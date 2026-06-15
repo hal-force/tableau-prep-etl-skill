@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+.env.local
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Per-run scratch (every skill invocation creates one)
+runtime/
+**/runtime/
+
+# Hyper outputs
+**/*.hyper
+**/*.tds
+
+# Built TFLs (regenerate via tflb_lib)
+**/*.tfl
+
+# Test data
+data/
+**/data/
+**/*.pdf
+**/*.xlsx
+**/*.xls
+
+# LLM caches
+**/cache/
+**/.cache/
+
+# Eval scratch
+**/eval/results/
+**/eval/ground_truth/*.json
+**/eval/holdout/manifest.json
+**/metrics_db/*.sqlite
+**/metrics_db/active.json
+**/proposer/briefs/
