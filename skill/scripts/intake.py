@@ -27,12 +27,17 @@ from urllib import error, request as urlrequest
 from skill.scripts.lib import _REPO_ROOT  # noqa: F401
 
 
-GATEWAY_URL = os.environ.get(
-    "LLM_GATEWAY_URL",
-    "https://your-gateway.example.com/chat/completions",
+from skill.scripts.llm_config import load_llm_config
+
+# Resolve LLM gateway config: env vars first, then ~/.tableau-prep-etl/config.json
+# (local-dev only — never published). If neither is available, _llm_chat raises
+# a clear error pointing the user at the no-LLM path.
+_LLM_CFG = load_llm_config(prompt_if_missing=False)
+GATEWAY_URL = _LLM_CFG.url if _LLM_CFG else os.environ.get(
+    "LLM_GATEWAY_URL", "https://your-gateway.example.com/chat/completions",
 )
-GATEWAY_KEY = os.environ.get("LLM_GATEWAY_KEY", "")
-GATEWAY_MODEL = os.environ.get("LLM_GATEWAY_MODEL", "claude-sonnet-4-6")
+GATEWAY_KEY = _LLM_CFG.key if _LLM_CFG else os.environ.get("LLM_GATEWAY_KEY", "")
+GATEWAY_MODEL = _LLM_CFG.model if _LLM_CFG else os.environ.get("LLM_GATEWAY_MODEL", "claude-sonnet-4-6")
 GATEWAY_VERIFY_SSL = False
 
 
@@ -70,6 +75,9 @@ class Output:
     path: str = ""
 
 
+REFRESH_CADENCES = ("once", "hourly", "daily", "weekly", "monthly", "on_demand")
+
+
 @dataclass
 class Spec:
     request: str
@@ -79,6 +87,8 @@ class Spec:
     qa_tier: str = "deterministic"
     eval_strategy: str = "sample_validation"
     deployment: str = "local"
+    refresh_cadence: str = "once"  # once | hourly | daily | weekly | monthly | on_demand
+    parameterize_query: bool = False  # True when the user wants the inputs runtime-configurable
     confidence: float = 0.0   # 0–1, LLM's self-reported confidence
     open_questions: list[str] = field(default_factory=list)
 
@@ -121,6 +131,8 @@ Return ONLY a JSON object matching this schema:
   "qa_tier": "none|deterministic|llm",
   "eval_strategy": "extract_from_source|sample_validation|synthesized|user_supplied|self_consistency",
   "deployment": "local",
+  "refresh_cadence": "once|hourly|daily|weekly|monthly|on_demand",
+  "parameterize_query": false,
   "confidence": 0.0,
   "open_questions": ["clarifying question 1", "..."]
 }
@@ -134,6 +146,16 @@ Rules:
 - Pick `qa_tier` 'llm' only when the user explicitly asks for QA review or
   the source is unstructured (PDFs, web). Use 'deterministic' for clean
   structured sources. Use 'none' only when the user says they want it.
+- Pick `refresh_cadence` from explicit cues in the request:
+  "daily" / "every day" → daily, "hourly" → hourly, "weekly" → weekly,
+  "monthly" → monthly, "ongoing" / "continuous" → on_demand.
+  When the user just says "pull X" or "load Y" with no cadence cue,
+  default to "once" but ALSO add a clarifying entry to open_questions:
+  "Should this be a one-time pull or recurring (daily/hourly/etc.)?"
+- Set `parameterize_query` to true when the user says the inputs should
+  be configurable from the dashboard, or uses words like "configurable",
+  "dashboard parameter", "let me change the query", "topic should be
+  configurable" — typical for web_crawl flows.
 - `confidence` should be 0.95 if every required field is unambiguous in
   the user's request, lower otherwise. If < 0.7, populate `open_questions`
   with the missing pieces.
@@ -154,8 +176,11 @@ def _llm_chat(user_msg: str, max_retries: int = 3) -> str:
     """Send a single-turn message; return assistant text. Raises on failure."""
     if not GATEWAY_KEY or "your-gateway.example.com" in GATEWAY_URL:
         raise RuntimeError(
-            "LLM gateway not configured. Set LLM_GATEWAY_URL and LLM_GATEWAY_KEY "
-            "environment variables before running the intake step."
+            "LLM gateway not configured. Either set LLM_GATEWAY_URL and "
+            "LLM_GATEWAY_KEY environment variables (production path), or "
+            "run `python3 -m skill.scripts.llm_config` to save a local-only "
+            "dev config to ~/.tableau-prep-etl/config.json. To skip intake "
+            "entirely, pass a pre-built spec: `run_loop.py --spec path/to/spec.json`."
         )
     payload = {
         "model": GATEWAY_MODEL,
@@ -219,6 +244,9 @@ def _validate_spec(spec_dict: dict) -> list[str]:
         errors.append(f"qa_tier must be one of {QA_TIERS}")
     if spec_dict.get("eval_strategy") not in EVAL_STRATEGIES:
         errors.append(f"eval_strategy must be one of {EVAL_STRATEGIES}")
+    cadence = spec_dict.get("refresh_cadence", "once")
+    if cadence not in REFRESH_CADENCES:
+        errors.append(f"refresh_cadence must be one of {REFRESH_CADENCES}")
 
     outputs = spec_dict.get("outputs") or []
     if not outputs:
@@ -264,6 +292,8 @@ def intake(request: str, run_dir: Path) -> Spec:
         qa_tier=parsed["qa_tier"],
         eval_strategy=parsed["eval_strategy"],
         deployment=parsed.get("deployment", "local"),
+        refresh_cadence=parsed.get("refresh_cadence", "once"),
+        parameterize_query=bool(parsed.get("parameterize_query", False)),
         confidence=confidence,
         open_questions=open_qs,
     )

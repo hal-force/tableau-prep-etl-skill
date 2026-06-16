@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "data.gdeltproject.org",
+    "auth": "none",
+    "format": "csv_index_then_zip"
+  },
+  "stored_at": 1781618848.80728
+}

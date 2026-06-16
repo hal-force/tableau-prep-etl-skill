@@ -22,6 +22,8 @@ runtime/
 
 # Built TFLs (regenerate via tflb_lib)
 **/*.tfl
+# ...except the seed clone, which is load-bearing for generate_flow.py.
+!skill/templates/seeds/empty.tfl
 
 # Test data
 data/
@@ -41,3 +43,6 @@ data/
 **/metrics_db/*.sqlite
 **/metrics_db/active.json
 **/proposer/briefs/
+
+# Hyper engine runtime log
+hyperd.log

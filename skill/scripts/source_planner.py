@@ -187,15 +187,85 @@ def _plan_outputs(spec: Spec, outputs_dir: Path) -> list[NodePlan]:
     return plans
 
 
+def _input_schema_from_sources(spec: Spec) -> dict:
+    """Best-effort upstream schema so QA nodes can pass-through input cols.
+    Returns {field_name: declared_type}. Empty dict means 'unknown'."""
+    schema: dict = {}
+    for src in spec.sources:
+        extra = src.extra or {}
+        if src.format == "arcgis_features":
+            fields = extra.get("arcgis_out_fields") or "*"
+            if fields == "*":
+                continue
+            for f in [x.strip() for x in fields.split(",") if x.strip()]:
+                lf = f.lower()
+                if lf.endswith(("date", "datetime", "time")):
+                    schema[f] = "string"
+                elif any(k in lf for k in ("acres", "size", "percent", "lat", "lon")):
+                    schema[f] = "decimal"
+                elif lf in ("objectid",):
+                    schema[f] = "int"
+                else:
+                    schema[f] = "string"
+            if extra.get("arcgis_return_geometry", True):
+                schema.setdefault("longitude", "decimal")
+                schema.setdefault("latitude", "decimal")
+        elif src.format == "csv_index_then_zip":
+            # GDELT v1 schema (the only csv_index_then_zip source we wire today)
+            gdelt_int = {
+                "GLOBALEVENTID", "SQLDATE", "MonthYear", "Year", "IsRootEvent",
+                "EventCode", "EventBaseCode", "EventRootCode", "QuadClass",
+                "NumMentions", "NumSources", "NumArticles", "DATEADDED",
+                "Actor1Geo_Type", "Actor2Geo_Type", "ActionGeo_Type",
+            }
+            gdelt_decimal = {
+                "FractionDate", "GoldsteinScale", "AvgTone",
+                "Actor1Geo_Lat", "Actor1Geo_Long",
+                "Actor2Geo_Lat", "Actor2Geo_Long",
+                "ActionGeo_Lat", "ActionGeo_Long",
+            }
+            gdelt_cols = [
+                "GLOBALEVENTID", "SQLDATE", "MonthYear", "Year", "FractionDate",
+                "Actor1Code", "Actor1Name", "Actor1CountryCode", "Actor1KnownGroupCode",
+                "Actor1EthnicCode", "Actor1Religion1Code", "Actor1Religion2Code",
+                "Actor1Type1Code", "Actor1Type2Code", "Actor1Type3Code",
+                "Actor2Code", "Actor2Name", "Actor2CountryCode", "Actor2KnownGroupCode",
+                "Actor2EthnicCode", "Actor2Religion1Code", "Actor2Religion2Code",
+                "Actor2Type1Code", "Actor2Type2Code", "Actor2Type3Code",
+                "IsRootEvent", "EventCode", "EventBaseCode", "EventRootCode",
+                "QuadClass", "GoldsteinScale", "NumMentions", "NumSources",
+                "NumArticles", "AvgTone", "Actor1Geo_Type", "Actor1Geo_FullName",
+                "Actor1Geo_CountryCode", "Actor1Geo_ADM1Code", "Actor1Geo_Lat",
+                "Actor1Geo_Long", "Actor1Geo_FeatureID",
+                "Actor2Geo_Type", "Actor2Geo_FullName", "Actor2Geo_CountryCode",
+                "Actor2Geo_ADM1Code", "Actor2Geo_Lat", "Actor2Geo_Long", "Actor2Geo_FeatureID",
+                "ActionGeo_Type", "ActionGeo_FullName", "ActionGeo_CountryCode",
+                "ActionGeo_ADM1Code", "ActionGeo_Lat", "ActionGeo_Long", "ActionGeo_FeatureID",
+                "DATEADDED", "SOURCEURL",
+            ]
+            for c in gdelt_cols:
+                if c in gdelt_int:
+                    schema[c] = "int"
+                elif c in gdelt_decimal:
+                    schema[c] = "decimal"
+                else:
+                    schema[c] = "string"
+    return schema
+
+
 def _plan_qa(spec: Spec) -> list[NodePlan]:
     """Add QA nodes per the spec's qa_tier."""
     if spec.qa_tier == "none":
         return []
     nodes: list[NodePlan] = []
+    input_schema = _input_schema_from_sources(spec)
     if spec.qa_tier in ("deterministic", "llm"):
         nodes.append(NodePlan(role="script", name="Validator",
                               template="validator.py.j2",
-                              template_vars={"transformations": [t.kind for t in spec.transformations]},
+                              template_vars={
+                                  "transformations": [t.kind for t in spec.transformations],
+                                  "input_schema": input_schema,
+                              },
                               function_name="validate"))
     if spec.qa_tier == "llm":
         nodes.append(NodePlan(role="script", name="QA Reviewer",
@@ -264,6 +334,8 @@ if __name__ == "__main__":
         qa_tier=spec_dict["qa_tier"],
         eval_strategy=spec_dict["eval_strategy"],
         deployment=spec_dict.get("deployment", "local"),
+        refresh_cadence=spec_dict.get("refresh_cadence", "once"),
+        parameterize_query=bool(spec_dict.get("parameterize_query", False)),
         confidence=spec_dict.get("confidence", 1.0),
     )
     # Re-hydrate full spec
