@@ -104,8 +104,14 @@ def make_join_node(
 
 
 def make_hyper_node(name: str, hyper_path: Path) -> tuple[str, dict]:
-    """Build a WriteToHyper terminal output node."""
+    """Build a WriteToHyper terminal output node.
+
+    Maestro validates `hyperOutputFile` ends in `.hyper`; ensure the
+    extension regardless of what the caller passed.
+    """
     nid = new_id()
+    if hyper_path.suffix.lower() != ".hyper":
+        hyper_path = hyper_path.with_suffix(".hyper")
     return nid, {
         "nodeType": ".v1.WriteToHyper",
         "name": name,

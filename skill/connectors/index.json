@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "description": "Registry of connectors built by the skill. Keyed by SHA1(source.type|host|auth|format) for stable lookup across runs. Each entry points at a stored render under skill/connectors/<key>/ that subsequent matching specs reuse instead of re-rendering.",
+  "entries": {
+    "5ed220ff37aaec29": {
+      "signature": {
+        "type": "rest_api",
+        "host": "data.gdeltproject.org",
+        "auth": "none",
+        "format": "csv_index_then_zip"
+      },
+      "hit_count": 4,
+      "last_used_at": 1781625651.689704
+    },
+    "87373f435ea745fc": {
+      "signature": {
+        "type": "rest_api",
+        "host": "services3.arcgis.com",
+        "auth": "none",
+        "format": "arcgis_features"
+      },
+      "hit_count": 12,
+      "last_used_at": 1781629223.4058712
+    }
+  }
+}

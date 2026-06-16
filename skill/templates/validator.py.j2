@@ -73,18 +73,27 @@ NUMERIC_RANGES: dict = {{ numeric_ranges | default({}) | tojson }}
 THRESHOLD = {{ threshold | default(0.85) }}
 
 
+# Skill renders the input schema here so get_output_schema can faithfully
+# pass it through alongside the validation columns. Without this, Maestro
+# only sees the validator's six columns and the upstream API data is lost.
+INPUT_SCHEMA: dict = {{ input_schema | tojson if input_schema is defined else '{}' }}
+
+
 def validate(df):
     """Tableau Prep entry point. One row in → one row out, augmented with
-    validation_score and validation_issues."""
+    validation_score and validation_issues. Input columns are preserved
+    so downstream nodes / Hyper writers see the original API data."""
+    val_cols = [
+        "row_id", "validation_score", "n_rules_passed", "n_rules_failed",
+        "validation_issues", "needs_review",
+    ]
     if df is None or len(df) == 0:
-        return pd.DataFrame(columns=[
-            "row_id", "validation_score", "n_rules_passed", "n_rules_failed",
-            "validation_issues", "needs_review",
-        ])
+        cols = list(INPUT_SCHEMA.keys()) + val_cols
+        return pd.DataFrame(columns=cols)
 
     id_col = next((c for c in ("invoice_id", "id", "row_id", "filename") if c in df.columns), None)
 
-    rows = []
+    val_rows = []
     for _, rec in df.iterrows():
         rec_dict = {k: rec.get(k) for k in df.columns}
         results: list[tuple[bool, str]] = []
@@ -100,7 +109,7 @@ def validate(df):
         score = (n_pass / len(results)) if results else 1.0
         issues = "; ".join(msg for ok, msg in results if not ok)
 
-        rows.append({
+        val_rows.append({
             "row_id": str(rec.get(id_col) if id_col else ""),
             "validation_score": float(score),
             "n_rules_passed": float(n_pass),
@@ -109,14 +118,27 @@ def validate(df):
             "needs_review": "True" if score < THRESHOLD else "False",
         })
 
-    out = pd.DataFrame(rows)
+    val_df = pd.DataFrame(val_rows, index=df.index)
+    out = pd.concat([df.reset_index(drop=True), val_df.reset_index(drop=True)], axis=1)
     for c in ("validation_score", "n_rules_passed", "n_rules_failed"):
         out[c] = pd.to_numeric(out[c], errors="coerce")
     return out
 
 
+def _prep_type_for(name: str, decl: str):
+    decl = (decl or "string").lower()
+    if decl == "int":
+        return prep_int()  # noqa: F821
+    if decl in ("decimal", "float", "double"):
+        return prep_decimal()  # noqa: F821
+    if decl == "bool":
+        return prep_bool()  # noqa: F821
+    return prep_string()  # noqa: F821
+
+
 def get_output_schema():
-    return pd.DataFrame({
+    schema = {name: _prep_type_for(name, decl) for name, decl in INPUT_SCHEMA.items()}
+    schema.update({
         "row_id": prep_string(),              # noqa: F821
         "validation_score": prep_decimal(),   # noqa: F821
         "n_rules_passed": prep_decimal(),     # noqa: F821
@@ -124,3 +146,4 @@ def get_output_schema():
         "validation_issues": prep_string(),   # noqa: F821
         "needs_review": prep_string(),        # noqa: F821
     })
+    return pd.DataFrame(schema)

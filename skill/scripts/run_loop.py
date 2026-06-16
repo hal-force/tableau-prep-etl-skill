@@ -31,10 +31,29 @@ from typing import Any, Optional
 
 from skill.scripts.lib import _REPO_ROOT  # noqa: F401
 
-from skill.scripts.intake import IntakeIncomplete, intake
+from skill.scripts.intake import (
+    IntakeIncomplete, Output, Source, Spec, Transformation, intake,
+)
 from skill.scripts.source_planner import plan_sources
 from skill.scripts.generate_flow import generate_flow
 from skill.scripts.synthesize_eval import synthesize_eval
+
+
+def _spec_from_dict(spec_dict: dict, request: str = "") -> Spec:
+    """Hydrate a Spec from a JSON dict (no-LLM mode)."""
+    return Spec(
+        request=spec_dict.get("request") or request,
+        sources=[Source(**s) for s in spec_dict.get("sources", [])],
+        transformations=[Transformation(**t) for t in spec_dict.get("transformations", [])],
+        outputs=[Output(**o) for o in spec_dict.get("outputs", [])],
+        qa_tier=spec_dict.get("qa_tier", "deterministic"),
+        eval_strategy=spec_dict.get("eval_strategy", "sample_validation"),
+        deployment=spec_dict.get("deployment", "local"),
+        refresh_cadence=spec_dict.get("refresh_cadence", "once"),
+        parameterize_query=bool(spec_dict.get("parameterize_query", False)),
+        confidence=float(spec_dict.get("confidence", 1.0)),
+        open_questions=list(spec_dict.get("open_questions", [])),
+    )
 
 
 MAX_ITERATIONS = int(os.environ.get("MAX_REFINEMENT_ITERATIONS", "3"))
@@ -209,15 +228,40 @@ def _emit_report(run_dir: Path, history: list[dict], spec_dict: dict, tfl_path: 
     return report
 
 
-def run(request: str, run_dir: Optional[Path] = None) -> dict:
-    """Top-level entry. Returns a dict summary of the run."""
+def run(request: str, run_dir: Optional[Path] = None,
+        spec_path: Optional[Path] = None,
+        skip_cli: bool = False,
+        flow_name: Optional[str] = None) -> dict:
+    """Top-level entry. Returns a dict summary of the run.
+
+    `spec_path` activates no-LLM mode: a pre-built spec.json is loaded
+    instead of calling the LLM gateway. Useful when the user has no
+    gateway configured or wants to drive the skill from a hand-edited
+    spec.
+
+    `skip_cli` skips the bounded prep-cli refinement loop and just
+    returns after generating the flow + scripts. Useful for structural
+    smoke tests on machines without TabPy / tableau-prep-cli.
+
+    `flow_name` groups runs under `runtime/<flow_name>/<run_id>/` so
+    repeated runs of the same flow stay co-located. Inferred from
+    `spec_path` filename when not given.
+    """
     if run_dir is None:
-        run_dir = Path("./runtime") / _new_run_id()
+        if flow_name is None and spec_path is not None:
+            flow_name = Path(spec_path).stem
+        parent = Path("./runtime") / flow_name if flow_name else Path("./runtime")
+        run_dir = parent / _new_run_id()
     run_dir = Path(run_dir).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # Phase 1: intake
-    spec = intake(request, run_dir)
+    # Phase 1: intake (or load pre-built spec)
+    if spec_path is not None:
+        spec_dict = json.loads(Path(spec_path).read_text())
+        spec = _spec_from_dict(spec_dict, request=request or spec_dict.get("request", ""))
+        (run_dir / "spec.json").write_text(json.dumps(spec.to_dict(), indent=2))
+    else:
+        spec = intake(request, run_dir)
 
     # Phase 2: plan
     plan = plan_sources(spec, run_dir / "outputs")
@@ -225,8 +269,45 @@ def run(request: str, run_dir: Optional[Path] = None) -> dict:
     # Phase 3: generate flow
     tfl_path = generate_flow(spec, plan, run_dir)
 
-    # Phase 4: eval rig
+    # Phase 3b: verify the .tfl actually deserializes + runs in tableau-prep-cli.
+    # This is the load-bearing test — earlier we shipped flows that passed
+    # structural ZIP validation but blew up Maestro's deserializer. CLI is
+    # the only ground truth.
+    verify_log = run_dir / "logs" / "verify.log"
+    verify_log.parent.mkdir(parents=True, exist_ok=True)
+    cli_path = Path(TABLEAU_PREP_CLI)
+    if not cli_path.exists():
+        verify_result = {"status": "skipped", "reason": f"prep-cli not at {cli_path}"}
+    else:
+        rc = _run_prep_cli(tfl_path, verify_log)
+        verify_result = {"status": "pass" if rc == 0 else "fail", "rc": rc,
+                          "log": str(verify_log)}
+        if rc != 0:
+            tail = verify_log.read_text()[-4000:] if verify_log.exists() else ""
+            verify_result["log_tail"] = tail
+            if not skip_cli:
+                # Hard-fail by default. Caller can pass skip_cli=True to
+                # collect the flow even when it fails (useful when iterating
+                # with diagnostic output already in hand).
+                return {
+                    "run_dir": str(run_dir),
+                    "tfl": str(tfl_path),
+                    "verify": verify_result,
+                    "spec": spec.to_dict(),
+                    "passed": False,
+                }
+
+    # Phase 4: synthesize the evaluation rig
     rig = synthesize_eval(spec, run_dir)
+
+    if skip_cli:
+        return {
+            "run_dir": str(run_dir),
+            "tfl": str(tfl_path),
+            "verify": verify_result,
+            "skipped_cli": True,
+            "spec": spec.to_dict(),
+        }
 
     # Phase 5: bounded refinement loop
     history: list[dict] = []
@@ -289,11 +370,26 @@ def run(request: str, run_dir: Optional[Path] = None) -> dict:
 if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("request", help="ETL request (natural language)")
+    ap.add_argument("request", nargs="?", default="",
+                    help="ETL request (natural language). Optional when --spec is given.")
     ap.add_argument("--run-dir", default=None)
+    ap.add_argument("--spec", default=None,
+                    help="Path to a pre-built spec.json. Skips the LLM intake step.")
+    ap.add_argument("--skip-cli", action="store_true",
+                    help="Skip the tableau-prep-cli refinement loop. Generate .tfl + scripts only.")
+    ap.add_argument("--flow-name", default=None,
+                    help="Group runs under runtime/<flow_name>/. Defaults to the spec filename stem.")
     args = ap.parse_args()
+    if not args.request and not args.spec:
+        ap.error("must provide either a request string or --spec path/to/spec.json")
     try:
-        result = run(args.request, Path(args.run_dir) if args.run_dir else None)
+        result = run(
+            args.request,
+            run_dir=Path(args.run_dir) if args.run_dir else None,
+            spec_path=Path(args.spec) if args.spec else None,
+            skip_cli=args.skip_cli,
+            flow_name=args.flow_name,
+        )
         print(json.dumps(result, indent=2))
     except IntakeIncomplete as e:
         print(f"INTAKE INCOMPLETE: {e}", file=sys.stderr)

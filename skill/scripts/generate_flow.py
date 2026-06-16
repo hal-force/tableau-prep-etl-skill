@@ -36,43 +36,70 @@ from tflb_lib.nodes import (
     make_script_node,
     new_id,
 )
-from tflb_lib.builder import write_flow
+from tflb_lib.builder import read_flow, write_flow
 
 from skill.scripts.intake import Spec
 from skill.scripts.source_planner import NodePlan, Plan
+from skill.scripts import connector_registry
 
 
-# Minimal seed flow JSON. The .tfl ZIP must have a `flow` member.
-# `displaySettings` and `maestroMetadata` would normally come from
-# Tableau Prep Builder; for skill-generated flows we emit empty ones
-# (Builder regenerates layout when the file is opened).
-SEED_FLOW: dict = {
-    "parameters": {"parameters": {}},
-    "initialNodes": [],
-    "nodes": {},
-    "connections": {},
-    "dataConnections": {},
-    "connectionIds": [],
-    "dataConnectionIds": [],
-    "nodeProperties": [],
-    "extensibility": {},
-    "selection": {},
-    "majorVersion": 2026,
-    "minorVersion": 1,
-    "documentId": "",
-    "obfuscatorId": "",
-}
-
-SEED_DISPLAY_SETTINGS = {"viewport": {"x": 0, "y": 0, "scale": 1.0}, "nodes": {}}
-SEED_MAESTRO_METADATA = {"version": "skill-generated", "skill": "tableau-prep-etl"}
+# A .tfl is a ZIP whose load-bearing entries are `flow`, `displaySettings`,
+# `maestroMetadata`, and `flowGraphThumbnail.svg`. The Maestro deserializer
+# requires `maestroMetadata` to be a fully-formed JSON document naming the
+# flow + displaySettings entries (otherwise it throws NullPointerException
+# at ZipFile.getEntry(null) and Prep Builder reports the .tfl as corrupt).
+#
+# Synthesizing a valid maestroMetadata from scratch would mean
+# reverse-engineering the Maestro document feature catalog. Instead we
+# bundle a known-good empty seed (skill/templates/seeds/empty.tfl) that
+# was produced by Tableau Prep Builder, and clone it on every run.
+SEED_TFL = Path(__file__).resolve().parents[1] / "templates" / "seeds" / "empty.tfl"
 
 
-def _render_templates(plan: Plan, scripts_dir: Path, templates_dir: Path) -> None:
-    """Render every script template referenced by the plan to scripts_dir."""
+def _render_templates(plan: Plan, scripts_dir: Path, templates_dir: Path,
+                      sources: Optional[list] = None) -> None:
+    """Render every script template referenced by the plan to scripts_dir.
+
+    For source-side connectors, the connector registry supplies *defaults*
+    learned from prior runs (timeouts, tested page sizes, etc.) that get
+    merged underneath the current spec's `extra`. Rendering is always
+    fresh because the rendered script bakes per-spec values (URL paths,
+    where clauses, field lists) into module constants — copying a
+    previous render would silently use the previous spec's values.
+    """
     scripts_dir.mkdir(parents=True, exist_ok=True)
     env = Environment(loader=FileSystemLoader(templates_dir))
+    sources = sources or []
 
-    for node in (*plan.transforms, *plan.qa_nodes):
+    # Map plan.transforms[i] → sources[i] (1:1 in v1; transforms are source connectors)
+    for i, node in enumerate(plan.transforms):
+        if not node.template:
+            continue
+        src = sources[i] if i < len(sources) else None
+        cached = connector_registry.lookup(src) if src is not None else None
+        if cached is not None and "extra" in node.template_vars:
+            merged = dict(cached.defaults)
+            merged.update(node.template_vars["extra"])  # spec wins
+            node.template_vars["extra"] = merged
+        try:
+            tpl = env.get_template(node.template)
+        except Exception as e:
+            raise RuntimeError(f"failed to load template '{node.template}': {e}")
+        rendered = tpl.render(**node.template_vars)
+        out_name = node.template.replace(".j2", "").replace("/", "_")
+        out_path = scripts_dir / out_name
+        out_path.write_text(rendered)
+        if src is not None:
+            if cached is not None:
+                connector_registry.touch(src)
+            else:
+                connector_registry.store(
+                    src, out_path, defaults=node.template_vars.get("extra", {}),
+                )
+        node.rendered_path = str(out_path.resolve())
+
+    # QA + validator nodes are not cached
+    for node in plan.qa_nodes:
         if not node.template:
             continue
         try:
@@ -80,8 +107,8 @@ def _render_templates(plan: Plan, scripts_dir: Path, templates_dir: Path) -> Non
         except Exception as e:
             raise RuntimeError(f"failed to load template '{node.template}': {e}")
         rendered = tpl.render(**node.template_vars)
-        script_name = node.template.replace(".j2", "").replace("/", "_")
-        out_path = scripts_dir / script_name
+        out_name = node.template.replace(".j2", "").replace("/", "_")
+        out_path = scripts_dir / out_name
         out_path.write_text(rendered)
         node.rendered_path = str(out_path.resolve())
 
@@ -169,11 +196,16 @@ def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
     outputs_dir = run_dir / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Render all script templates
-    _render_templates(plan, scripts_dir, templates_dir)
+    # 1. Render all script templates (with connector registry consultation)
+    _render_templates(plan, scripts_dir, templates_dir, sources=spec.sources)
 
-    # 2. Build flow JSON
-    flow = json.loads(json.dumps(SEED_FLOW))  # deep copy
+    # 2. Clone the bundled empty seed and mutate its `flow` member.
+    if not SEED_TFL.exists():
+        raise RuntimeError(
+            f"seed .tfl not found at {SEED_TFL}. "
+            "Run skill/templates/seeds/build_seed.py to regenerate it."
+        )
+    flow, members = read_flow(SEED_TFL)
 
     # 2a. Input
     if not plan.inputs:
@@ -234,12 +266,19 @@ def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
     if plan.parameters:
         flow["parameters"]["parameters"] = plan.parameters
 
-    # 3. Write the .tfl
+    # 3. Write the .tfl. We preserve maestroMetadata + flowGraphThumbnail.svg
+    # from the seed (they're required for deserialization); the layout map in
+    # displaySettings is reset because our nodes have new IDs the seed doesn't
+    # know about. Tableau Prep Builder lays out unknown nodes automatically
+    # when the file is first opened.
     tfl_path = run_dir / "flow.tfl"
-    members = {
-        "displaySettings": json.dumps(SEED_DISPLAY_SETTINGS, indent=2).encode("utf-8"),
-        "maestroMetadata": json.dumps(SEED_MAESTRO_METADATA, indent=2).encode("utf-8"),
-    }
+    if "displaySettings" in members:
+        try:
+            ds = json.loads(members["displaySettings"].decode("utf-8"))
+            ds["nodes"] = {}
+            members["displaySettings"] = json.dumps(ds, indent=2).encode("utf-8")
+        except Exception:
+            pass
     write_flow(flow, members, tfl_path)
     return tfl_path
 
@@ -260,6 +299,8 @@ if __name__ == "__main__":
         qa_tier=spec_dict["qa_tier"],
         eval_strategy=spec_dict["eval_strategy"],
         deployment=spec_dict.get("deployment", "local"),
+        refresh_cadence=spec_dict.get("refresh_cadence", "once"),
+        parameterize_query=bool(spec_dict.get("parameterize_query", False)),
     )
     from skill.scripts.source_planner import plan_sources
     plan = plan_sources(spec, Path(args.run_dir) / "outputs")
