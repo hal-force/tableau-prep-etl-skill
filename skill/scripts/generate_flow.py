@@ -33,6 +33,7 @@ from jinja2 import Environment, FileSystemLoader
 from tflb_lib.nodes import (
     add_edge,
     make_hyper_node,
+    make_join_node,
     make_script_node,
     new_id,
 )
@@ -71,11 +72,18 @@ def _render_templates(plan: Plan, scripts_dir: Path, templates_dir: Path,
     env = Environment(loader=FileSystemLoader(templates_dir))
     sources = sources or []
 
-    # Map plan.transforms[i] → sources[i] (1:1 in v1; transforms are source connectors)
-    for i, node in enumerate(plan.transforms):
+    # Map plan.transforms[i] → sources[transforms[i].branch]. Each
+    # transform gets its own rendered file (api_caller_b0.py,
+    # api_caller_b1.py, …). Without per-branch filenames, multi-source
+    # flows clobber earlier branches' rendered scripts and every node
+    # ends up pointing at the last-written file — Maestro then
+    # complains the upstream column doesn't exist on the join's left
+    # side because every branch reports the same (last) schema.
+    for node in plan.transforms:
         if not node.template:
             continue
-        src = sources[i] if i < len(sources) else None
+        branch_idx = node.branch
+        src = sources[branch_idx] if 0 <= branch_idx < len(sources) else None
         cached = connector_registry.lookup(src) if src is not None else None
         if cached is not None and "extra" in node.template_vars:
             merged = dict(cached.defaults)
@@ -86,7 +94,12 @@ def _render_templates(plan: Plan, scripts_dir: Path, templates_dir: Path,
         except Exception as e:
             raise RuntimeError(f"failed to load template '{node.template}': {e}")
         rendered = tpl.render(**node.template_vars)
-        out_name = node.template.replace(".j2", "").replace("/", "_")
+        base_name = node.template.replace(".j2", "").replace("/", "_")
+        if "." in base_name:
+            stem, ext = base_name.rsplit(".", 1)
+            out_name = f"{stem}_b{branch_idx}.{ext}"
+        else:
+            out_name = f"{base_name}_b{branch_idx}"
         out_path = scripts_dir / out_name
         out_path.write_text(rendered)
         if src is not None:
@@ -118,6 +131,7 @@ def _make_input_node(plan_input: NodePlan, trigger_xlsx: Path) -> tuple[str, dic
     folder-listing xlsx as a 'trigger' input that the downstream Script
     node ignores in favor of the configured URL/folder/etc."""
     nid = new_id()
+    desc = plan_input.description or None
     if plan_input.connector_class in ("local_folder", "local_xlsx_pointer"):
         return nid, {
             "nodeType": ".v1.LoadSql",
@@ -126,7 +140,7 @@ def _make_input_node(plan_input: NodePlan, trigger_xlsx: Path) -> tuple[str, dic
             "baseType": "input",
             "nextNodes": [],
             "serialize": False,
-            "description": None,
+            "description": desc,
             "connectionId": "",  # filled by skill in build()
             "connectionAttributes": {},
             "fields": [{
@@ -157,7 +171,7 @@ def _make_input_node(plan_input: NodePlan, trigger_xlsx: Path) -> tuple[str, dic
         "baseType": "input",
         "nextNodes": [],
         "serialize": False,
-        "description": f"native_connector hint: {plan_input.connector_class}",
+        "description": desc or f"native_connector hint: {plan_input.connector_class}",
         "connectionId": "",
         "connectionAttributes": plan_input.connector_attrs or {},
         "fields": [],
@@ -165,13 +179,15 @@ def _make_input_node(plan_input: NodePlan, trigger_xlsx: Path) -> tuple[str, dic
     }
 
 
-def _make_trigger_xlsx(run_dir: Path, folder_path: str = "") -> Path:
-    """Emit a tiny .xlsx with a single 'folder' column the input node points at."""
+def _make_trigger_xlsx(run_dir: Path, folder_path: str = "",
+                       filename: str = "trigger.xlsx") -> Path:
+    """Emit a tiny .xlsx with a single 'folder' column the input node points at.
+    `filename` lets multi-source flows give each branch a unique trigger file
+    (Prep tracks each source by its `connectionAttributes.filename`)."""
     try:
         from openpyxl import Workbook
     except ImportError:
-        # Fallback: empty placeholder. The skill will warn the user.
-        p = run_dir / "trigger.xlsx"
+        p = run_dir / filename
         p.write_bytes(b"")
         return p
     wb = Workbook()
@@ -179,7 +195,7 @@ def _make_trigger_xlsx(run_dir: Path, folder_path: str = "") -> Path:
     ws.title = "Sheet1"
     ws.append(["folder"])
     ws.append([folder_path])
-    p = run_dir / "trigger.xlsx"
+    p = run_dir / filename
     wb.save(p)
     return p
 
@@ -207,60 +223,113 @@ def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
         )
     flow, members = read_flow(SEED_TFL)
 
-    # 2a. Input
+    # 2a. Per-source-branch input nodes + per-branch transform chains.
+    # For multi-source flows we emit one trigger.xlsx per branch (in its own
+    # directory) with its own connection entry. Each branch then runs its
+    # rendered transform chain. After all branches are wired, joins consume
+    # branch tails to merge data.
     if not plan.inputs:
         raise RuntimeError("plan has no input nodes")
-    src0 = spec.sources[0] if spec.sources else None
-    folder_hint = (src0.path if src0 else "") or ""
-    trigger_xlsx = _make_trigger_xlsx(run_dir, folder_hint)
-    conn_id = new_id()
-    flow["connections"][conn_id] = {
-        "connectionType": ".v1.SqlConnection",
-        "id": conn_id,
-        "name": "skill_input",
-        "isPackaged": False,
-        "connectionAttributes": {
-            "filename": str(trigger_xlsx),
-            "directory": str(trigger_xlsx.parent),
-            "class": "excel-direct",
-            "validate": "no",
-            "is-single-table-union": "yes",
-            "interpretationMode": "0",
-        },
-    }
-    flow["connectionIds"] = [conn_id]
-    inp_id, inp_node = _make_input_node(plan.inputs[0], trigger_xlsx)
-    inp_node["connectionId"] = conn_id
-    flow["nodes"][inp_id] = inp_node
-    flow["initialNodes"] = [inp_id]
 
-    prev_id = inp_id
+    flow["connectionIds"] = []
+    initial_nodes: list[str] = []
+    branch_tails: list[str] = []  # branch_index → current tail node id
 
-    # 2b. Transforms (linear chain)
-    for node in plan.transforms:
-        sid, snode = make_script_node(
-            node.name, Path(node.rendered_path), node.function_name, next_node_ids=[],
-        )
-        flow["nodes"][sid] = snode
-        add_edge(flow["nodes"][prev_id], sid)
-        prev_id = sid
+    for branch_idx, plan_input in enumerate(plan.inputs):
+        # Per-branch trigger.xlsx in its own subdirectory so multiple Excel
+        # sources don't collide on filename or interpretationMode caching.
+        branch_dir = run_dir / f"branch_{branch_idx}"
+        branch_dir.mkdir(parents=True, exist_ok=True)
+        src = spec.sources[branch_idx] if branch_idx < len(spec.sources) else None
+        folder_hint = (src.path if src else "") or ""
+        trigger_xlsx = _make_trigger_xlsx(branch_dir, folder_hint, "trigger.xlsx")
 
-    # 2c. QA nodes (linear after transforms)
+        conn_id = new_id()
+        flow["connections"][conn_id] = {
+            "connectionType": ".v1.SqlConnection",
+            "id": conn_id,
+            "name": f"skill_input_{branch_idx}",
+            "isPackaged": False,
+            "connectionAttributes": {
+                "filename": str(trigger_xlsx),
+                "directory": str(trigger_xlsx.parent),
+                "class": "excel-direct",
+                "validate": "no",
+                "is-single-table-union": "yes",
+                "interpretationMode": "0",
+            },
+        }
+        flow["connectionIds"].append(conn_id)
+
+        inp_id, inp_node = _make_input_node(plan_input, trigger_xlsx)
+        inp_node["connectionId"] = conn_id
+        # Respect the plan's name (which honors src.name from the spec);
+        # only fall back to "Input N" when the planner didn't supply one.
+        if not plan_input.name:
+            inp_node["name"] = f"Input {branch_idx + 1}"
+        flow["nodes"][inp_id] = inp_node
+        initial_nodes.append(inp_id)
+
+        prev_id = inp_id
+        for tnode in plan.transforms:
+            if tnode.branch != branch_idx:
+                continue
+            sid, snode = make_script_node(
+                tnode.name, Path(tnode.rendered_path), tnode.function_name,
+                next_node_ids=[], description=tnode.description or None,
+            )
+            flow["nodes"][sid] = snode
+            add_edge(flow["nodes"][prev_id], sid)
+            prev_id = sid
+        branch_tails.append(prev_id)
+
+    flow["initialNodes"] = initial_nodes
+
+    # 2b. Joins. Each join feeds from two branch tails. The join's id
+    # becomes the new tail of `join_left` so chained joins accumulate
+    # (left=branch0, right=branch1) → join1; (left=join1, right=branch2) → join2…
+    # Spec authors express this by setting `left_branch=0` for every join
+    # after the first (since branch 0's tail is the previous join's id).
+    for j in plan.joins:
+        if j.join_left < 0 or j.join_left >= len(branch_tails):
+            raise RuntimeError(f"join '{j.name}': left_branch={j.join_left} out of range")
+        if j.join_right < 0 or j.join_right >= len(branch_tails):
+            raise RuntimeError(f"join '{j.name}': right_branch={j.join_right} out of range")
+        if not j.join_on:
+            raise RuntimeError(f"join '{j.name}': missing 'on' field")
+        jid, jnode = make_join_node(j.name, next_node_ids=[],
+                                    on_field=j.join_on, join_type=j.join_type,
+                                    description=j.description or None)
+        flow["nodes"][jid] = jnode
+        # Wire both upstream branch tails into the join. Maestro's
+        # SimpleJoinCompiler reads `nextNamespace` to identify the Left
+        # vs Right input stream; both must be present or it NPEs in
+        # JoinAccessors.getJoinType.
+        add_edge(flow["nodes"][branch_tails[j.join_left]], jid, namespace="Left")
+        add_edge(flow["nodes"][branch_tails[j.join_right]], jid, namespace="Right")
+        branch_tails[j.join_left] = jid
+
+    # The post-join tail is whatever branch the spec's last join landed on.
+    # If there were no joins, fall back to branch 0 (single-source flow).
+    final_tail = branch_tails[plan.joins[-1].join_left] if plan.joins else branch_tails[0]
+
+    # 2c. QA nodes (linear after the final join)
     for node in plan.qa_nodes:
         sid, snode = make_script_node(
             node.name, Path(node.rendered_path), node.function_name, next_node_ids=[],
+            description=node.description or None,
         )
         flow["nodes"][sid] = snode
-        add_edge(flow["nodes"][prev_id], sid)
-        prev_id = sid
+        add_edge(flow["nodes"][final_tail], sid)
+        final_tail = sid
 
-    # 2d. Outputs (each Hyper writer hangs off the last transform/qa node)
+    # 2d. Outputs hang off the final tail.
     for o in plan.outputs:
         attrs = o.connector_attrs or {}
         hp = attrs.get("hyper_path") or attrs.get("csv_path") or str(outputs_dir / o.name)
-        hid, hnode = make_hyper_node(o.name, Path(hp))
+        hid, hnode = make_hyper_node(o.name, Path(hp), description=o.description or None)
         flow["nodes"][hid] = hnode
-        add_edge(flow["nodes"][prev_id], hid)
+        add_edge(flow["nodes"][final_tail], hid)
 
     # 2e. Parameters (web crawl exposes a query param)
     if plan.parameters:

@@ -60,6 +60,11 @@ class Source:
     format: str = ""
     auth: str = "none"         # none | basic | oauth | client_cert | api_key
     extra: dict = field(default_factory=dict)
+    # Optional human-readable label + purpose. When set, these flow
+    # through to the Tableau Prep canvas as the node's name and
+    # description so the flow is self-documenting. Default is "Input N".
+    name: str = ""
+    description: str = ""
 
 
 @dataclass
@@ -73,6 +78,7 @@ class Output:
     kind: str           # hyper | csv | published_data_source
     name: str           # output filename or DS name
     path: str = ""
+    description: str = ""
 
 
 REFRESH_CADENCES = ("once", "hourly", "daily", "weekly", "monthly", "on_demand")

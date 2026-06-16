@@ -98,6 +98,52 @@ shape is:
 input(s) → cleansing step → optional QA reviewer + Statistical Analyst → output
 ```
 
+#### Multi-source flows (joins in Prep, not Python)
+
+When the spec has more than one source AND `transformations` contains
+`{"kind": "join", ...}` entries, `generate_flow.py` emits a
+**branched DAG** rather than a linear chain. Each source gets:
+
+- Its own per-branch `branch_<i>/` directory with a unique
+  `trigger.xlsx`
+- Its own `connections.<id>` entry (`excel-direct`)
+- Its own input node (`Input 1`, `Input 2`, …)
+- Its own rendered Python script with per-branch suffix
+  (`api_caller_b0.py`, `api_caller_b1.py`, …) — without distinct
+  filenames, the last render wins for everyone and Maestro fails with
+  `InvalidLeftConditionColumnMsg`
+
+Each `transformations.kind == "join"` entry references two branches
+by index and a join column:
+
+```json
+{"kind": "join", "args": {
+  "name": "Grants + Cities",
+  "left_branch": 0, "right_branch": 1,
+  "on": "city", "join_type": "leftOuter"
+}}
+```
+
+The planner emits one `.v2018_2_3.SuperJoin` per join. Two invariants
+the planner enforces (skip these and Maestro NPEs at compile time):
+
+- `join_type` is normalized to Maestro's `JoinType` enum
+  (`inner|left|right|full|notInner|leftOnly|rightOnly`). SQL synonyms
+  like `leftOuter` are aliased automatically.
+- Edges feeding into the `SuperJoin` set `nextNamespace: "Left"` /
+  `"Right"`. Edges out of the join stay `"Default"`.
+
+Chained joins use the convention: each subsequent join sets
+`left_branch=0`, because branch 0's tail becomes the previous join's
+output id. This produces a left-deep tree:
+
+```
+((branch0 ⋈ branch1) ⋈ branch2) ⋈ branch3 …
+```
+
+Worked example: `reference/examples/otf_grants_multisource.md`
+(three OTF CSVs, two joins, single Hyper output).
+
 ### Phase 6: Eval Rig Synthesis (`scripts/synthesize_eval.py`)
 
 Branch by `eval_strategy`:
@@ -188,3 +234,10 @@ See `reference/examples/`:
 - `gdelt_pull.md` — online API pull.
 - `arcgis_pki.md` — custom PKI Python connector.
 - `ongoing_crawl.md` — Crawl4AI + Prep parameter for the query.
+- `otf_grants_multisource.md` — three CSVs (grants + 2 concordance files)
+  joined natively in Prep with Maestro `SuperJoin` nodes.
+- `yrp_crime_trends.md` — YRP ArcGIS occurrence data with the
+  `trend_analysis` transformation: per-row temporal + per-dimension
+  trend stats (monthly count, YoY, rolling, z-score, lifetime rank,
+  is_anomaly) so a single Hyper extract powers both detail and
+  dashboard views.

@@ -1,0 +1,27 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 180,
+  "max_retries": 3,
+  "arcgis_where": "1=1",
+  "arcgis_out_fields": "UniqueIdentifier,case_type_pubtrans,LocationCode,district,municipality,Special_grouping,Shooting,hate_crime,case_status,occ_type,rep_date,time_est,occ_date",
+  "arcgis_page_size": 2000,
+  "arcgis_max_records": 0,
+  "arcgis_return_geometry": true,
+  "arcgis_geometry_kind": "point",
+  "arcgis_out_sr": 4326,
+  "arcgis_field_types": {
+    "UniqueIdentifier": "string",
+    "case_type_pubtrans": "string",
+    "LocationCode": "string",
+    "district": "string",
+    "municipality": "string",
+    "Special_grouping": "string",
+    "Shooting": "string",
+    "hate_crime": "string",
+    "case_status": "string",
+    "occ_type": "string",
+    "rep_date": "string",
+    "time_est": "string",
+    "occ_date": "string"
+  }
+}

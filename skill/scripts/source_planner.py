@@ -37,19 +37,31 @@ class NodePlan:
     """One node we intend to emit in the .tfl."""
     role: str             # 'input' | 'script' | 'join' | 'output'
     name: str             # display name in Prep
+    description: str = "" # human-readable purpose, surfaced as the Prep node's `description`
     template: str = ""    # Jinja template path (relative to templates/) for script nodes
     template_vars: dict = field(default_factory=dict)
     rendered_path: str = ""  # filled in by generate_flow after rendering
     function_name: str = ""  # entry function for script nodes
     connector_class: str = ""  # for native input nodes
     connector_attrs: dict = field(default_factory=dict)
+    branch: int = 0       # which source branch this transform belongs to (0..N-1)
+    # Join-only fields. Populated when role == 'join'.
+    join_left: int = -1   # index into Plan.branch_tails of the left feed
+    join_right: int = -1  # index into Plan.branch_tails of the right feed
+    join_on: str = ""     # column name to join on (must exist in both branches)
+    join_type: str = "inner"  # inner | leftOuter | rightOuter | fullOuter
 
 
 @dataclass
 class Plan:
-    """The full plan: source-side input nodes, transformation script nodes, output nodes."""
+    """The full plan: source-side input nodes, transformation script nodes, output nodes.
+    `inputs` and `transforms` are 1:1 indexed by source-branch position; `joins`
+    is a list of join NodePlans referencing branch indices. `branch_tails` is
+    populated by generate_flow after per-branch chains are emitted, mapping
+    branch_index → tail node id (so joins can wire to the right upstream)."""
     inputs: list[NodePlan] = field(default_factory=list)
     transforms: list[NodePlan] = field(default_factory=list)
+    joins: list[NodePlan] = field(default_factory=list)
     qa_nodes: list[NodePlan] = field(default_factory=list)
     outputs: list[NodePlan] = field(default_factory=list)
     parameters: dict = field(default_factory=dict)  # Tableau Prep parameters block
@@ -59,23 +71,28 @@ def _plan_local_folder(src: Source, idx: int) -> tuple[list[NodePlan], list[Node
     """Local-folder source → (input nodes, transform nodes)."""
     # The input is a tiny .xlsx with a single 'folder' column pointing at the
     # source path. We rewire it to a local file later in generate_flow.
-    inp = NodePlan(role="input", name=f"Input {idx}",
+    inp_name = src.name or f"Input {idx}"
+    inp_desc = src.description or f"Local folder source: {src.path or '<path>'} ({src.format or 'auto'})"
+    inp = NodePlan(role="input", name=inp_name, description=inp_desc,
                    connector_class="local_folder",
                    connector_attrs={"path": src.path, "format": src.format})
 
     # Transform: a Python step that walks the folder. Template depends on format.
     if src.format in ("pdf_portfolio", "pdf"):
         template = "connectors/pdf_walker.py.j2"
+        walk_desc = f"Walks {src.path} extracting fields from each PDF; emits one row per document."
     elif src.format == "json":
         template = "connectors/json_walker.py.j2"
+        walk_desc = f"Walks {src.path}, parsing each JSON file and yielding records."
     elif src.format == "csv":
         # CSV folders are best handled by the native CSV connector with
         # union, no Python step needed.
         return [inp], []
     else:
         template = "connectors/generic_folder_walker.py.j2"
+        walk_desc = f"Generic folder walker over {src.path} ({src.format or 'auto'})."
 
-    walk = NodePlan(role="script", name=f"Source {idx} Walker",
+    walk = NodePlan(role="script", name=f"{inp_name} Walker", description=walk_desc,
                     template=template,
                     template_vars={"folder_path": src.path, "format": src.format},
                     function_name="walk_folder")
@@ -101,7 +118,9 @@ def _plan_native_connector(src: Source, idx: int) -> tuple[list[NodePlan], list[
     else:
         cls = fmt or "unknown"
 
-    inp = NodePlan(role="input", name=f"Input {idx}",
+    inp_name = src.name or f"Input {idx}"
+    inp_desc = src.description or f"Native {cls} connector ({src.url or '<no url>'})"
+    inp = NodePlan(role="input", name=inp_name, description=inp_desc,
                    connector_class=cls,
                    connector_attrs={"url": src.url, "auth": src.auth, **src.extra})
     return [inp], []
@@ -109,11 +128,21 @@ def _plan_native_connector(src: Source, idx: int) -> tuple[list[NodePlan], list[
 
 def _plan_rest_api(src: Source, idx: int, *, graphql: bool = False) -> tuple[list[NodePlan], list[NodePlan]]:
     """REST or GraphQL API → trivial folder-listing input + Python step."""
-    inp = NodePlan(role="input", name=f"Input {idx}",
+    proto = "GraphQL" if graphql else "REST"
+    short_url = src.url.split("?", 1)[0] if src.url else "<no url>"
+    inp_name = src.name or f"Input {idx}"
+    inp_desc = src.description or f"Trigger row for {proto} fetch from {short_url} ({src.format or 'json'})."
+    inp = NodePlan(role="input", name=inp_name, description=inp_desc,
                    connector_class="local_xlsx_pointer",
                    connector_attrs={"hint": "skill rewires to a local trigger xlsx"})
     template = "api_caller.py.j2"
-    api = NodePlan(role="script", name=f"API Caller {idx}",
+    api_name = f"{inp_name} Fetcher" if src.name else f"API Caller {idx}"
+    api_desc = (
+        f"Pulls {proto} data from {short_url}. Format: {src.format or 'json'}. "
+        f"Walks pagination, flattens attributes/geometry, returns a dataframe "
+        f"with {src.format} schema."
+    )
+    api = NodePlan(role="script", name=api_name, description=api_desc,
                    template=template,
                    template_vars={
                        "url": src.url,
@@ -128,9 +157,12 @@ def _plan_rest_api(src: Source, idx: int, *, graphql: bool = False) -> tuple[lis
 
 def _plan_web_crawl(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePlan], dict]:
     """Web crawl → Python step + Prep parameter for the query."""
-    inp = NodePlan(role="input", name=f"Input {idx}",
+    inp_name = src.name or f"Input {idx}"
+    inp_desc = src.description or f"Trigger row for web crawl (engine: {src.extra.get('engine', 'crawl4ai')})."
+    inp = NodePlan(role="input", name=inp_name, description=inp_desc,
                    connector_class="local_xlsx_pointer")
-    crawl = NodePlan(role="script", name=f"Crawler {idx}",
+    crawl = NodePlan(role="script", name=f"{inp_name} Crawler" if src.name else f"Crawler {idx}",
+                     description=f"Runs a {src.extra.get('engine', 'crawl4ai')} crawl driven by the '{src.extra.get('query_param_name', 'Query')}' Prep parameter; emits one row per fetched page.",
                      template="crawler.py.j2",
                      template_vars={
                          "engine": src.extra.get("engine", "crawl4ai"),
@@ -153,9 +185,12 @@ def _plan_web_crawl(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePla
 
 def _plan_pki_endpoint(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePlan]]:
     """PKI cert-auth endpoint → Python step from pki_connector template."""
-    inp = NodePlan(role="input", name=f"Input {idx}",
+    inp_name = src.name or f"Input {idx}"
+    inp_desc = src.description or f"Trigger row for PKI-authenticated fetch from {src.url or '<no url>'}."
+    inp = NodePlan(role="input", name=inp_name, description=inp_desc,
                    connector_class="local_xlsx_pointer")
-    pki = NodePlan(role="script", name=f"PKI Caller {idx}",
+    pki = NodePlan(role="script", name=f"{inp_name} Caller" if src.name else f"PKI Caller {idx}",
+                   description=f"Calls {src.url or '<no url>'} with client cert auth (cert env: {src.extra.get('cert_path_env', 'CLIENT_CERT_PATH')}); returns response rows.",
                    template="pki_connector.py.j2",
                    template_vars={
                        "url": src.url,
@@ -171,20 +206,31 @@ def _plan_pki_endpoint(src: Source, idx: int) -> tuple[list[NodePlan], list[Node
 def _plan_outputs(spec: Spec, outputs_dir: Path) -> list[NodePlan]:
     plans: list[NodePlan] = []
     for o in spec.outputs:
+        desc = o.description or _default_output_description(o.kind, o.name)
         if o.kind == "hyper":
-            plans.append(NodePlan(role="output", name=o.name,
+            plans.append(NodePlan(role="output", name=o.name, description=desc,
                                   connector_attrs={"hyper_path": str(outputs_dir / o.name)}))
         elif o.kind == "csv":
-            plans.append(NodePlan(role="output", name=o.name,
+            plans.append(NodePlan(role="output", name=o.name, description=desc,
                                   connector_attrs={"csv_path": str(outputs_dir / o.name)}))
         elif o.kind == "published_data_source":
             # v2: needs Tableau Server publishing
-            plans.append(NodePlan(role="output", name=o.name,
+            plans.append(NodePlan(role="output", name=o.name, description=desc,
                                   connector_attrs={"published": True, "deferred": "v2"}))
         else:
-            plans.append(NodePlan(role="output", name=o.name,
+            plans.append(NodePlan(role="output", name=o.name, description=desc,
                                   connector_attrs={"unknown_kind": o.kind}))
     return plans
+
+
+def _default_output_description(kind: str, name: str) -> str:
+    if kind == "hyper":
+        return f"Writes the final dataframe to {name}.hyper for Tableau extracts."
+    if kind == "csv":
+        return f"Writes the final dataframe to {name}.csv."
+    if kind == "published_data_source":
+        return f"Publishes a Tableau Server data source named {name} (deferred to v2)."
+    return f"Output: {name}"
 
 
 def _input_schema_from_sources(spec: Spec) -> dict:
@@ -197,7 +243,11 @@ def _input_schema_from_sources(spec: Spec) -> dict:
             fields = extra.get("arcgis_out_fields") or "*"
             if fields == "*":
                 continue
+            field_types = extra.get("arcgis_field_types") or {}
             for f in [x.strip() for x in fields.split(",") if x.strip()]:
+                if f in field_types:
+                    schema[f] = field_types[f]
+                    continue
                 lf = f.lower()
                 if lf.endswith(("date", "datetime", "time")):
                     schema[f] = "string"
@@ -208,8 +258,14 @@ def _input_schema_from_sources(spec: Spec) -> dict:
                 else:
                     schema[f] = "string"
             if extra.get("arcgis_return_geometry", True):
-                schema.setdefault("longitude", "decimal")
-                schema.setdefault("latitude", "decimal")
+                if extra.get("arcgis_geometry_kind", "point") == "polyline":
+                    schema.setdefault("start_lon", "decimal")
+                    schema.setdefault("start_lat", "decimal")
+                    schema.setdefault("end_lon", "decimal")
+                    schema.setdefault("end_lat", "decimal")
+                else:
+                    schema.setdefault("longitude", "decimal")
+                    schema.setdefault("latitude", "decimal")
         elif src.format == "csv_index_then_zip":
             # GDELT v1 schema (the only csv_index_then_zip source we wire today)
             gdelt_int = {
@@ -250,6 +306,14 @@ def _input_schema_from_sources(spec: Spec) -> dict:
                     schema[c] = "decimal"
                 else:
                     schema[c] = "string"
+        elif src.format == "csv":
+            # Plain CSV sources declare their post-rename schema in extra.csv_schema.
+            # Validator + downstream nodes need this so column-passthrough
+            # works after joins. Last-write-wins on column-name collisions
+            # is fine because join keys overlap intentionally (left/right
+            # carry the same column name).
+            for col, decl in (extra.get("csv_schema") or {}).items():
+                schema[col] = decl
     return schema
 
 
@@ -261,6 +325,7 @@ def _plan_qa(spec: Spec) -> list[NodePlan]:
     input_schema = _input_schema_from_sources(spec)
     if spec.qa_tier in ("deterministic", "llm"):
         nodes.append(NodePlan(role="script", name="Validator",
+                              description="Deterministic per-row validator. Adds validation_score, n_rules_passed/failed, validation_issues, needs_review. Passes input columns through.",
                               template="validator.py.j2",
                               template_vars={
                                   "transformations": [t.kind for t in spec.transformations],
@@ -269,10 +334,12 @@ def _plan_qa(spec: Spec) -> list[NodePlan]:
                               function_name="validate"))
     if spec.qa_tier == "llm":
         nodes.append(NodePlan(role="script", name="QA Reviewer",
+                              description="LLM-backed reviewer. Reads each canonical record and flags issues, severity, and recommended actions.",
                               template="qa_reviewer.py.j2",
                               template_vars={"domain": spec.request[:200]},
                               function_name="review_canonical"))
         nodes.append(NodePlan(role="script", name="Statistical Analyst",
+                              description="Computes per-field z-scores and group-level anomalies across the run for downstream attention lists.",
                               template="statistical_analyst.py.j2",
                               template_vars={"transformations": [t.kind for t in spec.transformations]},
                               function_name="analyze_corpus"))
@@ -285,33 +352,141 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
     plan = Plan()
 
     for i, src in enumerate(spec.sources, start=1):
+        branch_idx = i - 1
         if src.type == "local_folder":
             ins, trs = _plan_local_folder(src, i)
-            plan.inputs.extend(ins)
-            plan.transforms.extend(trs)
         elif src.type == "native_connector":
             ins, trs = _plan_native_connector(src, i)
-            plan.inputs.extend(ins)
-            plan.transforms.extend(trs)
         elif src.type == "rest_api":
             ins, trs = _plan_rest_api(src, i, graphql=False)
-            plan.inputs.extend(ins)
-            plan.transforms.extend(trs)
         elif src.type == "graphql_api":
             ins, trs = _plan_rest_api(src, i, graphql=True)
-            plan.inputs.extend(ins)
-            plan.transforms.extend(trs)
         elif src.type == "web_crawl":
             ins, trs, params = _plan_web_crawl(src, i)
-            plan.inputs.extend(ins)
-            plan.transforms.extend(trs)
             plan.parameters.update(params)
         elif src.type == "pki_endpoint":
             ins, trs = _plan_pki_endpoint(src, i)
-            plan.inputs.extend(ins)
-            plan.transforms.extend(trs)
         else:
             raise ValueError(f"unsupported source type: {src.type}")
+        for n in ins:
+            n.branch = branch_idx
+        for n in trs:
+            n.branch = branch_idx
+        plan.inputs.extend(ins)
+        plan.transforms.extend(trs)
+
+    # Join transformations. Each `kind == "join"` entry references two
+    # source branches and a join column. The .tfl will materialize one
+    # SuperJoin node per join; the post-join tail (qa, output) hangs off
+    # the last join.
+    #
+    # Maestro's `JoinType` enum accepts: inner, left, right, full,
+    # notInner, leftOnly, rightOnly. We normalize common SQL/dbt
+    # synonyms (leftOuter, rightOuter, fullOuter) to the enum names
+    # the deserializer expects, otherwise SimpleJoinCompiler NPEs at
+    # JoinAccessors.getJoinType.
+    JOIN_TYPE_ALIASES = {
+        "leftouter": "left", "left_outer": "left", "left outer": "left",
+        "rightouter": "right", "right_outer": "right", "right outer": "right",
+        "fullouter": "full", "full_outer": "full", "full outer": "full",
+        "outer": "full",
+    }
+    for j, tr in enumerate(spec.transformations):
+        if tr.kind != "join":
+            continue
+        args = tr.args or {}
+        raw_type = (args.get("join_type") or "inner").strip()
+        join_type = JOIN_TYPE_ALIASES.get(raw_type.lower(), raw_type)
+        join_name = args.get("name", f"Join {j + 1}")
+        plan.joins.append(NodePlan(
+            role="join",
+            name=join_name,
+            description=args.get("description") or f"{join_type} join of branch {args.get('left_branch', 0)} and branch {args.get('right_branch', 1)} on '{args.get('on', '')}'.",
+            join_left=int(args.get("left_branch", 0)),
+            join_right=int(args.get("right_branch", 1)),
+            join_on=args.get("on", ""),
+            join_type=join_type,
+        ))
+
+    # Graph analysis transformations. Emit a graph_analyzer script
+    # appended to the named branch (default branch 0). The script
+    # consumes an edge dataframe and emits an endpoint-row table with
+    # geographic + force-directed layout coords + standard centralities.
+    # Schema declared via `input_schema` so prior columns flow through.
+    input_schema = _input_schema_from_sources(spec)
+    for j, tr in enumerate(spec.transformations):
+        if tr.kind != "graph_analysis":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        ga_name = args.get("name", "Graph Analyzer")
+        ga_desc = args.get("description") or (
+            f"Builds a NetworkX graph from edges keyed by "
+            f"{args.get('source_id_col', 'SUB_1')} → {args.get('target_id_col', 'SUB_2')}. "
+            f"Computes Fruchterman-Reingold layout (geographic seed) plus degree, "
+            f"betweenness, eigenvector, pagerank, and closeness centrality. Emits "
+            f"two rows per edge (one per endpoint) for line rendering in Tableau."
+        )
+        node = NodePlan(
+            role="script",
+            name=ga_name,
+            description=ga_desc,
+            template="graph_analyzer.py.j2",
+            template_vars={
+                "source_id_col": args.get("source_id_col", "SUB_1"),
+                "target_id_col": args.get("target_id_col", "SUB_2"),
+                "layout_iterations": int(args.get("layout_iterations", 50)),
+                "layout_scale": float(args.get("layout_scale", 10.0)),
+                "layout_seed_from_geography": bool(args.get("layout_seed_from_geography", True)),
+                "closeness_full_threshold": int(args.get("closeness_full_threshold", 1000)),
+                "input_schema": input_schema,
+            },
+            function_name="analyze_graph",
+            branch=branch_idx,
+        )
+        plan.transforms.append(node)
+
+    # Trend analysis transformations. Per-row enrichment with temporal
+    # features, monthly counts per dimension, YoY change, rolling counts,
+    # z-scores, lifetime rank, and an is_anomaly flag — the standard
+    # exploratory toolkit for incident/event datasets (crime, claims,
+    # service tickets). Joining stats back at row level keeps a single
+    # Hyper feeding both detail and trend dashboards.
+    for j, tr in enumerate(spec.transformations):
+        if tr.kind != "trend_analysis":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        ta_name = args.get("name", "Trend Analyzer")
+        dims = args.get("dimensions") or []
+        date_col = args.get("date_col", "occ_date")
+        time_col = args.get("time_col", "")
+        rolling = int(args.get("rolling_window_days", 30))
+        anomaly_z = float(args.get("anomaly_z", 2.0))
+        ta_desc = args.get("description") or (
+            f"Enriches each row with temporal features (year/month/dow/hour bucket) "
+            f"and trend stats per dimension {dims}: monthly count, YoY change, "
+            f"{rolling}-day rolling count, baseline mean/std, z-score, lifetime rank, "
+            f"and is_anomaly (|z| >= {anomaly_z}). Stats join back at row level so a "
+            f"single Hyper powers both detail and dashboard views."
+        )
+        node = NodePlan(
+            role="script",
+            name=ta_name,
+            description=ta_desc,
+            template="trend_analyzer.py.j2",
+            template_vars={
+                "date_col": date_col,
+                "time_col": time_col,
+                "dimensions": dims,
+                "rolling_window_days": rolling,
+                "anomaly_z": anomaly_z,
+                "input_schema": input_schema,
+            },
+            function_name="analyze_trends",
+            branch=branch_idx,
+        )
+        plan.transforms.append(node)
 
     plan.qa_nodes = _plan_qa(spec)
     plan.outputs = _plan_outputs(spec, outputs_dir)
