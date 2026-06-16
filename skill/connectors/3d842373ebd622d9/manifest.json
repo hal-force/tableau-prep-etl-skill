@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "otf.ca",
+    "auth": "none",
+    "format": "csv"
+  },
+  "stored_at": 1781635134.6146529
+}

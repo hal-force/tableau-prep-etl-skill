@@ -22,6 +22,7 @@ def make_script_node(
     script_path: Path,
     function_name: str,
     next_node_ids: list[str],
+    description: str | None = None,
 ) -> tuple[str, dict]:
     """Build a SuperExtensibilityNode (Python Script step).
 
@@ -32,9 +33,15 @@ def make_script_node(
 
     `next_node_ids` is the list of downstream node ids (Hyper writers,
     join nodes, etc) the script's output should feed.
+
+    `description` populates the node's `description` field, which
+    Tableau Prep Builder surfaces in the canvas as the node's
+    "Description" property. Pass a short sentence explaining the
+    node's purpose so the flow is self-documenting on open.
     """
     inner_id = new_id()
     outer_id = new_id()
+    desc = description or None
     return outer_id, {
         "nodeType": ".v2019_2_2.SuperExtensibilityNode",
         "name": name,
@@ -45,7 +52,7 @@ def make_script_node(
             for nid in next_node_ids
         ],
         "serialize": False,
-        "description": None,
+        "description": desc,
         "beforeActionAnnotations": [],
         "afterActionAnnotations": [],
         "actionNode": {
@@ -55,7 +62,7 @@ def make_script_node(
             "baseType": "transform",
             "nextNodes": [],
             "serialize": False,
-            "description": None,
+            "description": desc,
             "setupParameters": {"scriptFilePath": str(script_path)},
             "executionParameters": {"scriptFunctionName": function_name},
             "externalServiceType": "pythonSupport",
@@ -68,10 +75,12 @@ def make_join_node(
     next_node_ids: list[str],
     on_field: str = "id",
     join_type: str = "inner",
+    description: str | None = None,
 ) -> tuple[str, dict]:
     """Build a SuperJoin step joining two upstream feeds on a single field."""
     inner_id = new_id()
     outer_id = new_id()
+    desc = description or None
     return outer_id, {
         "nodeType": ".v2018_2_3.SuperJoin",
         "name": name,
@@ -82,7 +91,7 @@ def make_join_node(
             for nid in next_node_ids
         ],
         "serialize": False,
-        "description": None,
+        "description": desc,
         "beforeActionAnnotations": [],
         "afterActionAnnotations": [],
         "actionNode": {
@@ -92,7 +101,7 @@ def make_join_node(
             "baseType": "transform",
             "nextNodes": [],
             "serialize": False,
-            "description": None,
+            "description": desc,
             "conditions": [{
                 "leftExpression": f"[{on_field}]",
                 "rightExpression": f"[{on_field}]",
@@ -103,7 +112,7 @@ def make_join_node(
     }
 
 
-def make_hyper_node(name: str, hyper_path: Path) -> tuple[str, dict]:
+def make_hyper_node(name: str, hyper_path: Path, description: str | None = None) -> tuple[str, dict]:
     """Build a WriteToHyper terminal output node.
 
     Maestro validates `hyperOutputFile` ends in `.hyper`; ensure the
@@ -119,7 +128,7 @@ def make_hyper_node(name: str, hyper_path: Path) -> tuple[str, dict]:
         "baseType": "output",
         "nextNodes": [],
         "serialize": False,
-        "description": None,
+        "description": description or None,
         "hyperOutputFile": str(hyper_path),
         "tdsOutput": str(hyper_path.with_suffix(".tds")),
     }

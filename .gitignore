@@ -15,6 +15,8 @@ venv/
 # Per-run scratch (every skill invocation creates one)
 runtime/
 **/runtime/
+_smoke/
+**/_smoke/
 
 # Hyper outputs
 **/*.hyper

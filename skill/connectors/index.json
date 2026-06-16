@@ -21,6 +21,36 @@
       },
       "hit_count": 12,
       "last_used_at": 1781629223.4058712
+    },
+    "3d842373ebd622d9": {
+      "signature": {
+        "type": "rest_api",
+        "host": "otf.ca",
+        "auth": "none",
+        "format": "csv"
+      },
+      "hit_count": 30,
+      "last_used_at": 1781651339.521596
+    },
+    "a92bd7846025f8e1": {
+      "signature": {
+        "type": "rest_api",
+        "host": "services1.arcgis.com",
+        "auth": "none",
+        "format": "arcgis_features"
+      },
+      "hit_count": 20,
+      "last_used_at": 1781651316.341932
+    },
+    "02b46b0c92bd0724": {
+      "signature": {
+        "type": "rest_api",
+        "host": "services8.arcgis.com",
+        "auth": "none",
+        "format": "arcgis_features"
+      },
+      "hit_count": 5,
+      "last_used_at": 1781650916.6295009
     }
   }
 }
