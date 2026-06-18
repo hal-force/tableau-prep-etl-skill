@@ -1,0 +1,101 @@
+{
+  "request": "Pull active US wildfire incidents from the NIFC/WFIGS authoritative incident-locations feed, enrich each row with EOC analyst-facing metrics (days-since-discovery, staleness, daily growth rate, NWCG size class, containment band, region key, tooltip-ready incident summary) plus calendar-axis temporal features, and publish the enriched data source to the Weather & Disaster Response project on Tableau Server for emergency operations dashboards.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "WFIGS US Wildfire Incidents",
+      "description": "NIFC/WFIGS Current Incident Locations FeatureServer (ActiveFireCandidate=1, freshness windows applied by source view). One row per active wildfire/prescribed/complex incident with geometry (point) and IRWIN attributes. Authoritative interagency feed.",
+      "url": "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_Current/FeatureServer/0/query",
+      "format": "arcgis_features",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 180,
+        "max_retries": 3,
+        "arcgis_where": "1=1",
+        "arcgis_out_fields": "OBJECTID,IrwinID,UniqueFireIdentifier,IncidentName,IncidentTypeCategory,IncidentTypeKind,FireDiscoveryDateTime,InitialResponseDateTime,ContainmentDateTime,ControlDateTime,FireOutDateTime,ModifiedOnDateTime_dt,IncidentSize,DiscoveryAcres,FinalAcres,PercentContained,FireCause,FireCauseGeneral,FireCauseSpecific,FireMgmtComplexity,FireBehaviorGeneral,PrimaryFuelModel,PredominantFuelGroup,PredominantFuelModel,GACC,POOState,POOCounty,POOFips,POOCity,POOJurisdictionalAgency,POOJurisdictionalUnit,POOLandownerCategory,POOProtectingAgency,InitialLatitude,InitialLongitude,TotalIncidentPersonnel,EstimatedCostToDate,EstimatedFinalCost,IncidentManagementOrganization,IncidentComplexityLevel,ActiveFireCandidate,IsCpxChild,CpxName",
+        "arcgis_field_types": {
+          "IncidentSize": "decimal",
+          "DiscoveryAcres": "decimal",
+          "FinalAcres": "decimal",
+          "PercentContained": "decimal",
+          "InitialLatitude": "decimal",
+          "InitialLongitude": "decimal",
+          "TotalIncidentPersonnel": "int",
+          "EstimatedCostToDate": "decimal",
+          "EstimatedFinalCost": "decimal",
+          "OBJECTID": "int",
+          "ActiveFireCandidate": "int",
+          "IsCpxChild": "int"
+        },
+        "arcgis_return_geometry": true,
+        "arcgis_geometry_kind": "point",
+        "arcgis_out_sr": 4326,
+        "arcgis_page_size": 2000,
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "eoc_fire_metrics",
+      "args": {
+        "branch": 0,
+        "name": "EOC Fire Metrics",
+        "size_col": "IncidentSize",
+        "discovery_col": "FireDiscoveryDateTime",
+        "modified_col": "ModifiedOnDateTime_dt",
+        "containment_col": "PercentContained",
+        "containment_dt_col": "ContainmentDateTime",
+        "state_col": "POOState",
+        "county_col": "POOCounty",
+        "agency_col": "POOJurisdictionalAgency",
+        "cause_col": "FireCauseGeneral",
+        "name_col": "IncidentName",
+        "type_col": "IncidentTypeCategory",
+        "fire_out_col": "FireOutDateTime"
+      }
+    },
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Discovery Trend",
+        "date_col": "FireDiscoveryDateTime",
+        "dimensions": [
+          "POOState",
+          "FireCauseGeneral",
+          "IncidentTypeCategory"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "US Wildfires (EOC Enriched)",
+      "project": "Weather & Disaster Response",
+      "description": "Active US wildfire incidents enriched for Emergency Operations Center analysts. One row per current incident from NIFC/WFIGS with EOC-derived metrics (size class, containment band, daily growth, staleness, region key) and temporal calendar axes. Use IncidentSize for current acreage, PercentContained for containment, region_key (state/county) for geographic rollups, size_class / containment_band for triage filters, days_since_discovery + acres_per_day for situational awareness. Refresh: hourly."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "hourly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "Weather & Disaster Response",
+    "flow_name": "US Wildfires EOC Enriched",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 0,
+    "minute_utc": 30,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "Wildfire EOC Hourly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}
