@@ -32,7 +32,7 @@ from typing import Any, Optional
 from skill.scripts.lib import _REPO_ROOT  # noqa: F401
 
 from skill.scripts.intake import (
-    IntakeIncomplete, Output, Source, Spec, Transformation, intake,
+    IntakeIncomplete, Output, ServerPublish, Source, Spec, Transformation, intake,
 )
 from skill.scripts.source_planner import plan_sources
 from skill.scripts.generate_flow import generate_flow
@@ -41,6 +41,8 @@ from skill.scripts.synthesize_eval import synthesize_eval
 
 def _spec_from_dict(spec_dict: dict, request: str = "") -> Spec:
     """Hydrate a Spec from a JSON dict (no-LLM mode)."""
+    sp = spec_dict.get("server_publish")
+    server_publish = ServerPublish(**sp) if isinstance(sp, dict) else None
     return Spec(
         request=spec_dict.get("request") or request,
         sources=[Source(**s) for s in spec_dict.get("sources", [])],
@@ -51,6 +53,7 @@ def _spec_from_dict(spec_dict: dict, request: str = "") -> Spec:
         deployment=spec_dict.get("deployment", "local"),
         refresh_cadence=spec_dict.get("refresh_cadence", "once"),
         parameterize_query=bool(spec_dict.get("parameterize_query", False)),
+        server_publish=server_publish,
         confidence=float(spec_dict.get("confidence", 1.0)),
         open_questions=list(spec_dict.get("open_questions", [])),
     )
@@ -231,7 +234,9 @@ def _emit_report(run_dir: Path, history: list[dict], spec_dict: dict, tfl_path: 
 def run(request: str, run_dir: Optional[Path] = None,
         spec_path: Optional[Path] = None,
         skip_cli: bool = False,
-        flow_name: Optional[str] = None) -> dict:
+        flow_name: Optional[str] = None,
+        publish: bool = False,
+        auto_create_project: bool = False) -> dict:
     """Top-level entry. Returns a dict summary of the run.
 
     `spec_path` activates no-LLM mode: a pre-built spec.json is loaded
@@ -301,13 +306,17 @@ def run(request: str, run_dir: Optional[Path] = None,
     rig = synthesize_eval(spec, run_dir)
 
     if skip_cli:
-        return {
+        result = {
             "run_dir": str(run_dir),
             "tfl": str(tfl_path),
             "verify": verify_result,
             "skipped_cli": True,
             "spec": spec.to_dict(),
         }
+        if publish:
+            result["publish"] = _maybe_publish(spec, tfl_path, run_dir,
+                                            auto_create_project=auto_create_project)
+        return result
 
     # Phase 5: bounded refinement loop
     history: list[dict] = []
@@ -357,7 +366,7 @@ def run(request: str, run_dir: Optional[Path] = None,
     # Phase 6: report
     report_path = _emit_report(run_dir, history, spec.to_dict(), tfl_path)
 
-    return {
+    result: dict = {
         "run_dir": str(run_dir),
         "tfl": str(tfl_path),
         "report": str(report_path),
@@ -365,6 +374,130 @@ def run(request: str, run_dir: Optional[Path] = None,
         "final_mean": history[-1]["score"]["overall_mean"] if history else 0.0,
         "passed": history[-1]["score"]["overall_mean"] >= THRESHOLD if history else False,
     }
+
+    # Phase 7 (optional): publish + schedule on Tableau Server / Cloud.
+    # Only fires when caller passed --publish AND the spec has a
+    # server_publish block. Failures don't roll back the local build —
+    # the .tfl is still on disk and the report is already written.
+    if publish:
+        result["publish"] = _maybe_publish(spec, tfl_path, run_dir,
+                                            auto_create_project=auto_create_project)
+
+    return result
+
+
+def _patch_publish_extract_routing(tfl_path: Path, project_luid: str,
+                                   server_url: str) -> None:
+    """Set projectLuid + serverUrl on every .v1.PublishExtract node in
+    the .tfl. Run after the publish step has resolved the project so
+    backgrounder can route writes to the right destination.
+    """
+    import zipfile
+    if not project_luid:
+        return
+    with zipfile.ZipFile(tfl_path) as zf:
+        members = {n: zf.read(n) for n in zf.namelist()}
+    flow = json.loads(members["flow"].decode("utf-8"))
+    changed = False
+    for nid, n in flow.get("nodes", {}).items():
+        if n.get("nodeType") == ".v1.PublishExtract":
+            if not n.get("projectLuid"):
+                n["projectLuid"] = project_luid
+                changed = True
+            if server_url and not n.get("serverUrl"):
+                n["serverUrl"] = server_url
+                changed = True
+    if not changed:
+        return
+    members["flow"] = json.dumps(flow, indent=2).encode("utf-8")
+    tmp = tfl_path.with_suffix(".tfl.tmp")
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, data in members.items():
+            zf.writestr(name, data)
+    tmp.replace(tfl_path)
+
+
+def _maybe_publish(spec: Spec, tfl_path: Path, run_dir: Path,
+                   auto_create_project: bool = False) -> dict:
+    """Run the publish + schedule step. Failures are reported in the
+    result dict; the local build is preserved either way.
+
+    Project picker contract: before attempting upload, this fetches the
+    site project list. If `spec.server_publish.project` doesn't match
+    an existing project, returns
+        {"status": "needs_user_decision",
+         "want": "<configured name>",
+         "candidates": [{"id", "name", "description"}, ...],
+         "near_matches": [...],   # case-insensitive substring matches
+         "tfl": <tfl path>}
+    so the caller (Claude / the orchestrator shell) can prompt the user
+    via AskUserQuestion: pick an existing project, type a different
+    name, or opt into create-new. The picker NEVER auto-uploads to a
+    project the user didn't explicitly approve — local build stays
+    intact and re-publish is a single retry away.
+
+    Pass `auto_create_project=True` (e.g. CI / batch mode) to
+    pre-authorize creating a project with the spec's configured name
+    when no match exists; without it, missing projects always bounce
+    back as needs_user_decision.
+    """
+    if spec.server_publish is None:
+        return {"status": "skipped",
+                "reason": "no server_publish block in spec"}
+    try:
+        from skill.scripts.publish import (
+            publish_run, list_site_projects, create_site_project,
+        )
+        from dataclasses import asdict
+
+        want = spec.server_publish.project or ""
+        projects = list_site_projects()
+        names = {p["name"]: p for p in projects}
+        if want and want not in names:
+            wl = want.lower()
+            near = [p for p in projects if wl and wl in (p["name"] or "").lower()]
+            if not auto_create_project:
+                return {
+                    "status": "needs_user_decision",
+                    "reason": (
+                        f"Project {want!r} doesn't exist on this site. "
+                        "Pick an existing project, type a different name, "
+                        "or rerun with --auto-create-project to create it."
+                    ),
+                    "want": want,
+                    "candidates": projects,
+                    "near_matches": near,
+                    "tfl": str(tfl_path),
+                }
+            new = create_site_project(
+                want,
+                description=f"Auto-created by tableau-prep-etl skill for {spec.server_publish.flow_name or Path(tfl_path).stem!r}.",
+            )
+            spec.server_publish.project = new["name"]
+            # Re-fetch so the LUID-patch below sees the freshly-created project.
+            projects = list_site_projects()
+            names = {p["name"]: p for p in projects}
+
+        # Patch any .v1.PublishExtract nodes in the .tfl with the
+        # resolved project LUID + serverUrl. Without this, backgrounder
+        # rejects the run task with "project not found" because the
+        # LUID is the load-bearing routing field on Cloud (project
+        # names are non-unique site-wide).
+        target = names.get(spec.server_publish.project) or {}
+        proj_luid = target.get("id") or ""
+        from tflb_lib.publishing import config_from_env
+        try:
+            cfg = config_from_env()
+            server_url = cfg.url or ""
+        except Exception:
+            server_url = ""
+        if proj_luid:
+            _patch_publish_extract_routing(tfl_path, proj_luid, server_url)
+
+        pr = publish_run(spec, tfl_path, run_dir=run_dir)
+        return {"status": "ok", **asdict(pr)}
+    except Exception as e:
+        return {"status": "error", "type": type(e).__name__, "message": str(e)}
 
 
 if __name__ == "__main__":
@@ -379,6 +512,17 @@ if __name__ == "__main__":
                     help="Skip the tableau-prep-cli refinement loop. Generate .tfl + scripts only.")
     ap.add_argument("--flow-name", default=None,
                     help="Group runs under runtime/<flow_name>/. Defaults to the spec filename stem.")
+    ap.add_argument("--publish", action="store_true",
+                    help="After build, publish the .tfl to Tableau Server/Cloud and "
+                         "schedule it per spec.server_publish. Requires "
+                         "TABLEAU_SERVER_{URL,PAT_NAME,PAT_SECRET,SITE} env vars. "
+                         "Default is local-only — server upload only happens when "
+                         "this flag is explicitly passed.")
+    ap.add_argument("--auto-create-project", action="store_true",
+                    help="Pre-authorize creating the spec.server_publish.project "
+                         "if it doesn't exist on the site. Without this, missing "
+                         "projects bounce back as needs_user_decision so the user "
+                         "can pick from existing projects or approve creation.")
     args = ap.parse_args()
     if not args.request and not args.spec:
         ap.error("must provide either a request string or --spec path/to/spec.json")
@@ -389,6 +533,8 @@ if __name__ == "__main__":
             spec_path=Path(args.spec) if args.spec else None,
             skip_cli=args.skip_cli,
             flow_name=args.flow_name,
+            publish=args.publish,
+            auto_create_project=args.auto_create_project,
         )
         print(json.dumps(result, indent=2))
     except IntakeIncomplete as e:

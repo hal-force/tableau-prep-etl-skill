@@ -32,8 +32,11 @@ from jinja2 import Environment, FileSystemLoader
 
 from tflb_lib.nodes import (
     add_edge,
+    make_change_column_type_node,
+    make_change_semantic_role_node,
     make_hyper_node,
     make_join_node,
+    make_published_datasource_node,
     make_script_node,
     new_id,
 )
@@ -234,6 +237,9 @@ def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
     flow["connectionIds"] = []
     initial_nodes: list[str] = []
     branch_tails: list[str] = []  # branch_index → current tail node id
+    branch_input_ids: list[str] = []  # branch_index → input node id (for fan-out)
+    transform_ids_by_name: dict[str, str] = {}  # transform.name → emitted node id
+    transform_upstream_by_name: dict[str, str] = {}  # transform.name → its upstream node id
 
     for branch_idx, plan_input in enumerate(plan.inputs):
         # Per-branch trigger.xlsx in its own subdirectory so multiple Excel
@@ -269,18 +275,62 @@ def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
             inp_node["name"] = f"Input {branch_idx + 1}"
         flow["nodes"][inp_id] = inp_node
         initial_nodes.append(inp_id)
+        branch_input_ids.append(inp_id)
 
+        # Transforms within a branch can either extend the linear chain
+        # (default) or fan off the branch input ("@input") or off a
+        # previously-emitted transform (by `name`). The linear-chain
+        # tail (`prev_id`) advances ONLY when the transform appended
+        # to it; fan-off transforms don't move the chain head, so a
+        # subsequent linear transform still hangs off the previous
+        # linear node and the detail extract stays lean.
         prev_id = inp_id
         for tnode in plan.transforms:
             if tnode.branch != branch_idx:
                 continue
-            sid, snode = make_script_node(
-                tnode.name, Path(tnode.rendered_path), tnode.function_name,
-                next_node_ids=[], description=tnode.description or None,
-            )
+            # Branch on transform role: cast / semantic_role nodes are
+            # native Maestro transform nodes (no Python script); script
+            # nodes wrap a rendered .py via SuperExtensibilityNode.
+            if tnode.role == "cast":
+                col = tnode.connector_attrs.get("cast_column", "")
+                typ = tnode.connector_attrs.get("cast_type", "string")
+                sid, snode = make_change_column_type_node(
+                    col, typ, next_node_ids=[],
+                    description=tnode.description or None,
+                )
+            elif tnode.role == "semantic_role":
+                col = tnode.connector_attrs.get("role_column", "")
+                rid = tnode.connector_attrs.get("role_id", "")
+                rname = tnode.connector_attrs.get("role_name", "")
+                sid, snode = make_change_semantic_role_node(
+                    col, rid, rname, next_node_ids=[],
+                    description=tnode.description or None,
+                )
+            else:
+                sid, snode = make_script_node(
+                    tnode.name, Path(tnode.rendered_path), tnode.function_name,
+                    next_node_ids=[], description=tnode.description or None,
+                )
             flow["nodes"][sid] = snode
-            add_edge(flow["nodes"][prev_id], sid)
-            prev_id = sid
+            # parent forms:
+            #   ""           → linear append (advance prev_id)
+            #   "@input"     → fork off this branch's input node
+            #   "@sibling:N" → share upstream with previously-emitted
+            #                  transform N (fan from same upstream)
+            #   "<name>"     → hang directly off transform <name>
+            if tnode.parent == "@input":
+                upstream_id = inp_id
+            elif tnode.parent.startswith("@sibling:"):
+                sib = tnode.parent.split(":", 1)[1]
+                upstream_id = transform_upstream_by_name.get(sib, prev_id)
+            elif tnode.parent and tnode.parent in transform_ids_by_name:
+                upstream_id = transform_ids_by_name[tnode.parent]
+            else:
+                upstream_id = prev_id
+                prev_id = sid
+            add_edge(flow["nodes"][upstream_id], sid)
+            transform_ids_by_name[tnode.name] = sid
+            transform_upstream_by_name[tnode.name] = upstream_id
         branch_tails.append(prev_id)
 
     flow["initialNodes"] = initial_nodes
@@ -323,13 +373,32 @@ def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
         add_edge(flow["nodes"][final_tail], sid)
         final_tail = sid
 
-    # 2d. Outputs hang off the final tail.
+    # 2d. Outputs hang off the resolved upstream:
+    #   - if `source` names a previously-emitted transform, fan off it
+    #     (lets a stats table sibling-fan off a stats node while the
+    #     detail output continues from the linear tail)
+    #   - otherwise, hang off the final tail (single-output linear default)
+    # Output kind controls writer-node type:
+    #   hyper / csv → WriteToHyper
+    #   published_data_source → WritePublishedDataSource (server-bound)
+    pub_cfg = spec.server_publish
+    default_project = (pub_cfg.project if pub_cfg else "") or "default"
     for o in plan.outputs:
         attrs = o.connector_attrs or {}
-        hp = attrs.get("hyper_path") or attrs.get("csv_path") or str(outputs_dir / o.name)
-        hid, hnode = make_hyper_node(o.name, Path(hp), description=o.description or None)
-        flow["nodes"][hid] = hnode
-        add_edge(flow["nodes"][final_tail], hid)
+        kind = attrs.get("kind", "hyper")
+        source_name = attrs.get("source", "") or ""
+        upstream_id = transform_ids_by_name.get(source_name, final_tail) if source_name else final_tail
+        if kind == "published_data_source":
+            project_name = attrs.get("project") or default_project
+            oid, onode = make_published_datasource_node(
+                o.name, project_name=project_name, datasource_name=o.name,
+                description=o.description or None,
+            )
+        else:
+            hp = attrs.get("hyper_path") or attrs.get("csv_path") or str(outputs_dir / o.name)
+            oid, onode = make_hyper_node(o.name, Path(hp), description=o.description or None)
+        flow["nodes"][oid] = onode
+        add_edge(flow["nodes"][upstream_id], oid)
 
     # 2e. Parameters (web crawl exposes a query param)
     if plan.parameters:
@@ -358,8 +427,9 @@ if __name__ == "__main__":
     ap.add_argument("--spec", required=True, help="Path to spec.json")
     ap.add_argument("--run-dir", required=True)
     args = ap.parse_args()
-    from skill.scripts.intake import Source, Transformation, Output
+    from skill.scripts.intake import Source, Transformation, Output, ServerPublish
     spec_dict = json.loads(Path(args.spec).read_text())
+    sp_dict = spec_dict.get("server_publish")
     spec = Spec(
         request=spec_dict["request"],
         sources=[Source(**s) for s in spec_dict["sources"]],
@@ -370,6 +440,7 @@ if __name__ == "__main__":
         deployment=spec_dict.get("deployment", "local"),
         refresh_cadence=spec_dict.get("refresh_cadence", "once"),
         parameterize_query=bool(spec_dict.get("parameterize_query", False)),
+        server_publish=ServerPublish(**sp_dict) if sp_dict else None,
     )
     from skill.scripts.source_planner import plan_sources
     plan = plan_sources(spec, Path(args.run_dir) / "outputs")

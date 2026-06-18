@@ -1,0 +1,28 @@
+{
+  "verify_ssl": false,
+  "timeout_s": 60,
+  "max_retries": 1,
+  "csv_encoding": "utf-8",
+  "csv_schema": {
+    "record_id": "string",
+    "full_name": "string",
+    "email": "string",
+    "phone": "string",
+    "date_of_birth": "string",
+    "ssn": "string",
+    "credit_card": "string",
+    "iban": "string",
+    "bank_routing": "string",
+    "bank_account": "string",
+    "street_address": "string",
+    "city": "string",
+    "state": "string",
+    "postal_code": "string",
+    "medical_record_number": "string",
+    "diagnosis_code": "string",
+    "health_plan_id": "string",
+    "visit_notes": "string",
+    "membership_tier": "string",
+    "signup_date": "string"
+  }
+}

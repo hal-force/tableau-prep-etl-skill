@@ -79,9 +79,39 @@ class Output:
     name: str           # output filename or DS name
     path: str = ""
     description: str = ""
+    # Which upstream node this output hangs off. Empty string = the
+    # final transform tail (the single-output default). When multiple
+    # outputs exist, set this to the transform node's `name` so the
+    # fan-out wires correctly. Example: trend_features feeds the
+    # detail output, trend_stats feeds the stats output.
+    source: str = ""
+    # Server-side routing for kind=='published_data_source'.
+    # `project` overrides spec.server_publish.project for this DS;
+    # left empty, the publish step uses the spec-level project.
+    project: str = ""
 
 
 REFRESH_CADENCES = ("once", "hourly", "daily", "weekly", "monthly", "on_demand")
+
+
+@dataclass
+class ServerPublish:
+    """Server publish config. Populated only when deployment=='tableau_server'.
+
+    Auth (URL/PAT) is NEVER stored here — it always comes from env vars at
+    runtime. This dataclass holds only routing + cadence info that's safe
+    to keep alongside the spec.
+    """
+    project: str = "default"           # project name OR id
+    flow_name: str = ""                # display name; defaults to spec name
+    overwrite: bool = True             # replace existing flow on re-publish
+    cadence: str = "daily"             # hourly|daily|weekly|monthly
+    hour_utc: int = 6                  # 0-23, UTC fire hour
+    minute_utc: int = 0                # 0|15|30|45
+    weekday: str = "monday"            # for cadence=='weekly'
+    day_of_month: int = 1              # for cadence=='monthly'
+    schedule_name_hint: str = ""       # display name for new schedules
+    balance_tolerance_hours: int = 2   # ± hours to shift to dodge load
 
 
 @dataclass
@@ -95,6 +125,7 @@ class Spec:
     deployment: str = "local"
     refresh_cadence: str = "once"  # once | hourly | daily | weekly | monthly | on_demand
     parameterize_query: bool = False  # True when the user wants the inputs runtime-configurable
+    server_publish: Optional[ServerPublish] = None
     confidence: float = 0.0   # 0–1, LLM's self-reported confidence
     open_questions: list[str] = field(default_factory=list)
 
