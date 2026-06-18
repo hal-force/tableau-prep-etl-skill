@@ -1,0 +1,16 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 240,
+  "max_retries": 3,
+  "arcgis_where": "VOLTAGE>=230",
+  "arcgis_out_fields": "OBJECTID,ID,TYPE,STATUS,OWNER,VOLTAGE,VOLT_CLASS,INFERRED,SUB_1,SUB_2,SOURCE,Shape__Length",
+  "arcgis_field_types": {
+    "OBJECTID": "int",
+    "VOLTAGE": "decimal",
+    "Shape__Length": "decimal"
+  },
+  "arcgis_return_geometry": true,
+  "arcgis_geometry_kind": "polyline",
+  "arcgis_out_sr": 4326,
+  "arcgis_page_size": 2000
+}

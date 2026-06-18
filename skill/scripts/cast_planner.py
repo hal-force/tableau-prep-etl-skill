@@ -47,7 +47,12 @@ _DATE_SUFFIXES = (
     "_date", "date", "occ_date", "occurrence_date", "report_date",
 )
 _INT_KEYWORDS = (
-    "year", "month", "day", "count", "_id", "id",
+    "year", "month", "day", "count", "_id",
+    # Note: bare "id" was here historically but mis-fires on string-id
+    # columns like HIFLD's `ID` (which holds e.g. "100123" but as a
+    # string). Callers can pin the type with `arcgis_field_types: ID: int`
+    # if they really do mean an integer ID. The `_id` suffix still fires
+    # for `record_id`, `event_id`, etc. via the underscore-bounded check.
 )
 _DECIMAL_KEYWORDS = (
     "lat", "latitude", "lon", "long", "longitude",

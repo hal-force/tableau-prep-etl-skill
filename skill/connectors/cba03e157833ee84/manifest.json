@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "services2.arcgis.com",
+    "auth": "none",
+    "format": "arcgis_features"
+  },
+  "stored_at": 1781825434.765789
+}
