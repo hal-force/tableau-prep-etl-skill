@@ -1,0 +1,72 @@
+{
+  "request": "Pull the US high-voltage transmission grid (>=230 kV) from the HIFLD authoritative ArcGIS feed, treat each line as an undirected edge between SUB_1 and SUB_2 substations, and run network analysis: degree / betweenness / eigenvector / pagerank / closeness centrality plus Fruchterman-Reingold layout coordinates seeded by geographic positions. Publish the enriched endpoint table to a new 'Energy Infrastructure' project on Tableau Server so analysts can visualize the network topology in Tableau with x/y coordinates and centrality-driven node attributes.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "HIFLD US Transmission Backbone",
+      "description": "HIFLD authoritative US Electric Power Transmission Lines layer, filtered to VOLTAGE>=230 (the high-voltage backbone). One feature per line; SUB_1 and SUB_2 are substation endpoint identifiers. Polyline geometry; we extract first/last vertex into start_lon/start_lat/end_lon/end_lat for the network layout's geographic seed.",
+      "url": "https://services2.arcgis.com/LYMgRMwHfrWWEg3s/arcgis/rest/services/HIFLD_US_Electric_Power_Transmission_Lines/FeatureServer/0/query",
+      "format": "arcgis_features",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 240,
+        "max_retries": 3,
+        "arcgis_where": "VOLTAGE>=230",
+        "arcgis_out_fields": "OBJECTID,ID,TYPE,STATUS,OWNER,VOLTAGE,VOLT_CLASS,INFERRED,SUB_1,SUB_2,SOURCE,Shape__Length",
+        "arcgis_field_types": {
+          "OBJECTID": "int",
+          "ID": "string",
+          "VOLTAGE": "decimal",
+          "Shape__Length": "decimal"
+        },
+        "arcgis_return_geometry": true,
+        "arcgis_geometry_kind": "polyline",
+        "arcgis_out_sr": 4326,
+        "arcgis_page_size": 2000
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "graph_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Grid Network Analyzer",
+        "source_id_col": "SUB_1",
+        "target_id_col": "SUB_2",
+        "layout_iterations": 50,
+        "layout_scale": 10.0,
+        "layout_seed_from_geography": true,
+        "closeness_full_threshold": 1000,
+        "description": "Builds an undirected NetworkX graph from transmission lines keyed by SUB_1 -> SUB_2. Computes Fruchterman-Reingold spring layout (x/y coords) seeded from each substation's geographic mean across all incident edges. Adds node-level metrics: degree_centrality, betweenness_centrality, eigenvector_centrality, pagerank, closeness_centrality. Emits two rows per edge (one per endpoint) so Tableau can render lines via Detail/path-order on edge_id."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "US Grid Network (Backbone)",
+      "project": "Energy Infrastructure",
+      "description": "US high-voltage (>=230 kV) electric transmission grid as a network. Each row = one endpoint of one line (two rows per line, joined by edge_id). x/y are Fruchterman-Reingold layout coords for non-geographic 'force-directed' rendering; longitude/latitude are real geographic coords. Node-level centralities (degree / betweenness / eigenvector / pagerank / closeness) attach naturally to node_id. Source: HIFLD authoritative transmission lines layer. Refresh: monthly."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "Energy Infrastructure",
+    "flow_name": "US Grid Network (Backbone)",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 9,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "Grid Network Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}
