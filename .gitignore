@@ -21,11 +21,15 @@ _smoke/
 # Hyper outputs
 **/*.hyper
 **/*.tds
+# ...except open-source archived sample outputs under flows/.
+!flows/**/*.hyper
 
 # Built TFLs (regenerate via tflb_lib)
 **/*.tfl
 # ...except the seed clone, which is load-bearing for generate_flow.py.
 !skill/templates/seeds/empty.tfl
+# ...and except archived per-flow .tfl artifacts under flows/.
+!flows/**/*.tfl
 
 # Test data
 data/

@@ -9,8 +9,8 @@
         "auth": "none",
         "format": "csv_index_then_zip"
       },
-      "hit_count": 4,
-      "last_used_at": 1781625651.689704
+      "hit_count": 9,
+      "last_used_at": 1781804808.0078888
     },
     "87373f435ea745fc": {
       "signature": {
@@ -69,8 +69,8 @@
         "auth": "none",
         "format": "tableau_published_ds"
       },
-      "hit_count": 2,
-      "last_used_at": 1781794477.6432111
+      "hit_count": 20,
+      "last_used_at": 1781803010.107321
     }
   }
 }

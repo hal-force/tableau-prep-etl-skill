@@ -1,0 +1,38 @@
+{
+  "request": "Pull the latest GDELT global events feed and load into a local Hyper extract for Tableau analysis. One row per event, geocoded by lat/lon with country, event-root code (CAMEO), Goldstein scale, and source URL. No country filter - keep events worldwide so we can map global activity by location.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "GDELT Global Events",
+      "description": "GDELT 1.0 daily events feed from data.gdeltproject.org. The skill scrapes the events index page for the most recent .CSV.zip, downloads + unzips it, and emits one row per event with full v1 schema (58 columns including Actor1/2 country/type, ActionGeo lat/lon and country, EventCode CAMEO, GoldsteinScale, NumMentions, AvgTone, SOURCEURL).",
+      "path": "",
+      "url": "http://data.gdeltproject.org/events/index.html",
+      "format": "csv_index_then_zip",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": false,
+        "timeout_s": 180,
+        "max_retries": 3,
+        "index_link_pattern": "([0-9]{8}\\.export\\.CSV\\.zip)",
+        "country_filter": "",
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [],
+  "outputs": [
+    {
+      "kind": "hyper",
+      "name": "gdelt_global_events",
+      "path": "",
+      "description": "GDELT 1.0 global events for the latest published day (one row per event). Use ActionGeo_Lat / ActionGeo_Long for map plots, ActionGeo_CountryCode for choropleths, EventRootCode (CAMEO root) for event-type breakdowns, GoldsteinScale (-10..+10) for conflict-cooperation tone."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "local",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "confidence": 1.0,
+  "open_questions": []
+}

@@ -309,6 +309,31 @@ secret store, not into argv or transcripts.
 never persisted alongside the spec. The local plaintext file is
 opt-in, chmod 600, and listed last in the suggestion order.
 
+#### Local prep-cli runs of `internal_published_ds` flows
+
+Tableau Prep CLI v2026.1 has a product gap: its `credentials.json`
+(`-c <path>`) only accepts `username` / `password` — PATs are
+explicitly rejected by the deserializer. To run such flows locally
+through prep-cli, store username + password as additional Keychain
+entries:
+
+```bash
+security add-generic-password -s tableau-prep-etl -a tableau-username -U \
+    -w 'YOUR_TABLEAU_USERNAME'
+security add-generic-password -s tableau-prep-etl -a tableau-password -U \
+    -w 'YOUR_TABLEAU_PASSWORD'
+```
+
+`run_loop._run_prep_cli` synthesizes a temp `credentials.json` per
+sqlproxy connection in the .tfl, passes it via `-c`, and deletes the
+file after the CLI exits regardless of outcome. The synth uses
+chmod 600 and never touches the audit log.
+
+PATs remain primary auth for **publish, scan, and metadata writer**
+(those code paths use TSC / REST / GraphQL, all of which accept PATs
+correctly). The username/password is *only* used for prep-cli's local
+verify run when the flow sources from a published DS.
+
 #### CLI usage for credentials
 
 ```bash
