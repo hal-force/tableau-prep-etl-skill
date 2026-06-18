@@ -231,12 +231,99 @@ def _emit_report(run_dir: Path, history: list[dict], spec_dict: dict, tfl_path: 
     return report
 
 
+def _maybe_scan_internal(spec: Spec, run_dir: Path, top_k: int = 10) -> dict:
+    """Phase 1b. Scan the connected Tableau site for INTERNAL published
+    data sources matching `spec.request`. Returns a dict the orchestrator
+    can surface to the user via AskUserQuestion.
+
+    Mirrors `_maybe_publish` semantics: never silently rewrites the spec.
+    Emits candidates and bounces back as needs_user_decision so the
+    orchestrator can ask. The user either:
+      (a) reruns with --skip-scan to fall through to external sources, or
+      (b) edits spec.json to add an internal_published_ds source and reruns.
+    """
+    try:
+        from skill.scripts.server_scan import is_configured, search_datasources
+        from skill.scripts.server_creds import discover
+    except Exception as e:
+        return {"status": "error", "type": type(e).__name__, "message": str(e)}
+    if not is_configured():
+        # Try Keychain / secret-tool / file fallbacks before giving up.
+        creds = discover()
+        if creds.status != "configured":
+            return {"status": "skipped",
+                    "reason": "TABLEAU_SERVER_* env vars not set",
+                    "credentials": creds.to_dict()}
+    try:
+        candidates = search_datasources(spec.request, top_k=top_k)
+    except Exception as e:
+        return {"status": "error", "type": type(e).__name__, "message": str(e)}
+
+    out_path = run_dir / "internal_scan.json"
+    out_path.write_text(json.dumps({
+        "request": spec.request,
+        "candidates": candidates,
+    }, indent=2))
+    return {
+        "status": "needs_user_decision" if candidates else "no_matches",
+        "scan_path": str(out_path),
+        "candidates": candidates,
+        "request": spec.request,
+    }
+
+
+def _maybe_write_metadata(spec: Spec, publish_result: dict, run_dir: Path,
+                          review: bool = False) -> dict:
+    """Phase 7b. For each published_data_source output, generate (and
+    optionally apply) DS + column descriptions. Runs after `_maybe_publish`
+    so the LUIDs are known.
+
+    `publish_result` is the `result["publish"]` dict; we use it to
+    extract LUIDs when present. When publish failed or the output is
+    local-only, we still emit the proposal as an audit trail."""
+    pd_outputs = [o for o in spec.outputs if o.kind == "published_data_source"]
+    if not pd_outputs:
+        return {"status": "skipped", "reason": "no published_data_source outputs"}
+    try:
+        from skill.scripts.metadata_writer import write_for_output
+    except Exception as e:
+        return {"status": "error", "type": type(e).__name__, "message": str(e)}
+
+    luids_by_name = {}
+    for ds in (publish_result or {}).get("datasources", []) or []:
+        if ds.get("name") and ds.get("luid"):
+            luids_by_name[ds["name"]] = ds["luid"]
+
+    per_output: list[dict] = []
+    for o in pd_outputs:
+        luid = luids_by_name.get(o.name, "")
+        # Sample rows aren't piped through yet; metadata_writer accepts
+        # an empty list and the LLM still produces useful column blurbs
+        # from the column-name list and the spec's flow_intent.
+        cols = []  # filled in by future hook from rendered output schema
+        try:
+            res = write_for_output(spec, o.name, luid, cols, [], run_dir,
+                                   review=review)
+            per_output.append(res)
+        except Exception as e:
+            per_output.append({
+                "status": "error", "output_name": o.name,
+                "type": type(e).__name__, "message": str(e),
+            })
+    return {
+        "status": "needs_user_decision" if review and per_output else "ok",
+        "outputs": per_output,
+    }
+
+
 def run(request: str, run_dir: Optional[Path] = None,
         spec_path: Optional[Path] = None,
         skip_cli: bool = False,
         flow_name: Optional[str] = None,
         publish: bool = False,
-        auto_create_project: bool = False) -> dict:
+        auto_create_project: bool = False,
+        skip_scan: bool = False,
+        review_metadata: bool = False) -> dict:
     """Top-level entry. Returns a dict summary of the run.
 
     `spec_path` activates no-LLM mode: a pre-built spec.json is loaded
@@ -267,6 +354,60 @@ def run(request: str, run_dir: Optional[Path] = None,
         (run_dir / "spec.json").write_text(json.dumps(spec.to_dict(), indent=2))
     else:
         spec = intake(request, run_dir)
+
+    # Phase 1a: credentials gate. If the spec implies any server work
+    # (internal_published_ds source, published_data_source output, or
+    # --publish), discover Tableau Server creds before going any further.
+    # Discovery walks env -> macOS Keychain -> Linux secret-tool -> local
+    # config file. When nothing turns up, we bounce back as
+    # needs_user_decision with platform-tailored secure-storage
+    # suggestions so the orchestrator can guide the user without ever
+    # having to handle secrets in the conversation transcript.
+    spec_dict_for_check = spec.to_dict()
+    needs_creds = False
+    try:
+        from skill.scripts.server_creds import discover, secrets_in_spec
+        needs_creds = secrets_in_spec(spec_dict_for_check) or publish
+    except Exception:
+        needs_creds = False
+    if needs_creds:
+        creds = discover()
+        if creds.status != "configured":
+            return {
+                "run_dir": str(run_dir),
+                "spec": spec_dict_for_check,
+                "credentials": creds.to_dict(),
+                "passed": False,
+            }
+
+    # Phase 1b: INTERNAL data scan. Before any external source acquisition,
+    # check the connected Tableau site for a published DS that already
+    # answers the user's request. Re-using a certified DS already on the
+    # site is almost always preferable to re-acquiring the upstream feed.
+    #
+    # Behavior matches the publish picker: never silently rewrites the
+    # spec. Emits candidates and bounces back as needs_user_decision so
+    # the orchestrator can prompt via AskUserQuestion. The user then:
+    #   (a) reruns with --skip-scan to fall through to external sources, or
+    #   (b) edits spec.json to add an internal_published_ds source and reruns.
+    has_internal = any(s.type == "internal_published_ds" for s in spec.sources)
+    if not skip_scan and not has_internal:
+        scan_result = _maybe_scan_internal(spec, run_dir)
+        # Only block when the scan succeeded with candidates the user
+        # should review. "skipped" / "no_matches" / "error" all fall
+        # through silently - the user shouldn't need a Tableau site to
+        # run this skill.
+        if scan_result.get("status") == "needs_user_decision":
+            return {
+                "run_dir": str(run_dir),
+                "spec": spec.to_dict(),
+                "internal_scan": scan_result,
+                "passed": False,
+            }
+        if scan_result.get("status") not in (None, "skipped"):
+            (run_dir / "internal_scan_result.json").write_text(
+                json.dumps(scan_result, indent=2)
+            )
 
     # Phase 2: plan
     plan = plan_sources(spec, run_dir / "outputs")
@@ -316,6 +457,11 @@ def run(request: str, run_dir: Optional[Path] = None,
         if publish:
             result["publish"] = _maybe_publish(spec, tfl_path, run_dir,
                                             auto_create_project=auto_create_project)
+            # Phase 7b: metadata writer. Only runs after a successful publish.
+            if result["publish"].get("status") == "ok":
+                result["metadata"] = _maybe_write_metadata(
+                    spec, result["publish"], run_dir, review=review_metadata,
+                )
         return result
 
     # Phase 5: bounded refinement loop
@@ -382,6 +528,11 @@ def run(request: str, run_dir: Optional[Path] = None,
     if publish:
         result["publish"] = _maybe_publish(spec, tfl_path, run_dir,
                                             auto_create_project=auto_create_project)
+        # Phase 7b: metadata writer. Only runs after a successful publish.
+        if result["publish"].get("status") == "ok":
+            result["metadata"] = _maybe_write_metadata(
+                spec, result["publish"], run_dir, review=review_metadata,
+            )
 
     return result
 
@@ -523,6 +674,14 @@ if __name__ == "__main__":
                          "if it doesn't exist on the site. Without this, missing "
                          "projects bounce back as needs_user_decision so the user "
                          "can pick from existing projects or approve creation.")
+    ap.add_argument("--skip-scan", action="store_true",
+                    help="Bypass the Phase 1b INTERNAL data scan and fall through "
+                         "straight to external source acquisition. Use when the spec "
+                         "already specifies the source you want.")
+    ap.add_argument("--review-metadata", action="store_true",
+                    help="Stop the Phase 11 metadata writer after generating proposal "
+                         "JSON; surface to the user before applying. Default is "
+                         "auto-apply. Proposal is always saved as audit trail either way.")
     args = ap.parse_args()
     if not args.request and not args.spec:
         ap.error("must provide either a request string or --spec path/to/spec.json")
@@ -535,6 +694,8 @@ if __name__ == "__main__":
             flow_name=args.flow_name,
             publish=args.publish,
             auto_create_project=args.auto_create_project,
+            skip_scan=args.skip_scan,
+            review_metadata=args.review_metadata,
         )
         print(json.dumps(result, indent=2))
     except IntakeIncomplete as e:

@@ -47,6 +47,36 @@ It is **not** the right tool for:
 When invoked, the skill walks through these phases. Each phase has a
 script under `scripts/`; the skill orchestrates them.
 
+### Phase 0: INTERNAL data scan (`scripts/server_scan.py`)
+
+**Tableau Server INTERNAL data sources are checked first.** Before the
+external source planner runs, the skill scans the connected site for
+published data sources matching the user's request - re-using a
+certified DS already on the site is almost always preferable to
+re-acquiring the upstream feed.
+
+The scan uses Tableau's Metadata API (GraphQL at
+`/api/metadata/graphql`) and authenticates via the same PAT env vars
+the publish step uses. No creds on disk.
+
+When the scan returns candidates, the orchestrator surfaces them to the
+user via `AskUserQuestion` and bounces the run back as
+`{"status": "needs_user_decision", "candidates": [...]}`. The user
+either:
+
+- Picks an existing DS - its luid + project flow into a
+  `source.type == "internal_published_ds"` entry on the spec.
+- Opts out (`--skip-scan` on rerun) and the planner walks straight
+  through to external sources.
+
+The scan is **silently skipped** when:
+
+- `--skip-scan` is passed.
+- The spec already has an `internal_published_ds` source (the user
+  has already chosen).
+- `TABLEAU_SERVER_*` env vars are missing AND no Keychain / secret-tool
+  / config-file fallback supplies them.
+
 ### Phase 1: Intake (`scripts/intake.py`)
 
 Parse the user's request into a structured `spec.json`. Calls the LLM
@@ -82,6 +112,7 @@ For each `spec.sources[*]`, pick a strategy:
 | `graphql_api` | `templates/api_caller.py.j2` (GraphQL variant) |
 | `web_crawl` | `templates/crawler.py.j2` Crawl4AI step + Prep parameter for query |
 | `pki_endpoint` | `templates/pki_connector.py.j2` cert-auth Python step |
+| `internal_published_ds` | Native Tableau Server input bound to a published DS LUID (no Python step). Resolved at backgrounder run time via the user's site session. |
 
 ### Phase 4: Source Acquisition + Schema Inference
 
@@ -210,6 +241,28 @@ emits a `WritePublishedDataSource` node pointing at the same project
 as the flow — Tableau backgrounder writes the extract there on each
 scheduled run.
 
+### Phase 11: Metadata writer (`scripts/metadata_writer.py`)
+
+After a successful publish, every `published_data_source` output gets
+LLM-generated descriptions written back to the site:
+
+- **DS-level description** via REST `PUT /datasources/{luid}` — a 2-4
+  sentence catalog entry covering what the data is and what it's
+  good for.
+- **Per-column descriptions** via the Metadata API GraphQL
+  `updateField` mutation (with `updateColumn` fallback for older
+  Server builds) — one sentence per column, mentioning units / format
+  when sample rows make it obvious.
+
+**Default: auto-apply.** Pass `--review-metadata` to write the
+proposal to `runtime/<run_id>/metadata_<output>.json` and stop without
+applying — the orchestrator surfaces it to the user via
+`AskUserQuestion`. Approval flow is the same shape as publish:
+inspect, then rerun without `--review-metadata` to apply.
+
+The proposal is always saved to disk regardless, so there's an audit
+trail of what got pushed to the site.
+
 ## Configuration
 
 ### Required environment variables
@@ -217,6 +270,68 @@ scheduled run.
 - `LLM_GATEWAY_URL` — full URL ending in `/chat/completions`
 - `LLM_GATEWAY_KEY` — bearer token
 - `LLM_GATEWAY_MODEL` — model id (default `claude-sonnet-4-6`)
+
+### Tableau Server (publish + INTERNAL scan + metadata writer)
+
+All four are required for any operation that talks to the site
+(scan, publish, metadata writer). When unset, those phases are
+silently skipped and the skill behaves as a local-only build tool.
+
+- `TABLEAU_SERVER_URL` — e.g. `https://prod-useast-a.online.tableau.com`
+- `TABLEAU_SERVER_PAT_NAME`
+- `TABLEAU_SERVER_PAT_SECRET`
+- `TABLEAU_SERVER_SITE` — site contentUrl (use `""` for the default
+  site on Tableau Server; required on Tableau Cloud)
+
+#### Auto-discovery + secure storage (`scripts/server_creds.py`)
+
+When a spec implies server work (an `internal_published_ds` source, a
+`published_data_source` output, or `--publish` on the CLI), Phase 1a
+runs **before** any other server-touching phase and tries to populate
+those env vars in this order:
+
+1. Already-set env vars (production / CI path — preferred).
+2. macOS Keychain via `security find-generic-password` with service
+   `tableau-prep-etl` and accounts `{url, pat-name, pat-secret, site}`.
+3. Linux libsecret via `secret-tool lookup` (same service/account scheme).
+4. `~/.tableau-prep-etl/server.json` (chmod 600 plaintext, local dev only).
+
+If discovery fails, run_loop returns
+`{"status": "needs_user_decision", "credentials": {...}}` with a list
+of platform-tailored secure-storage options the orchestrator surfaces
+via `AskUserQuestion`. The user is **never** asked to type a secret
+into the conversation — guidance directs them to OS-native stores
+(Keychain on macOS, GNOME Keyring / KWallet on Linux, Credential
+Manager on Windows) with copy-paste commands that put values into the
+secret store, not into argv or transcripts.
+
+**No creds on disk by default.** Env vars are read at call time and
+never persisted alongside the spec. The local plaintext file is
+opt-in, chmod 600, and listed last in the suggestion order.
+
+#### CLI usage for credentials
+
+```bash
+# Cheap env-only check (used by orchestrators / CI):
+python3 -m skill.scripts.server_creds --check
+
+# Full discovery: env -> Keychain -> secret-tool -> file.
+python3 -m skill.scripts.server_creds --load
+
+# Print platform-tailored secure-storage setup commands:
+python3 -m skill.scripts.server_creds --suggest
+
+# Save to ~/.tableau-prep-etl/server.json (LOCAL DEV ONLY):
+python3 -m skill.scripts.server_creds --save \
+    --url 'https://...' --pat-name 'name' --pat-secret 'secret' --site 'site'
+```
+
+### CLI flags relevant to Phase 0 + Phase 11
+
+- `--skip-scan` — bypass the INTERNAL data scan and fall through
+  straight to external sources.
+- `--review-metadata` — pause after generating the description
+  proposal so the user can review before applying.
 
 ### Optional
 
