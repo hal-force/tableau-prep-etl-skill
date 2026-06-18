@@ -83,6 +83,40 @@ def add_features(df):
         hours = pd.Series([-1] * len(df))
     df["hour_of_day"] = hours.astype(int)
     df["hour_bucket"] = hours.apply(_hour_bucket)
+    return _coerce_to_declared_schema(df)
+
+
+def _coerce_to_declared_schema(df):
+    """Cast every output column to its declared Prep type. Tableau
+    Prep's compile-time check rejects mismatches between the actual
+    pandas dtype and the type declared in `get_output_schema()`. We
+    apply every coercion (datetime->ISO string, int from float, etc.)
+    here at the end of the script so the output dataframe always
+    matches the contract Maestro expects."""
+    if df is None or len(df) == 0:
+        return df
+    for col, decl in INPUT_SCHEMA.items():
+        if col not in df.columns:
+            continue
+        d = (decl or "").lower()
+        try:
+            s = df[col]
+            if d in ("datetime", "date"):
+                if pd.api.types.is_datetime64_any_dtype(s):
+                    fmt = "%Y-%m-%d" if d == "date" else "%Y-%m-%dT%H:%M:%SZ"
+                    df[col] = s.dt.strftime(fmt).where(s.notna(), "")
+                else:
+                    df[col] = s.fillna("").astype(str)
+            elif d == "int":
+                df[col] = pd.to_numeric(s, errors="coerce").fillna(0).astype("int64")
+            elif d in ("decimal", "float", "double"):
+                df[col] = pd.to_numeric(s, errors="coerce")
+            elif d == "bool":
+                df[col] = s.astype("bool")
+            else:
+                df[col] = s.fillna("").astype(str)
+        except Exception:
+            continue
     return df
 
 
@@ -102,6 +136,10 @@ def _prep_type_for(decl: str):
         return prep_decimal()  # noqa: F821
     if decl == "bool":
         return prep_bool()  # noqa: F821
+    if decl == "date":
+        return prep_date()  # noqa: F821
+    if decl == "datetime":
+        return prep_datetime()  # noqa: F821
     return prep_string()  # noqa: F821
 
 

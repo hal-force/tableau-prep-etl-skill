@@ -5,9 +5,19 @@ For each `published_data_source` output of a successful publish,
 generate (and optionally apply) catalog-style descriptions:
 
   - DS-level description via REST PUT /api/{ver}/sites/{site}/datasources/{luid}
-    (TSC handles this via `server.datasources.update(item)`).
-  - Per-column descriptions via the Metadata API GraphQL `updateField`
-    mutation (with `updateColumn` fallback for older Server builds).
+    (TSC handles this via `server.datasources.update(item)`). WORKS today.
+  - Per-column descriptions: TODO migrate to .tds XML injection + Overwrite
+    re-publish. Tableau Cloud's Metadata API is read-only (verified
+    2026-06-18 against the usfederaldemos site - the GraphQL Mutation
+    root is empty), so the GraphQL `updateField` / `updateColumn`
+    mutations below ALWAYS fail with "Internal Server Error(s) while
+    executing query". The supported path is downloading the .tdsx,
+    injecting `<column><desc>` per field via XML, and re-publishing
+    with mode=Overwrite (the same LUID is preserved). For now, the
+    GraphQL path is left in place; callers see the failure surfaced
+    in the audit JSON. The OTF and US-wildfires flows applied
+    descriptions via this download->inject->republish path manually -
+    the helper to do it programmatically is the next implementation.
 
 Default behavior: AUTO-APPLY. The proposal JSON is always saved to
 runtime/<run_id>/metadata_<output_name>.json so there's an audit trail

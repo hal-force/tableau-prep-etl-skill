@@ -133,6 +133,10 @@ def _prep_type_for(name: str, decl: str):
         return prep_decimal()  # noqa: F821
     if decl == "bool":
         return prep_bool()  # noqa: F821
+    if decl == "date":
+        return prep_date()  # noqa: F821
+    if decl == "datetime":
+        return prep_datetime()  # noqa: F821
     return prep_string()  # noqa: F821
 
 

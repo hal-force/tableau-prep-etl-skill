@@ -85,24 +85,105 @@ def _norm(name: str) -> str:
     return (name or "").strip().lower()
 
 
+# Known names that English-trail with the suffix "date" but are NOT
+# date columns. Any column whose lowercased name ENDS in one of these
+# blocks the date heuristic outright. Add to this list whenever a real
+# spec hits a misfire - safer than reverse-engineering English morphology.
+_DATE_SUFFIX_BLOCKLIST = (
+    "candidate", "candidates",
+    "todate", "to_date", "month_to_date", "year_to_date",
+    "update", "updates", "mandate", "mandates",
+    "validate", "invalidate", "consolidate",
+    "accommodate", "intimidate", "inundate",
+    "elucidate",
+)
+
+
+def _ends_with_word(name: str, word: str) -> bool:
+    """`name` ends with `word` on a word boundary.
+
+    A word boundary is one of:
+      - exact match (n == w)
+      - the suffix already begins with '_' (e.g. `_dt`, `_id`, `_date`)
+        and `n.endswith(w)` -- the underscore IS the boundary
+      - the suffix is bare (no leading '_') and the char before it in
+        `n` is '_' -- e.g. `report` + `date` matches `report_date`.
+
+    CamelCase boundaries are deliberately NOT honored here - too many
+    English words trail in 'date' (Candidate, ToDate, Update, Mandate).
+    Concrete-name datetime columns (e.g. `FireDiscoveryDateTime`) get
+    matched via _CAMEL_DT_SUFFIXES, which is allow-listed and case-aware
+    on the original name (not the lowercased one)."""
+    n = name.lower()
+    w = word.lower()
+    if not n or not w:
+        return False
+    if n == w:
+        return True
+    if not n.endswith(w):
+        return False
+    # Suffix that already starts with '_' carries its own boundary.
+    if w.startswith("_"):
+        return True
+    # Otherwise require the preceding char in `n` to be '_'.
+    prev = n[-len(w) - 1]
+    return prev == "_"
+
+
+# CamelCase datetime suffixes worth auto-casting - these are unambiguous
+# (no English word ends in them). All match against the ORIGINAL-case
+# column name (not the lowercased version) so we genuinely recognize
+# CamelCase boundaries: `FireDiscoveryDateTime` matches `DateTime`,
+# `containmentdatetime` (lowercased) does NOT match `DateTime` and
+# falls through to the underscore-bounded `_DATETIME_SUFFIXES` check.
+_CAMEL_DT_SUFFIXES = ("DateTime", "Timestamp")
+
+
 def detect_cast(column_name: str) -> Optional[str]:
     """Return a Maestro type string for `column_name` if a heuristic
     fires, else None. Datetime check runs before date so '_datetime'
-    doesn't get misclassified as a plain date."""
+    doesn't get misclassified as a plain date.
+
+    Suffix matches require word-boundary semantics:
+      - underscore-bounded (e.g. `report_date`, `event_dt`)
+      - exact match (e.g. `date`)
+      - CamelCase tails matching `_CAMEL_DT_SUFFIXES` (e.g.
+        `FireDiscoveryDateTime` -> datetime). The CamelCase list is
+        allow-listed and short on purpose - English words trailing in
+        'date' (Candidate, ToDate, Update) blow up otherwise.
+
+    The `_DATE_SUFFIX_BLOCKLIST` guards against known English-word
+    collisions before any `date` heuristic fires. Caller can always
+    force a cast by declaring the type in source.extra.arcgis_field_types
+    / csv_schema - those declared types are honored verbatim."""
     n = _norm(column_name)
     if not n:
         return None
-    # datetime first — its suffixes are strict supersets of date's
+    # 0) Block known false positives outright.
+    for blk in _DATE_SUFFIX_BLOCKLIST:
+        if n.endswith(blk):
+            return None
+    # 1) CamelCase datetime tails (case-sensitive on original name)
+    for cs in _CAMEL_DT_SUFFIXES:
+        if column_name and column_name.endswith(cs) and len(column_name) > len(cs):
+            # Boundary check: char before cs must be lowercase (so
+            # `FireDiscoveryDateTime` matches but `DATETIME` alone does
+            # not -- it'll match via the underscore branch instead).
+            prev = column_name[-len(cs) - 1]
+            if prev.islower():
+                return "datetime"
+    # 2) Underscore-bounded datetime suffixes
     for suf in _DATETIME_SUFFIXES:
-        if n == suf or n.endswith(suf):
+        if _ends_with_word(n, suf):
             return "datetime"
+    # 3) Underscore-bounded date suffixes
     for suf in _DATE_SUFFIXES:
-        if n == suf or n.endswith(suf):
+        if _ends_with_word(n, suf):
             return "date"
     if n in _INT_KEYWORDS:
         return "int"
     for kw in _DECIMAL_KEYWORDS:
-        if n == kw or n.endswith("_" + kw) or n.endswith(kw):
+        if n == kw or _ends_with_word(n, kw):
             return "decimal"
     return None
 

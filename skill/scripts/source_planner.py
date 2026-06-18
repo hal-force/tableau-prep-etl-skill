@@ -296,6 +296,29 @@ def _plan_pki_endpoint(src: Source, idx: int) -> tuple[list[NodePlan], list[Node
     return [inp], [pki]
 
 
+def _is_arcgis_date_col(name: str) -> bool:
+    """True iff `name` looks like an ArcGIS date/datetime/time column,
+    using word-boundary semantics (so `ActiveFireCandidate` does NOT
+    qualify even though it ends in 'date'). Mirrors api_caller's
+    word-boundary date detection."""
+    if not name:
+        return False
+    lf = name.lower()
+    for suf in ("datetime", "date", "time", "_dt"):
+        if not lf.endswith(suf):
+            continue
+        if suf.startswith("_"):
+            return True
+        idx = len(lf) - len(suf)
+        if idx == 0:
+            return True
+        if lf[idx - 1] == "_":
+            return True
+        if idx < len(name) and name[idx].isupper():
+            return True
+    return False
+
+
 def _declared_schema_for_source(src: Source) -> dict[str, str]:
     """Best-effort {col: declared_type} for the upstream schema produced
     by this source's fetcher. Mirrors what api_caller's
@@ -314,8 +337,12 @@ def _declared_schema_for_source(src: Source) -> dict[str, str]:
                     schema[f] = field_types[f].lower()
                     continue
                 lf = f.lower()
-                if lf.endswith(("date", "datetime", "time")):
-                    schema[f] = "string"  # ISO 8601 string from api_caller
+                # api_caller declares date columns as prep_string()
+                # (Maestro rejects ISO strings declared as prep_datetime).
+                # Word-boundary check via `_is_arcgis_date_col` keeps
+                # `ActiveFireCandidate` out of this branch.
+                if _is_arcgis_date_col(f):
+                    schema[f] = "string"
                 elif any(k in lf for k in ("acres", "size", "percent", "lat", "lon")):
                     schema[f] = "decimal"
                 elif lf in ("objectid",):
@@ -495,7 +522,10 @@ def _input_schema_from_sources(spec: Spec) -> dict:
                     schema[f] = field_types[f]
                     continue
                 lf = f.lower()
-                if lf.endswith(("date", "datetime", "time")):
+                # Mirror api_caller's get_output_schema arcgis branch -
+                # date columns are emitted as ISO strings. Word-boundary
+                # check keeps `ActiveFireCandidate` out of this branch.
+                if _is_arcgis_date_col(f):
                     schema[f] = "string"
                 elif any(k in lf for k in ("acres", "size", "percent", "lat", "lon")):
                     schema[f] = "decimal"
@@ -561,6 +591,34 @@ def _input_schema_from_sources(spec: Spec) -> dict:
             for col, decl in (extra.get("csv_schema") or {}).items():
                 schema[col] = decl
     return schema
+
+
+def _input_schema_after_casts(spec: Spec) -> dict:
+    """Like `_input_schema_from_sources` but reflects the type each
+    column will have AFTER the planner's cast nodes run.
+
+    Cast nodes between the fetcher and analytics transforms convert
+    e.g. ISO 8601 string columns into datetime - the upstream-only
+    schema view returns those as `string`, which then thrashes against
+    the cast in any downstream script's `get_output_schema()`. Apply
+    the same `plan_casts_for_columns` rules + cast_overrides here so
+    `INPUT_SCHEMA` in the rendered scripts matches what's actually on
+    the wire when Maestro hands them rows."""
+    base = _input_schema_from_sources(spec)
+    for src in spec.sources:
+        extra = src.extra or {}
+        if extra.get("_skip_auto_casts"):
+            continue
+        cast_overrides = extra.get("casts") or {}
+        # Use the same name list `_plan_casts_and_roles` uses.
+        cols = _columns_for_source(src)
+        try:
+            casts = plan_casts_for_columns(cols, cast_overrides)
+        except Exception:
+            casts = {}
+        for col, typ in casts.items():
+            base[col] = typ
+    return base
 
 
 def _plan_qa(spec: Spec) -> list[NodePlan]:
@@ -666,7 +724,12 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
     # consumes an edge dataframe and emits an endpoint-row table with
     # geographic + force-directed layout coords + standard centralities.
     # Schema declared via `input_schema` so prior columns flow through.
-    input_schema = _input_schema_from_sources(spec)
+    # Note: build the POST-cast schema. Cast nodes between the fetcher
+    # and analytics transforms convert e.g. ISO 8601 string columns
+    # into datetime; downstream scripts must declare those columns as
+    # datetime in `get_output_schema()` to match what Maestro sees, or
+    # Maestro fails the run with 'a datetime type is required for [X]'.
+    input_schema = _input_schema_after_casts(spec)
     for j, tr in enumerate(spec.transformations):
         if tr.kind != "graph_analysis":
             continue
@@ -768,6 +831,49 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
             function_name="build_stats",
             branch=branch_idx,
             parent=f"@sibling:{feat_name}",
+        ))
+
+    # EOC fire-incident enrichment. Single-row script; consumes the
+    # branch tail (so it composes naturally after trend_features when
+    # both are configured) and adds analyst-facing derived columns
+    # (size_class, growth_band, containment_band, days_since_discovery,
+    # region_key, incident_summary). Sized for ArcGIS/WFIGS-shape feeds
+    # but works on any incident table by mapping the column names.
+    for tr in spec.transformations:
+        if tr.kind != "eoc_fire_metrics":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        base_name = args.get("name", "EOC Fire Metrics")
+        eoc_desc = args.get("description") or (
+            "Adds EOC analyst-facing derived metrics: days-since-discovery, "
+            "staleness, daily growth (acres/day), NWCG size class, "
+            "containment band, is_active flag, region_key (state/county) "
+            "and a tooltip-ready incident_summary string."
+        )
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=base_name,
+            description=eoc_desc,
+            template="eoc_fire_metrics.py.j2",
+            template_vars={
+                "size_col":          args.get("size_col", "IncidentSize"),
+                "discovery_col":     args.get("discovery_col", "FireDiscoveryDateTime"),
+                "modified_col":      args.get("modified_col", "ModifiedOnDateTime_dt"),
+                "containment_col":   args.get("containment_col", "PercentContained"),
+                "containment_dt_col":args.get("containment_dt_col", "ContainmentDateTime"),
+                "state_col":         args.get("state_col", "POOState"),
+                "county_col":        args.get("county_col", "POOCounty"),
+                "agency_col":        args.get("agency_col", "POOJurisdictionalAgency"),
+                "cause_col":         args.get("cause_col", "FireCauseGeneral"),
+                "name_col":          args.get("name_col", "IncidentName"),
+                "type_col":          args.get("type_col", "IncidentTypeCategory"),
+                "fire_out_col":      args.get("fire_out_col", "FireOutDateTime"),
+                "reference_now":     args.get("reference_now", ""),
+                "input_schema":      input_schema,
+            },
+            function_name="add_metrics",
+            branch=branch_idx,
         ))
 
     # PII / PAI redaction transformations. Like trend_analysis, this
