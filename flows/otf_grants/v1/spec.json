@@ -1,0 +1,197 @@
+{
+  "request": "Pull all three Ontario Trillium Foundation open datasets (the master grants list since 2000, the catchment-area-to-cities concordance, and the catchment-area-to-census-division concordance), join them on city and catchment ID, and publish the enriched grants table to the 'Grants' project on Tableau Server.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "OTF Grants Since 2000",
+      "description": "Master OTF grants ledger from otf.ca/open. Bilingual headers; UTF-8. One row per approved grant from 2000 to present.",
+      "url": "https://otf.ca/sites/default/files/OTF-Grants_since2000.csv",
+      "format": "csv",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 300,
+        "max_retries": 3,
+        "csv_encoding": "utf-8",
+        "csv_rename_map": {
+          "Funding Org:Org subventionnaire": "funding_org",
+          "Country Served:Pays servis": "country_served",
+          "Province Served:Province servis": "province_served",
+          "Fiscal Year:Ann\u00e9e fiscal": "fiscal_year",
+          "Grant Programme:Title:Programme, titre": "grant_program",
+          "Geographical Area Served:R\u00e9gion servis": "grant_catchment",
+          "Cross-catchment indicator:Indicateur interr\u00e9gional": "cross_catchment",
+          "Identifier:Identificateur": "identifier",
+          "Organization name:Nom d'organisme": "organization_name",
+          "Submission date:Date de soumission": "submission_date",
+          "Approval date:Date approv\u00e9e": "approval_date",
+          "Amount Applied For:Montant demand\u00e9": "amount_applied_for",
+          "Amount Awarded:Montant d\u00e9cern\u00e9": "amount_awarded",
+          "Planned Dates:Duration (months):Dates planifi\u00e9es:dur\u00e9e(mois)": "duration_months",
+          "Description (English/Anglais)": "description_en",
+          "Program Area:R\u00e9gion de programme": "program_area",
+          "Budget Fund:Fonds du budget": "budget_fund",
+          "Recipient Org:City:Org du b\u00e9n\u00e9ficiaires:Ville": "city",
+          "Recipient Org:Postal Code: Org du b\u00e9n\u00e9ficiaires:code postale": "recipient_postal_code",
+          "Population Served:Population servis": "population_served",
+          "Age Group:Groupe d'\u00e2ge": "age_group",
+          "Grant Result:R\u00e9sultat de subvention": "grant_result",
+          "Grant Status": "grant_status",
+          "Last modified:Mise \u00e0 jour": "last_modified"
+        },
+        "csv_usecols": [
+          "fiscal_year",
+          "grant_program",
+          "grant_catchment",
+          "cross_catchment",
+          "identifier",
+          "organization_name",
+          "approval_date",
+          "amount_applied_for",
+          "amount_awarded",
+          "duration_months",
+          "description_en",
+          "program_area",
+          "budget_fund",
+          "city",
+          "recipient_postal_code",
+          "population_served",
+          "age_group",
+          "grant_result",
+          "grant_status",
+          "last_modified"
+        ],
+        "csv_schema": {
+          "fiscal_year": "string",
+          "grant_program": "string",
+          "grant_catchment": "string",
+          "cross_catchment": "string",
+          "identifier": "string",
+          "organization_name": "string",
+          "approval_date": "string",
+          "amount_applied_for": "decimal",
+          "amount_awarded": "decimal",
+          "duration_months": "decimal",
+          "description_en": "string",
+          "program_area": "string",
+          "budget_fund": "string",
+          "city": "string",
+          "recipient_postal_code": "string",
+          "population_served": "string",
+          "age_group": "string",
+          "grant_result": "string",
+          "grant_status": "string",
+          "last_modified": "string"
+        }
+      }
+    },
+    {
+      "type": "rest_api",
+      "name": "OTF Catchment Cities",
+      "description": "City -> catchment area concordance file from otf.ca/open. Latin-1 encoded.",
+      "url": "https://otf.ca/sites/default/files/otf_catchment_area-cities_concordance_file.csv",
+      "format": "csv",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "csv_encoding": "latin-1",
+        "csv_rename_map": {
+          "City:Ville": "city",
+          "Catchment area:R\u00e9gion": "catchment_area",
+          "Catchment ID:Num\u00e9ro de r\u00e9gion": "catchment_id"
+        },
+        "csv_usecols": [
+          "city",
+          "catchment_area",
+          "catchment_id"
+        ],
+        "csv_schema": {
+          "city": "string",
+          "catchment_area": "string",
+          "catchment_id": "string"
+        }
+      }
+    },
+    {
+      "type": "rest_api",
+      "name": "OTF Catchment Census Division",
+      "description": "Catchment area -> Statistics Canada census division concordance file from otf.ca/open. Latin-1 encoded.",
+      "url": "https://otf.ca/sites/default/files/otf_catchment_area-census_division_concordance_file.csv",
+      "format": "csv",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "csv_encoding": "latin-1",
+        "csv_rename_map": {
+          "Catchment area:R\u00e9gion": "catchment_area_cd",
+          "Census Division: Division de recensement": "census_division",
+          "Catchment ID:Num\u00e9ro de r\u00e9gion": "catchment_id"
+        },
+        "csv_usecols": [
+          "catchment_area_cd",
+          "census_division",
+          "catchment_id"
+        ],
+        "csv_schema": {
+          "catchment_area_cd": "string",
+          "census_division": "string",
+          "catchment_id": "string"
+        }
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "join",
+      "args": {
+        "name": "Grants \u00d7 Cities",
+        "description": "Left-outer join the OTF grants ledger to the cities concordance on Recipient City to add the catchment area and catchment ID for every grant.",
+        "left_branch": 0,
+        "right_branch": 1,
+        "on": "city",
+        "join_type": "leftOuter"
+      }
+    },
+    {
+      "kind": "join",
+      "args": {
+        "name": "Grants \u00d7 Census Division",
+        "description": "Left-outer join the city-enriched grants to the census-division concordance on Catchment ID so each grant carries the Statistics Canada census division name.",
+        "left_branch": 0,
+        "right_branch": 2,
+        "on": "catchment_id",
+        "join_type": "leftOuter"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "OTF Grants Enriched",
+      "project": "Grants",
+      "description": "Every approved Ontario Trillium Foundation grant from 2000 to present, enriched with the OTF catchment area and Statistics Canada census division derived from the recipient city. Use grant_program / program_area / budget_fund for grant breakdowns; amount_awarded for funding rollups; catchment_area / census_division for geo analysis."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "Grants",
+    "flow_name": "OTF Grants Enriched",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 8,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "OTF Grants Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

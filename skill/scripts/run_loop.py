@@ -506,16 +506,19 @@ def run(request: str, run_dir: Optional[Path] = None,
     plan = plan_sources(spec, run_dir / "outputs")
 
     # Phase 3: generate flow.
-    # When the spec has internal_published_ds sources AND we successfully
-    # downloaded them (Phase 4a), flip generate_flow into local_iteration
-    # mode so every published_data_source output also becomes a local
-    # WriteToHyper. The whole flow runs locally with no server auth.
-    # Phase 10 swaps everything back at publish time.
+    # local_iteration=True swaps every `published_data_source` output to
+    # a local `WriteToHyper` so the flow can run + verify entirely
+    # locally with no server auth. Phase 10 swaps it back at publish time.
+    # Trigger when EITHER a published-DS source has been downloaded OR
+    # the spec has any published_data_source output (which the verify
+    # step would otherwise fail on with "not signed in to any Tableau
+    # server"). Flows with only local outputs skip this entirely.
     has_downloaded_pds = any(
         (s.extra or {}).get("_pds_local_csv_path") for s in spec.sources
     )
+    has_pds_output = any(o.kind == "published_data_source" for o in spec.outputs)
     tfl_path = generate_flow(spec, plan, run_dir,
-                             local_iteration=has_downloaded_pds)
+                             local_iteration=has_downloaded_pds or has_pds_output)
 
     # Phase 3b: verify the .tfl actually deserializes + runs in tableau-prep-cli.
     # This is the load-bearing test — earlier we shipped flows that passed
@@ -665,21 +668,43 @@ def run(request: str, run_dir: Optional[Path] = None,
 
 
 def _patch_publish_extract_routing(tfl_path: Path, project_luid: str,
-                                   server_url: str) -> None:
-    """Set projectLuid + serverUrl on every .v1.PublishExtract node in
-    the .tfl. Run after the publish step has resolved the project so
-    backgrounder can route writes to the right destination.
+                                   server_url: str,
+                                   project_name: str = "") -> None:
+    """Prepare the .tfl for publish:
+
+    1. Swap any local-iteration `WriteToHyper` nodes carrying
+       `_pds_target_*` markers back into `.v1.PublishExtract` nodes
+       (the inverse of generate_flow's `local_iteration=True` substitution).
+    2. Set projectLuid + serverUrl on every `.v1.PublishExtract` node so
+       backgrounder can route writes to the resolved project.
     """
     import zipfile
-    if not project_luid:
-        return
     with zipfile.ZipFile(tfl_path) as zf:
         members = {n: zf.read(n) for n in zf.namelist()}
     flow = json.loads(members["flow"].decode("utf-8"))
     changed = False
     for nid, n in flow.get("nodes", {}).items():
-        if n.get("nodeType") == ".v1.PublishExtract":
-            if not n.get("projectLuid"):
+        nt = n.get("nodeType")
+        # Step 1: swap-back. Any WriteToHyper carrying _pds_target_*
+        # markers was inserted by generate_flow under local_iteration=True
+        # to make the flow runnable locally; restore the published_data_source
+        # shape before we hand the .tfl to publish_run.
+        if nt == ".v1.WriteToHyper" and n.get("_pds_target_datasource_name"):
+            target_proj = n.pop("_pds_target_project", "") or project_name
+            target_ds = n.pop("_pds_target_datasource_name", "") or n.get("name", "")
+            target_desc = n.pop("_pds_target_description", "") or n.get("description") or ""
+            n.pop("hyperOutputFile", None)
+            n.pop("tdsOutput", None)
+            n["nodeType"] = ".v1.PublishExtract"
+            n["projectName"] = target_proj
+            n["projectLuid"] = project_luid
+            n["datasourceName"] = target_ds
+            n["datasourceDescription"] = target_desc
+            n["serverUrl"] = server_url
+            changed = True
+            continue
+        if nt == ".v1.PublishExtract":
+            if project_luid and not n.get("projectLuid"):
                 n["projectLuid"] = project_luid
                 changed = True
             if server_url and not n.get("serverUrl"):
@@ -770,7 +795,8 @@ def _maybe_publish(spec: Spec, tfl_path: Path, run_dir: Path,
         except Exception:
             server_url = ""
         if proj_luid:
-            _patch_publish_extract_routing(tfl_path, proj_luid, server_url)
+            _patch_publish_extract_routing(tfl_path, proj_luid, server_url,
+                                            project_name=spec.server_publish.project)
 
         pr = publish_run(spec, tfl_path, run_dir=run_dir)
         return {"status": "ok", **asdict(pr)}
