@@ -330,10 +330,74 @@ def _maybe_write_metadata(spec: Spec, publish_result: dict, run_dir: Path,
     except Exception as e:
         return {"status": "error", "type": type(e).__name__, "message": str(e)}
 
+    # The flow-publish step doesn't carry DS LUIDs (the backgrounder
+    # creates the DS at run-time). For Cloud-friendly flows that write
+    # the local Hyper as a DS, the LUID is discovered by name in the
+    # target project. Fall back to publish_result["datasources"] when
+    # available (older shape).
     luids_by_name = {}
     for ds in (publish_result or {}).get("datasources", []) or []:
         if ds.get("name") and ds.get("luid"):
             luids_by_name[ds["name"]] = ds["luid"]
+    if not luids_by_name:
+        try:
+            from tflb_lib import publishing as _pub
+            cfg = _pub.config_from_env()
+            srv = _pub.sign_in(cfg)
+            try:
+                project_name = (publish_result or {}).get("project_name") or (
+                    spec.server_publish.project if spec.server_publish else ""
+                )
+                import tableauserverclient as TSC
+                req = TSC.RequestOptions()
+                for o in pd_outputs:
+                    req.filter.clear_filters()
+                    req.filter.add(TSC.Filter(
+                        "name", TSC.RequestOptions.Operator.Equals, o.name))
+                    if project_name:
+                        req.filter.add(TSC.Filter(
+                            "projectName", TSC.RequestOptions.Operator.Equals,
+                            project_name))
+                    for ds in TSC.Pager(srv.datasources, req):
+                        luids_by_name[o.name] = ds.id
+                        break
+            finally:
+                try:
+                    srv.auth.sign_out()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # Build {column_name: declared_type} from the planned upstream
+    # schema so the .tds-roundtrip path can declare datatypes for
+    # columns that aren't already in the published .tds. This is a
+    # best-effort map - empty when sources don't expose a schema and
+    # the writer falls back to `string` for unknowns. Includes
+    # transformation-added columns (trend_features / eoc_fire_metrics).
+    try:
+        from skill.scripts.source_planner import _input_schema_after_casts
+        column_types = dict(_input_schema_after_casts(spec))
+    except Exception:
+        column_types = {}
+    # Hard-coded type hints for the canonical transformation-added
+    # columns. These match what the templates declare in their
+    # `get_output_schema()` updates. Future templates can register
+    # their derived columns here as they're added.
+    _TRANSFORM_COLUMN_TYPES = {
+        # trend_features
+        "year": "int", "month": "int", "quarter": "int",
+        "year_month": "string", "iso_week": "int",
+        "day_of_week_num": "int", "day_of_week_name": "string",
+        "is_weekend": "bool", "hour_of_day": "int", "hour_bucket": "string",
+        # eoc_fire_metrics
+        "days_since_discovery": "decimal", "hours_since_modified": "decimal",
+        "staleness_band": "string", "acres_per_day": "decimal",
+        "growth_band": "string", "size_class": "string",
+        "containment_band": "string", "is_active": "bool",
+        "region_key": "string", "incident_summary": "string",
+    }
+    column_types.update(_TRANSFORM_COLUMN_TYPES)
 
     per_output: list[dict] = []
     for o in pd_outputs:
@@ -341,10 +405,11 @@ def _maybe_write_metadata(spec: Spec, publish_result: dict, run_dir: Path,
         # Sample rows aren't piped through yet; metadata_writer accepts
         # an empty list and the LLM still produces useful column blurbs
         # from the column-name list and the spec's flow_intent.
-        cols = []  # filled in by future hook from rendered output schema
+        cols = list(column_types.keys())
         try:
             res = write_for_output(spec, o.name, luid, cols, [], run_dir,
-                                   review=review)
+                                   review=review,
+                                   column_types=column_types)
             per_output.append(res)
         except Exception as e:
             per_output.append({

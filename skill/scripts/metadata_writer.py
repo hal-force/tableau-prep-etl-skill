@@ -5,19 +5,18 @@ For each `published_data_source` output of a successful publish,
 generate (and optionally apply) catalog-style descriptions:
 
   - DS-level description via REST PUT /api/{ver}/sites/{site}/datasources/{luid}
-    (TSC handles this via `server.datasources.update(item)`). WORKS today.
-  - Per-column descriptions: TODO migrate to .tds XML injection + Overwrite
-    re-publish. Tableau Cloud's Metadata API is read-only (verified
-    2026-06-18 against the usfederaldemos site - the GraphQL Mutation
-    root is empty), so the GraphQL `updateField` / `updateColumn`
-    mutations below ALWAYS fail with "Internal Server Error(s) while
-    executing query". The supported path is downloading the .tdsx,
-    injecting `<column><desc>` per field via XML, and re-publishing
-    with mode=Overwrite (the same LUID is preserved). For now, the
-    GraphQL path is left in place; callers see the failure surfaced
-    in the audit JSON. The OTF and US-wildfires flows applied
-    descriptions via this download->inject->republish path manually -
-    the helper to do it programmatically is the next implementation.
+    (TSC handles this via `server.datasources.update(item)`).
+  - Per-column descriptions via .tds XML injection + Overwrite re-publish.
+    Tableau Cloud's Metadata API is read-only (verified 2026-06-18
+    against usfederaldemos: the GraphQL Mutation root is empty,
+    `updateField` / `updateColumn` always return generic "Internal
+    Server Error(s) while executing query"). The only supported write
+    surface for column descriptions on Cloud is round-tripping the
+    .tdsx: `datasources.download` -> unzip -> inject `<column><desc>`
+    elements per field into the .tds -> repack -> `datasources.publish
+    (mode="Overwrite")`. The same LUID is preserved across the
+    overwrite, so callers' references stay valid. This path also
+    works on Tableau Server.
 
 Default behavior: AUTO-APPLY. The proposal JSON is always saved to
 runtime/<run_id>/metadata_<output_name>.json so there's an audit trail
@@ -250,25 +249,18 @@ def generate_descriptions(spec: Spec, output_name: str,
 
 # === Public: apply ==================================================
 
-# Per-field GraphQL mutation. updateField is the canonical mutation on
-# Server >= 2023.1 and Cloud. On older Server builds the equivalent
-# is named `updateColumn`; we fall back automatically when the server
-# reports `updateField` as unknown.
-_UPDATE_FIELD_GQL = """
-mutation UpdateField($luid: String!, $field: String!, $description: String!) {
-  updateField(input: { luid: $luid, name: $field, description: $description }) {
-    field { name description }
-  }
+# Pandas / Hyper -> Tableau .tds datatype mapping. The .tds XML schema
+# uses these names: integer, real, string, date, datetime, boolean.
+# We don't need the full set - just enough for the most common output
+# columns. Anything not on this map defaults to 'string'.
+_DECL_TO_TDS_TYPE = {
+    "int": "integer", "integer": "integer",
+    "decimal": "real", "real": "real", "float": "real", "double": "real",
+    "string": "string", "str": "string",
+    "date": "date",
+    "datetime": "datetime", "timestamp": "datetime",
+    "bool": "boolean", "boolean": "boolean",
 }
-"""
-
-_UPDATE_COLUMN_GQL = """
-mutation UpdateColumn($luid: String!, $field: String!, $description: String!) {
-  updateColumn(input: { luid: $luid, name: $field, description: $description }) {
-    column { name description }
-  }
-}
-"""
 
 
 def _signin():
@@ -288,67 +280,166 @@ def _apply_ds_description(server, luid: str, description: str) -> dict:
         return {"status": "error", "type": type(e).__name__, "message": str(e)}
 
 
-def _apply_column_description(server, luid: str, field_name: str,
-                              description: str) -> dict:
-    """Update one column's description via Metadata API. Falls back to
-    updateColumn when updateField is reported as unknown."""
-    variables = {"luid": luid, "field": field_name, "description": description}
+def _apply_column_descriptions_via_tds(
+    server, luid: str, descriptions: dict[str, str],
+    column_types: Optional[dict[str, str]] = None,
+    work_dir: Optional[Path] = None,
+) -> dict:
+    """Apply per-column descriptions by .tds round-trip.
+
+    Steps:
+      1. `server.datasources.download(luid, include_extract=True)` -> .tdsx.
+      2. Unzip to a working directory; locate the single .tds and the
+         Data/Extracts/*.hyper sidecar.
+      3. Parse the .tds XML; for each field in `descriptions`, find the
+         existing `<column name='[X]' ...>` element OR create a new one
+         (with the inferred datatype/role/type), then replace any
+         existing `<desc>` child with a fresh
+         `<desc><formatted-text><run>...</run></formatted-text></desc>`.
+      4. Repack the .tdsx (.tds + Data/Extracts/*.hyper).
+      5. `server.datasources.publish(item, path, mode='Overwrite')`.
+         The LUID is preserved across the overwrite.
+
+    `column_types` is an optional `{column_name: declared_type_name}`
+    map - declared names match the spec's lowercased shorthand
+    (`int`/`decimal`/`string`/`bool`/`date`/`datetime`). When missing
+    or unknown, the column lands as `string` / `dimension`.
+    """
+    import shutil
+    import tempfile
+    import zipfile
+    import xml.etree.ElementTree as ET
+    import tableauserverclient as TSC  # noqa: F401 (import here to keep top-level import light)
+
+    if not descriptions:
+        return {"status": "skipped", "reason": "no column descriptions to apply"}
+
+    work_dir = Path(work_dir) if work_dir else Path(tempfile.mkdtemp(prefix="tpa_md_"))
+    work_dir.mkdir(parents=True, exist_ok=True)
+    # Clean prior contents to avoid stale .tds / hyper from a previous attempt
+    for p in work_dir.iterdir() if work_dir.exists() else []:
+        if p.is_file():
+            p.unlink()
+        elif p.is_dir():
+            shutil.rmtree(p)
+
     try:
-        result = server.metadata.query(_UPDATE_FIELD_GQL, variables=variables)
+        # Step 1: download
+        tdsx_path = server.datasources.download(
+            luid, filepath=str(work_dir), include_extract=True
+        )
+        tdsx_path = Path(tdsx_path)
+
+        # Step 2: unzip
+        with zipfile.ZipFile(tdsx_path) as zf:
+            zf.extractall(work_dir)
+        tds_files = list(work_dir.glob("*.tds"))
+        if not tds_files:
+            return {"status": "error", "reason": "no .tds inside downloaded .tdsx"}
+        tds_path = tds_files[0]
+        hyper_files = list((work_dir / "Data" / "Extracts").glob("*.hyper")) if (work_dir / "Data" / "Extracts").exists() else []
+
+        # Step 3: inject descriptions
+        tree = ET.parse(tds_path)
+        root = tree.getroot()
+        existing = {c.get("name"): c for c in root.findall("./column")}
+        types = column_types or {}
+        added = 0
+        updated = 0
+        for col, desc in descriptions.items():
+            if not col or not desc:
+                continue
+            name_attr = f"[{col}]"
+            decl = (types.get(col) or "string").lower()
+            tds_dt = _DECL_TO_TDS_TYPE.get(decl, "string")
+            is_measure = tds_dt in ("integer", "real")
+            if name_attr in existing:
+                col_elem = existing[name_attr]
+                old_desc = col_elem.find("desc")
+                if old_desc is not None:
+                    col_elem.remove(old_desc)
+                updated += 1
+            else:
+                col_elem = ET.SubElement(root, "column")
+                col_elem.set("caption", col)
+                col_elem.set("datatype", tds_dt)
+                col_elem.set("name", name_attr)
+                col_elem.set("role", "measure" if is_measure else "dimension")
+                col_elem.set("type", "quantitative" if is_measure else "nominal")
+                added += 1
+            d = ET.SubElement(col_elem, "desc")
+            ft = ET.SubElement(d, "formatted-text")
+            run = ET.SubElement(ft, "run")
+            run.text = desc
+        ET.indent(tree, space="  ")
+        tree.write(tds_path, encoding="utf-8", xml_declaration=True)
+
+        # Step 4: repack
+        new_tdsx = work_dir / f"{tds_path.stem}.tdsx"
+        with zipfile.ZipFile(new_tdsx, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(tds_path, tds_path.name)
+            for hp in hyper_files:
+                zf.write(hp, f"Data/Extracts/{hp.name}")
+
+        # Step 5: republish (Overwrite). Need the existing item's
+        # project_id + name for the publish call.
+        existing_item = server.datasources.get_by_id(luid)
+        ds_item = type(existing_item)(
+            project_id=existing_item.project_id,
+            name=existing_item.name,
+        )
+        # Preserve DS description if one was set in step (1) on this run.
+        if existing_item.description:
+            ds_item.description = existing_item.description
+        pub = server.datasources.publish(ds_item, str(new_tdsx), mode="Overwrite")
+        return {
+            "status": "ok",
+            "added_column_elements": added,
+            "updated_column_elements": updated,
+            "luid": pub.id,
+        }
     except Exception as e:
         return {"status": "error", "type": type(e).__name__, "message": str(e)}
 
-    if isinstance(result, str):
-        try:
-            result = json.loads(result)
-        except Exception:
-            result = {"raw": result}
-    errors = (result or {}).get("errors") or []
-    if errors:
-        msg = (errors[0] or {}).get("message", "").lower()
-        # Old Server build: try updateColumn
-        if any(k in msg for k in ("unknown", "no such", "cannot query")):
-            try:
-                fb = server.metadata.query(_UPDATE_COLUMN_GQL, variables=variables)
-            except Exception as e:
-                return {"status": "error", "type": type(e).__name__, "message": str(e)}
-            if isinstance(fb, str):
-                try:
-                    fb = json.loads(fb)
-                except Exception:
-                    fb = {"raw": fb}
-            if (fb or {}).get("errors"):
-                return {"status": "error", "errors": fb["errors"]}
-            return {"status": "ok", "via": "updateColumn"}
-        return {"status": "error", "errors": errors}
-    return {"status": "ok", "via": "updateField"}
 
+def apply_descriptions(proposal: DescriptionProposal,
+                       column_types: Optional[dict[str, str]] = None) -> dict:
+    """Apply a generated proposal to the site. DS-level description goes
+    first via the REST surface (`datasources.update`); column descriptions
+    go via the .tds round-trip path because Cloud's Metadata API has no
+    write mutations.
 
-def apply_descriptions(proposal: DescriptionProposal) -> dict:
-    """Apply a generated proposal to the site. Returns per-field status.
-    Failures don't roll back - already-applied descriptions stay."""
+    `column_types` is an optional {col: declared_type} map used when the
+    .tds doesn't already have a `<column>` element for that name (we
+    have to create one, and Tableau wants the datatype declared)."""
     if not proposal.luid:
         return {"status": "skipped", "reason": "no luid - not yet published"}
 
     server = _signin()
     try:
-        ds_res = _apply_ds_description(
-            server, proposal.luid, proposal.ds_description) if proposal.ds_description else {"status": "skipped", "reason": "empty ds_description"}
-
-        col_results: dict[str, dict] = {}
-        for field_name, desc in proposal.column_descriptions.items():
-            col_results[field_name] = _apply_column_description(
-                server, proposal.luid, field_name, desc)
+        ds_res = (
+            _apply_ds_description(server, proposal.luid, proposal.ds_description)
+            if proposal.ds_description
+            else {"status": "skipped", "reason": "empty ds_description"}
+        )
+        col_res = _apply_column_descriptions_via_tds(
+            server, proposal.luid, proposal.column_descriptions,
+            column_types=column_types,
+        )
     finally:
         try:
             server.auth.sign_out()
         except Exception:
             pass
 
+    overall = "ok" if (
+        ds_res.get("status") in ("ok", "skipped")
+        and col_res.get("status") in ("ok", "skipped")
+    ) else "partial"
     return {
-        "status": "ok" if ds_res.get("status") == "ok" else "partial",
+        "status": overall,
         "ds": ds_res,
-        "columns": col_results,
+        "columns": col_res,
     }
 
 
@@ -358,11 +449,17 @@ def write_for_output(spec: Spec, output_name: str, luid: str,
                      columns: list[str],
                      sample_rows: Optional[list[dict]],
                      run_dir: Path,
-                     review: bool = False) -> dict:
+                     review: bool = False,
+                     column_types: Optional[dict[str, str]] = None) -> dict:
     """One-shot: generate proposal, save audit JSON, optionally apply.
 
     `review=True` -> stop after saving the proposal so the user can
     inspect via AskUserQuestion.
+
+    `column_types` is an optional {col: declared_type} map (e.g.
+    `{"acres_per_day": "decimal", "is_active": "bool"}`) used by the
+    .tds-roundtrip path to assign correct datatype/role to columns
+    that aren't already declared in the published DS's .tds.
     """
     run_dir = Path(run_dir).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -383,7 +480,7 @@ def write_for_output(spec: Spec, output_name: str, luid: str,
             "column_count": len(proposal.column_descriptions),
         }
 
-    apply_result = apply_descriptions(proposal)
+    apply_result = apply_descriptions(proposal, column_types=column_types)
     return {
         "status": apply_result.get("status", "unknown"),
         "output_name": output_name,
