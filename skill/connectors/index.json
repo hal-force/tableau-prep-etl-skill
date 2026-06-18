@@ -49,8 +49,18 @@
         "auth": "none",
         "format": "arcgis_features"
       },
-      "hit_count": 5,
-      "last_used_at": 1781650916.6295009
+      "hit_count": 44,
+      "last_used_at": 1781709045.042737
+    },
+    "976128b2c96ff6b3": {
+      "signature": {
+        "type": "rest_api",
+        "host": "",
+        "auth": "none",
+        "format": "csv"
+      },
+      "hit_count": 12,
+      "last_used_at": 1781723614.395193
     }
   }
 }

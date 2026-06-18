@@ -182,8 +182,33 @@ Produce `runtime/<run_id>/report.md` with:
 
 ### Phase 9: Output
 
-Hand the user the `.tfl` path + the report path. Tableau Server
-publishing is a v2 feature behind a `--publish` flag (not in v1).
+Hand the user the `.tfl` path + the report path.
+
+### Phase 10: Publish (opt-in only)
+
+**Default is local-only.** Server upload happens only when the user
+explicitly opts in. Never write to a server with embedded credentials
+in the artifact — auth must come from `TABLEAU_SERVER_{URL,PAT_NAME,
+PAT_SECRET,SITE}` env vars at runtime, never from disk.
+
+When the user asks to publish:
+
+1. Pass `--publish`. The orchestrator signs in, lists site projects,
+   and either uses `spec.server_publish.project` (if it matches an
+   existing project) or returns
+   `{"status": "needs_user_decision", "candidates": [...], "near_matches": [...]}`.
+2. Surface the candidates to the user via `AskUserQuestion`. Offer:
+   - Pick from existing projects (top picks: `near_matches`).
+   - Type a different existing project name.
+   - Create a new project with the configured name (rerun with
+     `--auto-create-project`).
+3. After the user picks, update `spec.server_publish.project` and
+   re-run with `--publish`.
+
+For published data sources (kind `published_data_source`), the .tfl
+emits a `WritePublishedDataSource` node pointing at the same project
+as the flow — Tableau backgrounder writes the extract there on each
+scheduled run.
 
 ## Configuration
 

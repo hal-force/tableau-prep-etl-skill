@@ -134,6 +134,138 @@ def make_hyper_node(name: str, hyper_path: Path, description: str | None = None)
     }
 
 
+def make_published_datasource_node(
+    name: str,
+    project_name: str,
+    datasource_name: str | None = None,
+    description: str | None = None,
+    project_luid: str = "",
+    server_url: str = "",
+    datasource_description: str = "",
+) -> tuple[str, dict]:
+    """Build a .v1.PublishExtract terminal output node.
+
+    Shape verified against a Tableau Prep-emitted flow (Interos
+    `tier_orgs_to_parts_joins.tfl`):
+      projectName, projectLuid, datasourceName, datasourceDescription,
+      serverUrl. `projectLuid` is the load-bearing routing field on
+      Cloud — Maestro will fail the run task if the LUID is empty AND
+      `projectName` is ambiguous. Skill callers pass project_luid from
+      the publish step's `find_project()` result.
+
+    `serverUrl` is informational on the .tfl; the actual destination
+    is determined by the site the flow is published into. Pass it for
+    parity with hand-authored flows.
+    """
+    nid = new_id()
+    return nid, {
+        "nodeType": ".v1.PublishExtract",
+        "name": name,
+        "id": nid,
+        "baseType": "output",
+        "nextNodes": [],
+        "serialize": False,
+        "description": description or None,
+        "projectName": project_name,
+        "projectLuid": project_luid,
+        "datasourceName": datasource_name or name,
+        "datasourceDescription": datasource_description,
+        "serverUrl": server_url,
+    }
+
+
+def make_change_column_type_node(
+    column_name: str,
+    type_str: str,
+    next_node_ids: list[str] | None = None,
+    description: str | None = None,
+) -> tuple[str, dict]:
+    """Build a `.v1.ChangeColumnType` standalone transform node.
+
+    Coerces `column_name` to `type_str` (Maestro's accepted values:
+    `string`, `date`, `datetime`, `int`, `decimal`, `bool`).
+
+    Shape verified against `Interos/Flows/network_analysis_interos.tfl`
+    (column-type cast nested in a `.v1.Container.loomContainer`) and
+    `Analyst Notebook/Flows/Collection/APIs/get_flight_data.tfl`
+    (cast as an `afterActionAnnotations.annotationNode`). Both nest
+    the same shape; emitting it as a top-level transform node in
+    `flow.nodes` works as well — Maestro reads the `nodeType` and
+    `fields` regardless of where the node sits in the graph, as long
+    as `nextNodes` wires it correctly.
+
+    `calc` is left as `null` for plain casts. For string→date
+    coercions Tableau Prep will add a `DATEPARSE` calc; we leave
+    that to the user since the format string varies per source.
+    """
+    nid = new_id()
+    type_str_lower = type_str.lower().strip()
+    return nid, {
+        "nodeType": ".v1.ChangeColumnType",
+        "fields": {column_name: {"type": type_str_lower, "calc": None}},
+        "name": f"Change {column_name} to {type_str_lower.title()} 1",
+        "id": nid,
+        "baseType": "transform",
+        "nextNodes": [
+            {"namespace": "Default", "nextNodeId": n, "nextNamespace": "Default"}
+            for n in (next_node_ids or [])
+        ],
+        "serialize": False,
+        "description": description or None,
+    }
+
+
+def make_change_semantic_role_node(
+    column_name: str,
+    role_id: str,
+    role_name: str,
+    next_node_ids: list[str] | None = None,
+    description: str | None = None,
+) -> tuple[str, dict]:
+    """Build a `.v2018_2_3.ChangeSemanticRole` standalone transform node.
+
+    Tags `column_name` with a Tableau semantic role (e.g. geo/state,
+    geo/postal_code, resource/url) so the resulting Hyper extract /
+    published data source surfaces the correct role icon in Tableau.
+
+    Common role IDs:
+      - `global/geo/state` (state/province)
+      - `global/geo/city`
+      - `global/geo/country`
+      - `global/geo/postal_code`
+      - `global/resource/url`
+
+    Shape verified against `Interos/Flows/org_table.tfl` (which uses
+    the bare 2-key form `{id, name}`) and
+    `Document Processing/invoice_processing.tfl` (which uses the
+    5-key extended form with `serverUrl`/`siteName`/`detailsUrl` =
+    null). The 5-key form is forward-compatible — Maestro accepts
+    either; we emit the extended form for parity with current Prep
+    Builder output.
+    """
+    nid = new_id()
+    return nid, {
+        "nodeType": ".v2018_2_3.ChangeSemanticRole",
+        "columnName": column_name,
+        "semanticRole": {
+            "id": role_id,
+            "name": role_name,
+            "serverUrl": None,
+            "siteName": None,
+            "detailsUrl": None,
+        },
+        "name": f"change {column_name} to {role_name} 1",
+        "id": nid,
+        "baseType": "transform",
+        "nextNodes": [
+            {"namespace": "Default", "nextNodeId": n, "nextNamespace": "Default"}
+            for n in (next_node_ids or [])
+        ],
+        "serialize": False,
+        "description": description or None,
+    }
+
+
 def add_edge(node: dict, next_id: str, namespace: str = "Default") -> None:
     """Append an outgoing edge from `node` to `next_id`.
 

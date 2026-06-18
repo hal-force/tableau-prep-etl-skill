@@ -30,6 +30,10 @@ from pathlib import Path
 from typing import Optional
 
 from skill.scripts.intake import Spec, Source
+from skill.scripts.cast_planner import (
+    plan_casts_for_columns,
+    plan_semantic_roles_for_columns,
+)
 
 
 @dataclass
@@ -50,6 +54,11 @@ class NodePlan:
     join_right: int = -1  # index into Plan.branch_tails of the right feed
     join_on: str = ""     # column name to join on (must exist in both branches)
     join_type: str = "inner"  # inner | leftOuter | rightOuter | fullOuter
+    # Fan-out hook. When set, this transform node hangs off the same
+    # upstream as another node ("the fork") instead of extending the
+    # linear chain. `parent` names another transform's `name` (or
+    # "input" + branch idx). Empty string = linear append (default).
+    parent: str = ""
 
 
 @dataclass
@@ -203,23 +212,165 @@ def _plan_pki_endpoint(src: Source, idx: int) -> tuple[list[NodePlan], list[Node
     return [inp], [pki]
 
 
+def _declared_schema_for_source(src: Source) -> dict[str, str]:
+    """Best-effort {col: declared_type} for the upstream schema produced
+    by this source's fetcher. Mirrors what api_caller's
+    `get_output_schema()` (and the GDELT/CSV equivalents) actually
+    return so we can suppress redundant casts. Lowercased type strings
+    (string/int/decimal/date/datetime/bool)."""
+    schema: dict[str, str] = {}
+    extra = src.extra or {}
+    if src.format == "arcgis_features":
+        fields = extra.get("arcgis_out_fields") or ""
+        field_types = extra.get("arcgis_field_types") or {}
+        if fields and fields != "*":
+            for f in [x.strip() for x in fields.split(",") if x.strip()]:
+                # api_caller's logic: explicit field_types override > name suffix > default string.
+                if f in field_types:
+                    schema[f] = field_types[f].lower()
+                    continue
+                lf = f.lower()
+                if lf.endswith(("date", "datetime", "time")):
+                    schema[f] = "string"  # ISO 8601 string from api_caller
+                elif any(k in lf for k in ("acres", "size", "percent", "lat", "lon")):
+                    schema[f] = "decimal"
+                elif lf in ("objectid",):
+                    schema[f] = "int"
+                else:
+                    schema[f] = "string"
+        if extra.get("arcgis_return_geometry", True):
+            if extra.get("arcgis_geometry_kind", "point") == "polyline":
+                for c in ("start_lon", "start_lat", "end_lon", "end_lat"):
+                    schema.setdefault(c, "decimal")
+            else:
+                schema.setdefault("longitude", "decimal")
+                schema.setdefault("latitude", "decimal")
+    elif src.format == "csv":
+        for col, decl in (extra.get("csv_schema") or {}).items():
+            schema[col] = (decl or "string").lower()
+    elif src.format == "csv_index_then_zip":
+        # GDELT v1 schema reused from _input_schema_from_sources.
+        gdelt_int = {
+            "GLOBALEVENTID", "SQLDATE", "MonthYear", "Year", "IsRootEvent",
+            "EventCode", "EventBaseCode", "EventRootCode", "QuadClass",
+            "NumMentions", "NumSources", "NumArticles", "DATEADDED",
+            "Actor1Geo_Type", "Actor2Geo_Type", "ActionGeo_Type",
+        }
+        gdelt_decimal = {
+            "FractionDate", "GoldsteinScale", "AvgTone",
+            "Actor1Geo_Lat", "Actor1Geo_Long",
+            "Actor2Geo_Lat", "Actor2Geo_Long",
+            "ActionGeo_Lat", "ActionGeo_Long",
+        }
+        for c in gdelt_int:
+            schema[c] = "int"
+        for c in gdelt_decimal:
+            schema[c] = "decimal"
+    return schema
+
+
+def _columns_for_source(src: Source) -> list[str]:
+    """Best-effort list of column names emitted by `src`. Used by the
+    cast/semantic-role planner so heuristics can fire on each column.
+    Returns the union of declared-schema columns plus any user
+    overrides (so a cast can be forced on a derived column too)."""
+    cols: list[str] = []
+    seen: set[str] = set()
+
+    def add(c: str) -> None:
+        if c and c not in seen:
+            cols.append(c)
+            seen.add(c)
+
+    for c in _declared_schema_for_source(src).keys():
+        add(c)
+    extra = src.extra or {}
+    for c in (extra.get("casts") or {}).keys():
+        add(c)
+    for c in (extra.get("semantic_roles") or {}).keys():
+        add(c)
+    return cols
+
+
+def _plan_casts_and_roles(src: Source, branch_idx: int) -> list[NodePlan]:
+    """Emit cast + semantic-role NodePlans for `src`'s columns.
+
+    Casts come first (so downstream nodes see typed columns), then
+    semantic roles (which Tableau attaches to the typed columns).
+    Both insert linearly into the branch chain — `parent=""` means
+    `generate_flow` extends the linear tail. They land between the
+    source's fetcher transform and any analytics transforms
+    (trend_analysis, graph_analysis) that the spec adds later, so
+    those analytics see properly-typed inputs.
+
+    Suppresses casts that would be no-ops: if the upstream fetcher
+    already declares a column with the same type (e.g. api_caller's
+    `get_output_schema()` returns `latitude: prep_decimal()` for a
+    point-geometry ArcGIS feed), an explicit ChangeColumnType node
+    wraps the column in another type-check round-trip that Maestro
+    sometimes rejects with 'a decimal type is required for [latitude]'
+    when TabPy's gzipped JSON serialization round-trips the column.
+    User-supplied overrides under `extra.casts` always win, even when
+    redundant — they may be a deliberate user request to surface the
+    cast as an explicit Prep step.
+    """
+    extra = src.extra or {}
+    cast_overrides = extra.get("casts") or {}
+    role_overrides = extra.get("semantic_roles") or {}
+    cols = _columns_for_source(src)
+    declared = _declared_schema_for_source(src)
+    casts = plan_casts_for_columns(cols, cast_overrides)
+    roles = plan_semantic_roles_for_columns(cols, role_overrides)
+
+    nodes: list[NodePlan] = []
+    for col, typ in casts.items():
+        if col not in cast_overrides and declared.get(col, "").lower() == typ.lower():
+            continue
+        nodes.append(NodePlan(
+            role="cast",
+            name=f"Change {col} to {typ.title()}",
+            description=f"Casts {col!r} to Tableau type {typ!r} so downstream steps and the Hyper extract carry the correct dtype.",
+            connector_attrs={"cast_column": col, "cast_type": typ},
+            branch=branch_idx,
+        ))
+    for col, (role_id, role_name) in roles.items():
+        nodes.append(NodePlan(
+            role="semantic_role",
+            name=f"Change {col} to {role_name}",
+            description=f"Tags {col!r} with semantic role {role_name!r} so Tableau renders the geographic / URL pill icon and supports map drill-up.",
+            connector_attrs={
+                "role_column": col,
+                "role_id": role_id,
+                "role_name": role_name,
+            },
+            branch=branch_idx,
+        ))
+    return nodes
+
+
 def _plan_outputs(spec: Spec, outputs_dir: Path) -> list[NodePlan]:
     plans: list[NodePlan] = []
     for o in spec.outputs:
         desc = o.description or _default_output_description(o.kind, o.name)
+        # `kind` and `source` flow through connector_attrs so generate_flow
+        # can fan multiple outputs off the right upstream node and pick the
+        # right writer node type. `source` names a transform node by its
+        # plan name (e.g. "Crime Trend Analyzer (Stats)"); empty = the
+        # linear chain's final tail (single-output default).
+        attrs: dict = {"kind": o.kind, "source": o.source or "", "project": o.project or ""}
         if o.kind == "hyper":
-            plans.append(NodePlan(role="output", name=o.name, description=desc,
-                                  connector_attrs={"hyper_path": str(outputs_dir / o.name)}))
+            attrs["hyper_path"] = str(outputs_dir / o.name)
         elif o.kind == "csv":
-            plans.append(NodePlan(role="output", name=o.name, description=desc,
-                                  connector_attrs={"csv_path": str(outputs_dir / o.name)}))
+            attrs["csv_path"] = str(outputs_dir / o.name)
         elif o.kind == "published_data_source":
-            # v2: needs Tableau Server publishing
-            plans.append(NodePlan(role="output", name=o.name, description=desc,
-                                  connector_attrs={"published": True, "deferred": "v2"}))
+            # The skill's publish step handles server upload of the .tfl;
+            # the .tfl itself emits a WritePublishedDataSource node so
+            # backgrounder writes the result to the named project.
+            attrs["published"] = True
         else:
-            plans.append(NodePlan(role="output", name=o.name, description=desc,
-                                  connector_attrs={"unknown_kind": o.kind}))
+            attrs["unknown_kind"] = o.kind
+        plans.append(NodePlan(role="output", name=o.name, description=desc,
+                              connector_attrs=attrs))
     return plans
 
 
@@ -229,7 +380,11 @@ def _default_output_description(kind: str, name: str) -> str:
     if kind == "csv":
         return f"Writes the final dataframe to {name}.csv."
     if kind == "published_data_source":
-        return f"Publishes a Tableau Server data source named {name} (deferred to v2)."
+        return (
+            f"Publishes the result as a Tableau Server data source named {name}. "
+            "Tableau backgrounder writes the extract into the project configured "
+            "on the .tfl during scheduled runs."
+        )
     return f"Output: {name}"
 
 
@@ -374,6 +529,11 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
             n.branch = branch_idx
         plan.inputs.extend(ins)
         plan.transforms.extend(trs)
+        # Cast + semantic-role nodes come right after the source's
+        # fetcher transforms and before analytics (trend, graph) so
+        # downstream computations see properly-typed columns. Linear
+        # append (parent="") chains them onto the source's tail.
+        plan.transforms.extend(_plan_casts_and_roles(src, branch_idx))
 
     # Join transformations. Each `kind == "join"` entry references two
     # source branches and a join column. The .tfl will materialize one
@@ -446,47 +606,142 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
         )
         plan.transforms.append(node)
 
-    # Trend analysis transformations. Per-row enrichment with temporal
-    # features, monthly counts per dimension, YoY change, rolling counts,
-    # z-scores, lifetime rank, and an is_anomaly flag — the standard
-    # exploratory toolkit for incident/event datasets (crime, claims,
-    # service tickets). Joining stats back at row level keeps a single
-    # Hyper feeding both detail and trend dashboards.
+    # Trend analysis transformations. Now a fork:
+    #   trend_features → row-level temporal features only (small extract)
+    #   trend_stats    → long-form stats table (one row per
+    #                    dim×value×year×month) joinable back from Tableau
+    # Both nodes consume the same upstream input branch so the stats
+    # don't pay row-multiplied storage costs.
     for j, tr in enumerate(spec.transformations):
         if tr.kind != "trend_analysis":
             continue
         args = tr.args or {}
         branch_idx = int(args.get("branch", 0))
-        ta_name = args.get("name", "Trend Analyzer")
+        base_name = args.get("name", "Trend Analyzer")
         dims = args.get("dimensions") or []
         date_col = args.get("date_col", "occ_date")
         time_col = args.get("time_col", "")
         rolling = int(args.get("rolling_window_days", 30))
         anomaly_z = float(args.get("anomaly_z", 2.0))
-        ta_desc = args.get("description") or (
-            f"Enriches each row with temporal features (year/month/dow/hour bucket) "
-            f"and trend stats per dimension {dims}: monthly count, YoY change, "
-            f"{rolling}-day rolling count, baseline mean/std, z-score, lifetime rank, "
-            f"and is_anomaly (|z| >= {anomaly_z}). Stats join back at row level so a "
-            f"single Hyper powers both detail and dashboard views."
+
+        feat_name = f"{base_name} (Features)"
+        feat_desc = args.get("features_description") or (
+            f"Adds per-row temporal features (year/month/quarter/dow/iso_week/"
+            f"hour_of_day/hour_bucket) parsed from {date_col!r}"
+            + (f" and {time_col!r}" if time_col else "")
+            + ". Pure pass-through: no per-dimension stats are joined "
+              "to the row, keeping the detail extract lean."
         )
-        node = NodePlan(
+        plan.transforms.append(NodePlan(
             role="script",
-            name=ta_name,
-            description=ta_desc,
-            template="trend_analyzer.py.j2",
+            name=feat_name,
+            description=feat_desc,
+            template="trend_features.py.j2",
             template_vars={
                 "date_col": date_col,
                 "time_col": time_col,
+                "input_schema": input_schema,
+            },
+            function_name="add_features",
+            branch=branch_idx,
+        ))
+
+        stats_name = f"{base_name} (Stats)"
+        stats_desc = args.get("stats_description") or (
+            f"Long-form trend statistics: one row per (dimension, value, year, month) "
+            f"across {dims}. Joinable from Tableau on (dimension, value, year, month). "
+            f"Includes monthly_count, yoy_change/yoy_pct, {rolling}-day rolling_count, "
+            f"baseline_mean/std, zscore, lifetime_count/rank/pct_of_total, and "
+            f"is_anomaly (|z| >= {anomaly_z})."
+        )
+        # Fan off the SAME upstream as Features so Stats consumes the
+        # same raw event rows. For an API source the upstream is the
+        # Fetcher (not the trigger Input), so a @sibling: parent is
+        # required — `@input` would land Stats on the trigger row,
+        # which carries no events. The linear chain (and therefore the
+        # detail output) stays anchored on Features so the row-level
+        # extract isn't collapsed to one row per (dim, value, ym).
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=stats_name,
+            description=stats_desc,
+            template="trend_stats.py.j2",
+            template_vars={
+                "date_col": date_col,
                 "dimensions": dims,
                 "rolling_window_days": rolling,
                 "anomaly_z": anomaly_z,
+            },
+            function_name="build_stats",
+            branch=branch_idx,
+            parent=f"@sibling:{feat_name}",
+        ))
+
+    # PII / PAI redaction transformations. Like trend_analysis, this
+    # forks into two siblings consuming the same upstream:
+    #   pii_redactor → row-preserving clean output (one row in, one row out
+    #                  with PII masked in place + 3 diagnostic columns)
+    #   pii_audit    → long-form audit table (one row per detection,
+    #                  with sha256 of the original — never the original)
+    # The redactor anchors the linear chain so the clean records flow to
+    # the default Hyper output; the auditor hangs off as a sibling so
+    # the per-detection table can be wired to its own output.
+    for j, tr in enumerate(spec.transformations):
+        if tr.kind != "pii_redaction":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        base_name = args.get("name", "PII Redactor")
+        enabled = args.get("enabled_categories") or [
+            "direct", "financial", "geographic", "health",
+        ]
+        redaction_token = args.get("redaction_token", "[REDACTED]")
+        hash_token_prefix = args.get("hash_token_prefix", "PII_")
+        record_id_col = args.get("record_id_col", "record_id")
+        red_desc = args.get("redactor_description") or (
+            f"Detects and masks PII/PAI across categories {enabled}. "
+            f"Returns the same rows with sensitive cells redacted in place "
+            f"plus diagnostic columns: pii_categories_detected, "
+            f"pii_fields_redacted, pii_severity (none|low|medium|high)."
+        )
+        red_name = f"{base_name} (Redact)"
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=red_name,
+            description=red_desc,
+            template="pii_redactor.py.j2",
+            template_vars={
+                "enabled_categories": enabled,
+                "redaction_token": redaction_token,
+                "hash_token_prefix": hash_token_prefix,
                 "input_schema": input_schema,
             },
-            function_name="analyze_trends",
+            function_name="redact",
             branch=branch_idx,
+        ))
+
+        audit_desc = args.get("audit_description") or (
+            f"Long-form PII detection audit. One row per (record_id, field) "
+            f"detection with category, detector, sha256 of the original "
+            f"value (never the original itself), and the masked replacement. "
+            f"Used for redaction QA / compliance review."
         )
-        plan.transforms.append(node)
+        audit_name = f"{base_name} (Audit)"
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=audit_name,
+            description=audit_desc,
+            template="pii_audit.py.j2",
+            template_vars={
+                "enabled_categories": enabled,
+                "redaction_token": redaction_token,
+                "hash_token_prefix": hash_token_prefix,
+                "record_id_col": record_id_col,
+            },
+            function_name="audit",
+            branch=branch_idx,
+            parent=f"@sibling:{red_name}",
+        ))
 
     plan.qa_nodes = _plan_qa(spec)
     plan.outputs = _plan_outputs(spec, outputs_dir)
