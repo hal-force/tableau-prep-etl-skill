@@ -192,6 +192,46 @@ def _plan_web_crawl(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePla
     return [inp], [crawl], parameters
 
 
+def _plan_internal_published_ds(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePlan]]:
+    """A source bound to an existing published data source on the
+    Tableau Server. The .tfl carries an input node referencing the DS
+    LUID; backgrounder resolves it at run time using the user's site
+    session - no Python step needed.
+
+    The reverse-engineering of the exact Maestro deserialized shape
+    for this input node lives in `generate_flow._make_input_node`
+    under `connector_class == 'published_datasource'`. The planner
+    just packs the routing info (luid/project/site/optional column
+    subset) into the NodePlan so the renderer can wire it correctly."""
+    extra = src.extra or {}
+    inp_name = src.name or f"Input {idx}"
+    desc_parts: list[str] = [src.description or ""]
+    if extra.get("luid"):
+        desc_parts.append(f"luid={extra['luid']}")
+    if extra.get("project"):
+        desc_parts.append(f"project={extra['project']}")
+    if extra.get("column_subset"):
+        cols = ",".join(extra["column_subset"][:6])
+        if len(extra["column_subset"]) > 6:
+            cols += "..."
+        desc_parts.append(f"columns={cols}")
+    inp_desc = " - ".join(p for p in desc_parts if p) or (
+        f"Internal published data source ({extra.get('luid', '<no luid>')}) on the connected Tableau site."
+    )
+    inp = NodePlan(
+        role="input", name=inp_name, description=inp_desc,
+        connector_class="published_datasource",
+        connector_attrs={
+            "luid": extra.get("luid", ""),
+            "project": extra.get("project", ""),
+            "site": extra.get("site", ""),
+            "column_subset": extra.get("column_subset", []),
+            "auth": "server_session",
+        },
+    )
+    return [inp], []
+
+
 def _plan_pki_endpoint(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePlan]]:
     """PKI cert-auth endpoint → Python step from pki_connector template."""
     inp_name = src.name or f"Input {idx}"
@@ -521,6 +561,8 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
             plan.parameters.update(params)
         elif src.type == "pki_endpoint":
             ins, trs = _plan_pki_endpoint(src, i)
+        elif src.type == "internal_published_ds":
+            ins, trs = _plan_internal_published_ds(src, i)
         else:
             raise ValueError(f"unsupported source type: {src.type}")
         for n in ins:

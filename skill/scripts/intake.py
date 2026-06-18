@@ -43,7 +43,7 @@ GATEWAY_VERIFY_SSL = False
 
 SOURCE_TYPES = (
     "local_folder", "native_connector", "rest_api", "graphql_api",
-    "web_crawl", "pki_endpoint",
+    "web_crawl", "pki_endpoint", "internal_published_ds",
 )
 QA_TIERS = ("none", "deterministic", "llm")
 EVAL_STRATEGIES = (

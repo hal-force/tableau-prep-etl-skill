@@ -61,6 +61,16 @@
       },
       "hit_count": 12,
       "last_used_at": 1781723614.395193
+    },
+    "711f6561c40b5fd4": {
+      "signature": {
+        "type": "internal_published_ds",
+        "host": "",
+        "auth": "none",
+        "format": "tableau_published_ds"
+      },
+      "hit_count": 2,
+      "last_used_at": 1781794477.6432111
     }
   }
 }
