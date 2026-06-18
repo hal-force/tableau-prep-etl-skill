@@ -20,6 +20,7 @@ Public entry: `generate_flow(spec, plan, run_dir) -> Path`
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -129,6 +130,231 @@ def _render_templates(plan: Plan, scripts_dir: Path, templates_dir: Path,
         node.rendered_path = str(out_path.resolve())
 
 
+_PROXY_TYPE_TO_PREP = {
+    "string": "string",
+    "varchar": "string",
+    "text": "string",
+    "integer": "integer",
+    "int": "integer",
+    "long": "integer",
+    "bigint": "integer",
+    "real": "real",
+    "float": "real",
+    "double": "real",
+    "decimal": "real",
+    "date": "date",
+    "datetime": "datetime",
+    "timestamp": "datetime",
+    "boolean": "bool",
+    "bool": "bool",
+}
+
+_DEFAULT_STRING_COLLATION = "LEN_RUS_S2"
+
+
+def _published_ds_meta_from_inventory(luid: str) -> tuple[list[dict], str, str]:
+    """Best-effort fetch of (fields, datasource_name, project_name) from
+    the Metadata API for a published DS so the LoadSqlProxy node can
+    declare its schema + name up-front. Maestro requires both at
+    deserialize time, and `datasourceName` must match what's on the
+    site exactly (it's the resolution key for the proxy connection).
+
+    Falls back to ([], "", "") when:
+      - server_scan can't be imported (running from a different repo layout)
+      - TABLEAU_SERVER_* env vars aren't set
+      - the Metadata API is unreachable / rejects the query
+
+    Caller code accepts an empty list as a degraded but still serializable
+    flow - Maestro may reject at run time, but the .tfl writes successfully
+    and the user sees a clear error from prep-cli rather than a Python
+    exception."""
+    if not luid:
+        return [], "", ""
+    try:
+        from skill.scripts.server_scan import inventory_datasource, is_configured
+    except Exception:
+        return [], "", ""
+    if not is_configured():
+        return [], "", ""
+    try:
+        inv = inventory_datasource(luid)
+    except Exception:
+        return [], "", ""
+    cols = inv.get("columns") or []
+    out: list[dict] = []
+    for i, c in enumerate(cols):
+        # Skip calculated fields - they're computed downstream from the
+        # published DS itself; Maestro requires them in the source DS,
+        # not in the consuming flow's input node.
+        if c.get("field_kind") == "CalculatedField":
+            continue
+        raw_type = (c.get("data_type") or "string").lower()
+        prep_type = _PROXY_TYPE_TO_PREP.get(raw_type, "string")
+        collation = _DEFAULT_STRING_COLLATION if prep_type == "string" else None
+        out.append({
+            "name": c.get("name") or "",
+            "type": prep_type,
+            "collation": collation,
+            "caption": "",
+            "ordinal": i,
+            "isGenerated": False,
+        })
+    return out, inv.get("name") or "", inv.get("project") or ""
+
+
+def _make_published_ds_input_node(plan_input: NodePlan,
+                                  conn_id: str) -> tuple[str, dict]:
+    """Build the .v2019_3_1.LoadSqlProxy input node bound to a published
+    data source on the connected Tableau Server. Shape reverse-engineered
+    from `user_examples/USAFE_server_pull_example.tfl` saved by Tableau
+    Prep Builder."""
+    nid = new_id()
+    attrs = plan_input.connector_attrs or {}
+    luid = attrs.get("luid", "")
+    project = attrs.get("project", "")
+    # datasourceName must EXACTLY match what's on the site - it's how
+    # Tableau Server identifies the DS for the proxy connection. Pull
+    # from the Metadata API inventory (authoritative) when we have
+    # creds; fall back to the spec's source.name (a user-facing label
+    # that often won't match the actual DS) only if the API is
+    # unreachable.
+    fields, server_ds_name, server_proj_name = _published_ds_meta_from_inventory(luid)
+    ds_name = (
+        attrs.get("datasource_name")
+        or server_ds_name
+        or plan_input.name
+        or ""
+    )
+    project = project or server_proj_name or ""
+    # dbname is the datasourceName with spaces removed (Maestro convention
+    # observed in Builder-saved seed flows).
+    db_name = attrs.get("dbname") or ds_name.replace(" ", "")
+
+    return nid, {
+        "nodeType": ".v2019_3_1.LoadSqlProxy",
+        "name": plan_input.name,
+        "id": nid,
+        "baseType": "input",
+        "nextNodes": [],
+        "serialize": False,
+        "description": plan_input.description or None,
+        "connectionId": conn_id,
+        "connectionAttributes": {
+            "dbname": db_name,
+            "projectName": project,
+            "datasourceName": ds_name,
+        },
+        "fields": fields,
+        "actions": [],
+        "debugModeRowLimit": 393216,
+        "originalDataTypes": {},
+        "randomSampling": None,
+        "updateTimestamp": None,
+        "restrictedFields": {},
+        "userRenamedFields": {},
+        "selectedFields": None,
+        "samplingType": None,
+        "groupByFields": None,
+        "filters": [],
+        "relation": {"type": "table", "table": "[sqlproxy]"},
+    }
+
+
+def _make_sqlproxy_connection(conn_id: str, server_url: str,
+                              site_url_name: str,
+                              friendly_name: str = "") -> dict:
+    """Build the .v1.SqlConnection block for a sqlproxy (Tableau Server
+    published DS) connection. Shape from the Builder-saved seed flow.
+
+    The auth itself is resolved by the backgrounder (or by Prep Builder
+    when running locally) using the user's site session - no creds in
+    the .tfl."""
+    name = friendly_name or f"{server_url} ({site_url_name or 'default'})"
+    return {
+        "connectionType": ".v1.SqlConnection",
+        "id": conn_id,
+        "name": name,
+        "isPackaged": False,
+        "connectionAttributes": {
+            "server": server_url,
+            "port": "443",
+            "query-category": "Data",
+            "siteUrlName": site_url_name or "",
+            "channel": "https",
+            "class": "sqlproxy",
+            "directory": "/dataserver",
+            "odbc-native-protocol": "yes",
+        },
+    }
+
+
+def _make_local_csv_input_node(plan_input: NodePlan,
+                               conn_id: str) -> tuple[str, dict]:
+    """Build a LoadCsv input node pointing at a local CSV. Used when
+    run_loop's Phase 4a downloaded a published DS as CSV (MFA-bound
+    Cloud sites). Mirrors the LoadCsv shape Tableau Prep Builder
+    produces for File > Connect to CSV.
+
+    The connection block is created by the caller and points at the
+    CSV's directory + filename, class=textscan."""
+    nid = new_id()
+    attrs = plan_input.connector_attrs or {}
+    csv_path = attrs.get("_pds_csv_path", "")
+    desc = plan_input.description or None
+    return nid, {
+        "nodeType": ".v1.LoadCsv",
+        "name": plan_input.name,
+        "id": nid,
+        "baseType": "input",
+        "nextNodes": [],
+        "serialize": False,
+        "description": desc,
+        "connectionId": conn_id,
+        # _pds_* attrs are preserved here so Phase 10 (publish-time
+        # rewrite in run_loop) can detect them and swap this node
+        # back to LoadSqlProxy without losing the routing info.
+        "connectionAttributes": {
+            "_pds_luid": attrs.get("_pds_luid", ""),
+            "_pds_project": attrs.get("_pds_project", ""),
+            "_pds_site": attrs.get("_pds_site", ""),
+            "_pds_datasource_name": attrs.get("_pds_datasource_name", ""),
+        },
+        "fields": [],
+        "actions": [],
+        "debugModeRowLimit": 393216,
+        "originalDataTypes": {},
+        "randomSampling": None,
+        "updateTimestamp": None,
+        "restrictedFields": {},
+        "userRenamedFields": {},
+        "selectedFields": None,
+        "samplingType": None,
+        "groupByFields": None,
+        "filters": [],
+        "relation": {"type": "table", "table": str(Path(csv_path).name)},
+    }
+
+
+def _make_local_csv_connection(conn_id: str, csv_path: Path) -> dict:
+    """Build a `.v1.SqlConnection` (class=textscan) for a local CSV.
+    Mirrors what Tableau Prep Builder produces when you File > Connect
+    to a CSV file."""
+    return {
+        "connectionType": ".v1.SqlConnection",
+        "id": conn_id,
+        "name": csv_path.name,
+        "isPackaged": False,
+        "connectionAttributes": {
+            "filename": str(csv_path),
+            "directory": str(csv_path.parent),
+            "class": "textscan",
+            "validate": "no",
+            "is-single-table-union": "yes",
+            "interpretationMode": "0",
+        },
+    }
+
+
 def _make_input_node(plan_input: NodePlan, trigger_xlsx: Path) -> tuple[str, dict]:
     """Build an input node. For non-native sources we always use the
     folder-listing xlsx as a 'trigger' input that the downstream Script
@@ -186,7 +412,17 @@ def _make_trigger_xlsx(run_dir: Path, folder_path: str = "",
                        filename: str = "trigger.xlsx") -> Path:
     """Emit a tiny .xlsx with a single 'folder' column the input node points at.
     `filename` lets multi-source flows give each branch a unique trigger file
-    (Prep tracks each source by its `connectionAttributes.filename`)."""
+    (Prep tracks each source by its `connectionAttributes.filename`).
+
+    IMPORTANT: row 2 must be a non-empty string. When the row cell is None,
+    Maestro emits zero rows from the LoadSql input node, the downstream
+    Script node never receives a trigger DataFrame, and the entire flow
+    fails with cryptic schema errors (TabPy `BasicAuthConfiguration` /
+    `getPassword` errors are misleading - they fire because the script
+    node's `get_output_schema()` is the only thing that runs and it's
+    invoked without any input rows). For rest_api / web_crawl / pki
+    sources where there's no folder path, fall back to a sentinel
+    placeholder so the row exists and the script gets called."""
     try:
         from openpyxl import Workbook
     except ImportError:
@@ -197,15 +433,22 @@ def _make_trigger_xlsx(run_dir: Path, folder_path: str = "",
     ws = wb.active
     ws.title = "Sheet1"
     ws.append(["folder"])
-    ws.append([folder_path])
+    ws.append([folder_path or "TRIGGER"])
     p = run_dir / filename
     wb.save(p)
     return p
 
 
 def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
-                  templates_dir: Optional[Path] = None) -> Path:
-    """Generate a working .tfl. Returns the path to the produced file."""
+                  templates_dir: Optional[Path] = None,
+                  local_iteration: bool = False) -> Path:
+    """Generate a working .tfl. Returns the path to the produced file.
+
+    `local_iteration=True` swaps every `published_data_source` output
+    to a local WriteToHyper. Used by run_loop's pre-publish iteration
+    loop on MFA-bound Cloud sites where prep-cli can't auth to push
+    extracts to the server. Phase 10 (publish-time rewrite) flips them
+    back to `PublishExtract` before upload."""
     if templates_dir is None:
         templates_dir = Path(__file__).resolve().parents[1] / "templates"
 
@@ -247,28 +490,50 @@ def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
         branch_dir = run_dir / f"branch_{branch_idx}"
         branch_dir.mkdir(parents=True, exist_ok=True)
         src = spec.sources[branch_idx] if branch_idx < len(spec.sources) else None
-        folder_hint = (src.path if src else "") or ""
-        trigger_xlsx = _make_trigger_xlsx(branch_dir, folder_hint, "trigger.xlsx")
+
+        is_published_ds = plan_input.connector_class == "published_datasource"
+        is_local_csv = plan_input.connector_class == "local_csv"
 
         conn_id = new_id()
-        flow["connections"][conn_id] = {
-            "connectionType": ".v1.SqlConnection",
-            "id": conn_id,
-            "name": f"skill_input_{branch_idx}",
-            "isPackaged": False,
-            "connectionAttributes": {
-                "filename": str(trigger_xlsx),
-                "directory": str(trigger_xlsx.parent),
-                "class": "excel-direct",
-                "validate": "no",
-                "is-single-table-union": "yes",
-                "interpretationMode": "0",
-            },
-        }
+        if is_published_ds:
+            attrs = plan_input.connector_attrs or {}
+            site_url = attrs.get("site") or os.environ.get("TABLEAU_SERVER_SITE", "")
+            server_url = (
+                attrs.get("server_url")
+                or os.environ.get("TABLEAU_SERVER_URL", "")
+                or ""
+            ).rstrip("/")
+            flow["connections"][conn_id] = _make_sqlproxy_connection(
+                conn_id, server_url, site_url,
+            )
+            inp_id, inp_node = _make_published_ds_input_node(plan_input, conn_id)
+        elif is_local_csv:
+            attrs = plan_input.connector_attrs or {}
+            csv_path = Path(attrs.get("_pds_csv_path", ""))
+            flow["connections"][conn_id] = _make_local_csv_connection(
+                conn_id, csv_path,
+            )
+            inp_id, inp_node = _make_local_csv_input_node(plan_input, conn_id)
+        else:
+            folder_hint = (src.path if src else "") or ""
+            trigger_xlsx = _make_trigger_xlsx(branch_dir, folder_hint, "trigger.xlsx")
+            flow["connections"][conn_id] = {
+                "connectionType": ".v1.SqlConnection",
+                "id": conn_id,
+                "name": f"skill_input_{branch_idx}",
+                "isPackaged": False,
+                "connectionAttributes": {
+                    "filename": str(trigger_xlsx),
+                    "directory": str(trigger_xlsx.parent),
+                    "class": "excel-direct",
+                    "validate": "no",
+                    "is-single-table-union": "yes",
+                    "interpretationMode": "0",
+                },
+            }
+            inp_id, inp_node = _make_input_node(plan_input, trigger_xlsx)
+            inp_node["connectionId"] = conn_id
         flow["connectionIds"].append(conn_id)
-
-        inp_id, inp_node = _make_input_node(plan_input, trigger_xlsx)
-        inp_node["connectionId"] = conn_id
         # Respect the plan's name (which honors src.name from the spec);
         # only fall back to "Input N" when the planner didn't supply one.
         if not plan_input.name:
@@ -388,12 +653,23 @@ def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
         kind = attrs.get("kind", "hyper")
         source_name = attrs.get("source", "") or ""
         upstream_id = transform_ids_by_name.get(source_name, final_tail) if source_name else final_tail
-        if kind == "published_data_source":
+        if kind == "published_data_source" and not local_iteration:
             project_name = attrs.get("project") or default_project
             oid, onode = make_published_datasource_node(
                 o.name, project_name=project_name, datasource_name=o.name,
                 description=o.description or None,
             )
+        elif kind == "published_data_source" and local_iteration:
+            # Local-iteration substitution: write to a Hyper on disk
+            # instead of pushing to the server. The original published
+            # DS routing (project, datasource_name) is preserved on the
+            # node so Phase 10 can rewrite back to PublishExtract.
+            hp = str(outputs_dir / f"{o.name}.hyper")
+            oid, onode = make_hyper_node(o.name, Path(hp),
+                                         description=o.description or None)
+            onode["_pds_target_project"] = attrs.get("project") or default_project
+            onode["_pds_target_datasource_name"] = o.name
+            onode["_pds_target_description"] = o.description or ""
         else:
             hp = attrs.get("hyper_path") or attrs.get("csv_path") or str(outputs_dir / o.name)
             oid, onode = make_hyper_node(o.name, Path(hp), description=o.description or None)

@@ -50,6 +50,13 @@ from skill.scripts.lib import _REPO_ROOT  # noqa: F401
 REQUIRED = ("TABLEAU_SERVER_URL", "TABLEAU_SERVER_PAT_NAME", "TABLEAU_SERVER_PAT_SECRET")
 OPTIONAL = ("TABLEAU_SERVER_SITE",)  # empty string OK for default site on Server
 
+# Tableau Prep CLI v2026.1 only accepts username/password in its
+# credentials JSON - PATs are explicitly rejected by the deserializer.
+# These are OPTIONAL on the env-var side but REQUIRED to run a flow
+# locally via prep-cli when the flow has any internal_published_ds
+# source. Same Keychain service, separate accounts.
+CLI_AUTH = ("TABLEAU_SERVER_USERNAME", "TABLEAU_SERVER_PASSWORD")
+
 CONFIG_DIR = Path(os.environ.get(
     "TABLEAU_PREP_ETL_CONFIG_DIR",
     str(Path.home() / ".tableau-prep-etl"),
@@ -63,6 +70,11 @@ _FIELD_TO_ACCOUNT = {
     "TABLEAU_SERVER_PAT_NAME": "pat-name",
     "TABLEAU_SERVER_PAT_SECRET": "pat-secret",
     "TABLEAU_SERVER_SITE": "site",
+    # Required for local prep-cli runs of flows that include
+    # internal_published_ds sources. Tableau Prep CLI v2026.1 does
+    # NOT accept PATs in its credentials JSON - product gap.
+    "TABLEAU_SERVER_USERNAME": "tableau-username",
+    "TABLEAU_SERVER_PASSWORD": "tableau-password",
 }
 
 
@@ -414,6 +426,103 @@ def discover(env: Optional[dict] = None) -> CredsResult:
         source="",
         suggestions=suggestions(),
     )
+
+
+def has_cli_auth(env: Optional[dict] = None) -> bool:
+    """True iff TABLEAU_SERVER_USERNAME + _PASSWORD are non-empty.
+    Used by run_loop to decide whether to synthesize a credentials.json
+    for prep-cli."""
+    env = env or os.environ
+    return all((env.get(k, "") or "").strip() for k in CLI_AUTH)
+
+
+def synthesize_cli_credentials_json(tfl_path,
+                                    out_path,
+                                    env: Optional[dict] = None) -> dict:
+    """Read sqlproxy connections from a .tfl and write a credentials.json
+    matching prep-cli's expected schema (`{inputConnections: [{...}]}`).
+
+    Tableau Prep CLI v2026.1 only accepts username/password in this file -
+    PATs are explicitly rejected. This is a Tableau product gap, not a
+    skill choice. The PAT path remains primary for publish/scan/metadata.
+
+    The output file is written with chmod 600. The caller is responsible
+    for deleting it after the CLI run.
+
+    Returns a dict summarizing what was written; or {"status": "skipped",
+    "reason": "..."} when no sqlproxy connections were found OR username
+    /password aren't configured.
+    """
+    import json
+    import zipfile
+    from pathlib import Path
+    env = env if env is not None else os.environ
+
+    tfl_path = Path(tfl_path)
+    out_path = Path(out_path)
+
+    if not has_cli_auth(env):
+        return {
+            "status": "skipped",
+            "reason": ("TABLEAU_SERVER_USERNAME / TABLEAU_SERVER_PASSWORD not set. "
+                       "Required for prep-cli runs of flows with internal_published_ds "
+                       "sources. Add via:\n"
+                       "  security add-generic-password -s tableau-prep-etl -a tableau-username -U -w '<user>'\n"
+                       "  security add-generic-password -s tableau-prep-etl -a tableau-password -U -w '<pass>'"),
+        }
+
+    try:
+        with zipfile.ZipFile(tfl_path) as z:
+            with z.open("flow") as f:
+                flow = json.load(f)
+    except Exception as e:
+        return {"status": "error", "type": type(e).__name__, "message": str(e)}
+
+    sqlproxy_conns: list[dict] = []
+    for cid, c in (flow.get("connections") or {}).items():
+        ca = (c.get("connectionAttributes") or {})
+        if ca.get("class") == "sqlproxy":
+            sqlproxy_conns.append({
+                "id": cid,
+                "server": ca.get("server", "").rstrip("/"),
+                "siteUrlName": ca.get("siteUrlName", ""),
+                "port": ca.get("port", "443"),
+            })
+
+    if not sqlproxy_conns:
+        return {"status": "skipped",
+                "reason": "no sqlproxy connections found in .tfl"}
+
+    username = env.get("TABLEAU_SERVER_USERNAME", "").strip()
+    password = env.get("TABLEAU_SERVER_PASSWORD", "").strip()
+
+    input_connections = []
+    for sc in sqlproxy_conns:
+        try:
+            port_int = int(sc["port"])
+        except (TypeError, ValueError):
+            port_int = 443
+        input_connections.append({
+            "hostname": sc["server"],
+            "contentUrl": sc["siteUrlName"],
+            "port": port_int,
+            "username": username,
+            "password": password,
+        })
+
+    creds = {"inputConnections": input_connections}
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(creds, indent=2))
+    try:
+        os.chmod(out_path, stat.S_IRUSR | stat.S_IWUSR)
+    except Exception:
+        pass
+
+    return {
+        "status": "ok",
+        "path": str(out_path),
+        "connection_count": len(input_connections),
+    }
 
 
 def secrets_in_spec(spec_dict: dict) -> bool:

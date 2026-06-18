@@ -194,17 +194,61 @@ def _plan_web_crawl(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePla
 
 def _plan_internal_published_ds(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePlan]]:
     """A source bound to an existing published data source on the
-    Tableau Server. The .tfl carries an input node referencing the DS
-    LUID; backgrounder resolves it at run time using the user's site
-    session - no Python step needed.
+    Tableau Server.
 
-    The reverse-engineering of the exact Maestro deserialized shape
-    for this input node lives in `generate_flow._make_input_node`
-    under `connector_class == 'published_datasource'`. The planner
-    just packs the routing info (luid/project/site/optional column
-    subset) into the NodePlan so the renderer can wire it correctly."""
+    Two emission modes:
+
+    1. **Local-CSV mode** (default when run_loop has downloaded the
+       extract): emit a LoadCsv input pointing at the CSV that
+       Phase 4a wrote. prep-cli runs locally with no auth - this is
+       how MFA-bound Cloud sites stay iterable.
+
+    2. **LoadSqlProxy mode** (fallback for backgrounder execution
+       AND for sites without MFA): emit a `published_datasource`
+       NodePlan that generate_flow renders as a `.v2019_3_1.LoadSqlProxy`
+       node with a `.v1.SqlConnection` (class=sqlproxy). At publish
+       time, run_loop swaps any LoadCsv inputs back to LoadSqlProxy
+       so the backgrounder hits the live DS via the user's site session.
+
+    Both modes preserve LUID/project/site/datasource_name in
+    connector_attrs so the publish-time swap can route correctly."""
     extra = src.extra or {}
     inp_name = src.name or f"Input {idx}"
+
+    # Mode 1: local CSV is the iterable mode for MFA-bound Cloud sites.
+    csv_path = extra.get("_pds_local_csv_path", "")
+    if csv_path:
+        from pathlib import Path
+        p = Path(csv_path)
+        if p.exists():
+            ds_name = extra.get("_pds_actual_ds_name") or src.name or ""
+            project = extra.get("_pds_actual_project") or extra.get("project") or ""
+            row_count = extra.get("_pds_row_count", 0)
+            inp_desc = (src.description or "").strip() or (
+                f"Local snapshot of published DS '{ds_name}' "
+                f"({row_count} rows from project {project!r}) - "
+                f"swapped to live LoadSqlProxy at publish time."
+            )
+            inp = NodePlan(
+                role="input", name=inp_name, description=inp_desc,
+                connector_class="local_csv",
+                connector_attrs={
+                    # _pds_* keys are the swap signal for Phase 10:
+                    # any input whose connector_attrs carries them
+                    # gets rewritten back to LoadSqlProxy at publish.
+                    "_pds_csv_path": str(p),
+                    "_pds_luid": extra.get("luid", ""),
+                    "_pds_project": project,
+                    "_pds_site": extra.get("site", ""),
+                    "_pds_datasource_name": ds_name,
+                    "_pds_column_subset": extra.get("column_subset", []),
+                },
+            )
+            return [inp], []
+
+    # Mode 2: LoadSqlProxy fallback. Used when Phase 4a download failed
+    # OR when this skill runs on a non-MFA site where prep-cli could
+    # auth directly (rare but valid).
     desc_parts: list[str] = [src.description or ""]
     if extra.get("luid"):
         desc_parts.append(f"luid={extra['luid']}")
@@ -355,6 +399,13 @@ def _plan_casts_and_roles(src: Source, branch_idx: int) -> list[NodePlan]:
     cast as an explicit Prep step.
     """
     extra = src.extra or {}
+    # Escape hatch: when a source's column-name heuristics fire wrong
+    # (e.g. GDELT's `SQLDATE` looks like a date suffix but the data is
+    # `YYYYMMDD` strings Prep can't auto-parse), the spec can opt out
+    # entirely with `extra._skip_auto_casts: true`. Explicit overrides
+    # under extra.casts still apply.
+    if extra.get("_skip_auto_casts"):
+        return []
     cast_overrides = extra.get("casts") or {}
     role_overrides = extra.get("semantic_roles") or {}
     cols = _columns_for_source(src)
