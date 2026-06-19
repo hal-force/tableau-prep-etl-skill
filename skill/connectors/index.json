@@ -191,6 +191,16 @@
       },
       "hit_count": 3,
       "last_used_at": 1781841410.778574
+    },
+    "0cbbddab0f9611ba": {
+      "signature": {
+        "type": "rest_api",
+        "host": "aqs.epa.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 9,
+      "last_used_at": 1781842096.4389079
     }
   }
 }

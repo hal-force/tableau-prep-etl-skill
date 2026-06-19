@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "aqs.epa.gov",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1781841896.747586
+}

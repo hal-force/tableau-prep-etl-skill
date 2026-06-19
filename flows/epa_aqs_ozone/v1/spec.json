@@ -1,0 +1,105 @@
+{
+  "request": "Pull EPA Air Quality System (AQS) ozone (parameter 44201) hourly sample measurements for California for January 2024, enrich with sample-time-of-day features and trend analysis by site_number + county. Publish to 'Prep Agent / 09 - EPA Air Quality' on Tableau Server for environmental analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "EPA AQS Ozone California January 2024",
+      "description": "U.S. EPA Air Quality System (AQS) Data API. Hourly sample measurements for ozone (parameter 44201) across all California monitoring sites for a 3-day demo window (Jan 15-17, 2024). Public test/test credential pair allowed for low-volume access; for higher volume, register at aqs.epa.gov/aqsweb/documents/data_api.html. Single-call snapshot (no pagination). Response is wrapped in {Header, Data}.",
+      "url": "https://aqs.epa.gov/data/api/sampleData/byState?email=test@aqs.api&key=test&param=44201&bdate=20240115&edate=20240117&state=06",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 120,
+        "max_retries": 2,
+        "json_paginate": false,
+        "json_records_path": "Data",
+        "json_derived_columns": [
+          {
+            "name": "obs_date",
+            "kind": "concat",
+            "cols": [
+              "date_local"
+            ],
+            "sep": ""
+          }
+        ],
+        "json_schema": {
+          "state_code": "string",
+          "county_code": "string",
+          "site_number": "string",
+          "parameter_code": "string",
+          "poc": "int",
+          "latitude": "decimal",
+          "longitude": "decimal",
+          "parameter": "string",
+          "date_local": "string",
+          "time_local": "string",
+          "sample_measurement": "decimal",
+          "units_of_measure": "string",
+          "sample_duration": "string",
+          "method": "string",
+          "method_type": "string",
+          "state": "string",
+          "county": "string",
+          "cbsa_code": "string",
+          "obs_date": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Ozone Trend",
+        "date_col": "obs_date",
+        "dimensions": [
+          "county",
+          "site_number"
+        ],
+        "rolling_window_days": 7,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level temporal features parsed from obs_date (year, month, quarter, day_of_week, iso_week). Pure pass-through of EPA AQS ozone hourly samples.",
+        "stats_description": "Long-form EPA ozone statistics (one row per dimension x value x year x month over county and site_number). Includes monthly_count of valid samples, 7-day rolling counts, year-over-year deltas + pct change (limited use here since the demo window is one month), z-score anomalies vs baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Use to identify monitoring sites trending toward exceedance bands."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "EPA Ozone Detail",
+      "project": "09 - EPA Air Quality",
+      "source": "Ozone Trend (Features)",
+      "description": "Row-level EPA AQS ozone (parameter 44201) hourly sample measurements for California, January 2024. Includes state, county, site_number, parameter, datetime (date_local + time_local), sample_measurement (parts per million), units_of_measure, sample_duration, method/method_type, lat/lon, county, cbsa_code. Plus calendar features. Source: aqs.epa.gov/data/api. Refresh: monthly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "EPA Ozone Stats",
+      "project": "09 - EPA Air Quality",
+      "source": "Ozone Trend (Stats)",
+      "description": "Long-form EPA ozone statistics (one row per dimension x value x year x month over county and site_number). Includes 7-day rolling counts, z-score anomalies vs baseline, lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Source: EPA AQS Data API."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "09 - EPA Air Quality",
+    "parent_project": "Prep Agent",
+    "flow_name": "EPA Ozone Surveillance",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 14,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 7,
+    "schedule_name_hint": "EPA Ozone Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}
