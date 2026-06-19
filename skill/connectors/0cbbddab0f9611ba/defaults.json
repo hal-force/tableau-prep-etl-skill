@@ -1,0 +1,39 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 120,
+  "max_retries": 2,
+  "json_paginate": false,
+  "json_records_path": "Data",
+  "json_derived_columns": [
+    {
+      "name": "obs_date",
+      "kind": "concat",
+      "cols": [
+        "date_local"
+      ],
+      "sep": ""
+    }
+  ],
+  "json_schema": {
+    "state_code": "string",
+    "county_code": "string",
+    "site_number": "string",
+    "parameter_code": "string",
+    "poc": "int",
+    "latitude": "decimal",
+    "longitude": "decimal",
+    "parameter": "string",
+    "date_local": "string",
+    "time_local": "string",
+    "sample_measurement": "decimal",
+    "units_of_measure": "string",
+    "sample_duration": "string",
+    "method": "string",
+    "method_type": "string",
+    "state": "string",
+    "county": "string",
+    "cbsa_code": "string",
+    "obs_date": "string"
+  },
+  "_skip_auto_casts": true
+}
