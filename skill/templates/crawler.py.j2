@@ -14,12 +14,32 @@ Domains allowlist: {{ domains_allowlist | tojson }}
 """
 import asyncio
 import os
+from urllib.parse import quote_plus, urlparse
 
 import pandas as pd
 
-QUERY_PARAM_NAME = "{{ query_param_name }}"
+QUERY_PARAM_NAME = {{ query_param_name | tojson }}
 MAX_RESULTS = {{ max_results_per_run }}
 DOMAINS_ALLOWLIST = {{ domains_allowlist | tojson }}
+SEARCH_HOST = {{ (engine_search_host or 'www.google.com') | tojson }}
+SEARCH_PATH = {{ (engine_search_path or '/search') | tojson }}
+SEARCH_QUERY_PARAM = {{ (engine_search_query_param or 'q') | tojson }}
+# Total wall-time bound for one crawl call. Defends against an unbounded
+# headless-browser session that could otherwise wedge the TabPy worker.
+CRAWL_TIMEOUT_S = {{ crawl_timeout_s | default(60) | tojson }}
+# Hard cap on bytes the browser will hand back per page.
+MAX_RESPONSE_BYTES = {{ max_response_bytes | default(50_000_000) | tojson }}
+
+# Operator policy: refuse to run an unfiltered crawl. Empty allowlist =>
+# the planner forgot to seed one, which means we'd happily follow links
+# anywhere on the public internet. Hard-fail at script-load time so the
+# operator notices BEFORE TabPy spins up Chromium.
+if not DOMAINS_ALLOWLIST:
+    raise RuntimeError(
+        "crawler refused to run: DOMAINS_ALLOWLIST is empty. Populate "
+        "spec.sources[*].extra.domains_allowlist with the hosts the "
+        "crawl is permitted to follow."
+    )
 
 
 def _read_query(df):
@@ -33,6 +53,33 @@ def _read_query(df):
     return os.environ.get(QUERY_PARAM_NAME.upper(), "")
 
 
+def _sanitize_query(q: str) -> str:
+    """Reject control-char / newline injection. Crawl4AI feeds the query
+    into a real browser; a CR/LF pair could split request lines or hide
+    second-stage URLs in a multi-line search box.
+    """
+    if any(ord(c) < 0x20 or ord(c) == 0x7f for c in q):
+        raise RuntimeError("crawler refused query: contains control characters")
+    if len(q) > 2048:
+        raise RuntimeError("crawler refused query: exceeds 2048 chars")
+    return q
+
+
+def _build_search_url(query: str) -> str:
+    """Construct the search URL with proper escaping and assert it
+    points at the allowlisted search host (closes the host-substitution
+    class). Returns a fully-formed https URL."""
+    safe_q = quote_plus(query)
+    url = f"https://{SEARCH_HOST}{SEARCH_PATH}?{SEARCH_QUERY_PARAM}={safe_q}"
+    p = urlparse(url)
+    if (p.hostname or "").lower() != SEARCH_HOST.lower():
+        raise RuntimeError(
+            f"search URL host {p.hostname!r} != configured SEARCH_HOST {SEARCH_HOST!r}; "
+            "refusing to crawl"
+        )
+    return url
+
+
 async def _crawl_async(query: str):
     try:
         from crawl4ai import AsyncWebCrawler
@@ -43,23 +90,43 @@ async def _crawl_async(query: str):
             f"Original error: {e}"
         )
 
+    search_url = _build_search_url(query)
     rows = []
-    async with AsyncWebCrawler(verbose=False) as crawler:
-        # Crawl4AI provides a query/search workflow; for raw URL crawls
-        # use crawler.arun(url=...). The skill's spec includes
-        # `domains_allowlist` for filtering.
-        result = await crawler.arun(url=f"https://www.google.com/search?q={query}")
-        # Extract links
-        if hasattr(result, "links") and result.links:
-            for link in result.links.get("external", [])[:MAX_RESULTS]:
-                href = link.get("href") or ""
-                if DOMAINS_ALLOWLIST and not any(d in href for d in DOMAINS_ALLOWLIST):
-                    continue
-                rows.append({
-                    "url": href,
-                    "text": link.get("text") or "",
-                    "query": query,
-                })
+    # Total wall-time bound. Browser-driven crawls can hang on stalled
+    # network or infinite redirect chains; the timeout is the failsafe.
+    async with asyncio.timeout(CRAWL_TIMEOUT_S):
+        async with AsyncWebCrawler(verbose=False) as crawler:
+            result = await crawler.arun(url=search_url)
+            # Defense-in-depth: cap the page body size we accept. Crawl4AI
+            # may expose the raw HTML via .html or .cleaned_html depending
+            # on version; check whatever's available.
+            for attr in ("html", "cleaned_html", "markdown"):
+                body = getattr(result, attr, None)
+                if isinstance(body, str) and len(body.encode("utf-8", "replace")) > MAX_RESPONSE_BYTES:
+                    raise RuntimeError(
+                        f"crawler aborted: {attr} body exceeded MAX_RESPONSE_BYTES "
+                        f"({len(body)} bytes > {MAX_RESPONSE_BYTES})"
+                    )
+            if hasattr(result, "links") and result.links:
+                for link in result.links.get("external", [])[:MAX_RESULTS]:
+                    href = link.get("href") or ""
+                    # Only emit links whose host matches the allowlist —
+                    # `d in href` substring matching can be tricked
+                    # (e.g. allowlist 'data.gov' matches 'phishy-data.gov.evil.com').
+                    try:
+                        host = (urlparse(href).hostname or "").lower()
+                    except Exception:
+                        continue
+                    if not host:
+                        continue
+                    if not any(host == d.lower() or host.endswith("." + d.lower())
+                               for d in DOMAINS_ALLOWLIST):
+                        continue
+                    rows.append({
+                        "url": href,
+                        "text": link.get("text") or "",
+                        "query": query,
+                    })
     return rows
 
 
@@ -68,6 +135,7 @@ def crawl(df):
     query = _read_query(df)
     if not query:
         return pd.DataFrame(columns=["url", "text", "query"])
+    query = _sanitize_query(query)
 
     try:
         rows = asyncio.run(_crawl_async(query))

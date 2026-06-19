@@ -63,7 +63,11 @@ GATEWAY_URL = _LLM_CFG.url if _LLM_CFG else os.environ.get("LLM_GATEWAY_URL", ""
 GATEWAY_KEY = _LLM_CFG.key if _LLM_CFG else os.environ.get("LLM_GATEWAY_KEY", "")
 GATEWAY_MODEL = _LLM_CFG.model if _LLM_CFG else os.environ.get(
     "LLM_GATEWAY_MODEL", "claude-sonnet-4-6")
-GATEWAY_VERIFY_SSL = False
+# Defaults ON. Local dev with self-signed gateways flips via env var
+# (LLM_GATEWAY_VERIFY_SSL=false) so production paths can't silently MITM.
+GATEWAY_VERIFY_SSL = (
+    os.environ.get("LLM_GATEWAY_VERIFY_SSL", "true").strip().lower() != "false"
+)
 
 
 SYSTEM_PROMPT = """You are a Tableau Server data catalog writer.
@@ -117,6 +121,13 @@ class DescriptionProposal:
     raw_llm_output: str = ""
 
     def to_dict(self) -> dict:
+        # raw_llm_output is intentionally NOT serialized into the audit
+        # JSON: it can echo sample-row PII back verbatim. We persist
+        # a hash + length so the audit still attests to "what the
+        # gateway returned" without holding the bytes; under
+        # --debug-llm a sidecar file holds the raw text.
+        import hashlib
+        raw_bytes = (self.raw_llm_output or "").encode("utf-8", errors="replace")
         return {
             "output_name": self.output_name,
             "luid": self.luid,
@@ -124,6 +135,8 @@ class DescriptionProposal:
             "column_descriptions": dict(self.column_descriptions),
             "columns": list(self.columns),
             "sample_rows": list(self.sample_rows),
+            "raw_llm_output_sha256": hashlib.sha256(raw_bytes).hexdigest(),
+            "raw_llm_output_len": len(raw_bytes),
         }
 
 
@@ -450,7 +463,8 @@ def write_for_output(spec: Spec, output_name: str, luid: str,
                      sample_rows: Optional[list[dict]],
                      run_dir: Path,
                      review: bool = False,
-                     column_types: Optional[dict[str, str]] = None) -> dict:
+                     column_types: Optional[dict[str, str]] = None,
+                     debug_llm: bool = False) -> dict:
     """One-shot: generate proposal, save audit JSON, optionally apply.
 
     `review=True` -> stop after saving the proposal so the user can
@@ -469,6 +483,15 @@ def write_for_output(spec: Spec, output_name: str, luid: str,
 
     audit_path = run_dir / f"metadata_{_safe_name(output_name)}.json"
     audit_path.write_text(json.dumps(proposal.to_dict(), indent=2))
+    # Sidecar with the raw LLM output, written only under --debug-llm
+    # so PII echoed back from the gateway never lands on disk by default.
+    if debug_llm and proposal.raw_llm_output:
+        sidecar = run_dir / f"metadata_{_safe_name(output_name)}.raw.txt"
+        sidecar.write_text(proposal.raw_llm_output)
+        try:
+            os.chmod(sidecar, 0o600)
+        except OSError:
+            pass
 
     if review:
         return {
@@ -507,6 +530,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help="Where to save the audit JSON")
     ap.add_argument("--review", action="store_true",
                     help="Stop after generating proposal; do not apply")
+    ap.add_argument("--debug-llm", action="store_true",
+                    help="Persist the raw LLM response as a sidecar "
+                         "metadata_<name>.raw.txt for debugging. Off by "
+                         "default: raw responses can echo sample-row PII.")
     args = ap.parse_args(argv)
 
     from skill.scripts.publish import _load_spec
@@ -518,7 +545,8 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     result = write_for_output(spec, args.output_name, args.luid,
                               columns, sample, Path(args.run_dir),
-                              review=args.review)
+                              review=args.review,
+                              debug_llm=args.debug_llm)
     print(json.dumps(result, indent=2))
     return 0
 

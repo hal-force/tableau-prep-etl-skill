@@ -19,6 +19,7 @@ Public entry: `generate_flow(spec, plan, run_dir) -> Path`
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 import shutil
@@ -29,7 +30,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 # Bootstrap tflb_lib
 from skill.scripts.lib import _REPO_ROOT  # noqa: F401
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from tflb_lib.nodes import (
     add_edge,
@@ -73,7 +74,17 @@ def _render_templates(plan: Plan, scripts_dir: Path, templates_dir: Path,
     previous render would silently use the previous spec's values.
     """
     scripts_dir.mkdir(parents=True, exist_ok=True)
-    env = Environment(loader=FileSystemLoader(templates_dir))
+    # Hardening: StrictUndefined turns silent {{ undefined_var }} into
+    # an error so a typo'd variable can't render to empty string and
+    # ship a syntactically-valid-but-wrong script. autoescape=False is
+    # explicit (HTML-style escaping in Python output would be wrong);
+    # the safety isn't escaping but the post-render `ast.parse` below
+    # combined with `tojson`-wrapped variables in templates.
+    env = Environment(
+        loader=FileSystemLoader(templates_dir),
+        autoescape=False,
+        undefined=StrictUndefined,
+    )
     sources = sources or []
 
     # Map plan.transforms[i] → sources[transforms[i].branch]. Each
@@ -98,6 +109,7 @@ def _render_templates(plan: Plan, scripts_dir: Path, templates_dir: Path,
         except Exception as e:
             raise RuntimeError(f"failed to load template '{node.template}': {e}")
         rendered = tpl.render(**node.template_vars)
+        _assert_valid_python(rendered, node.template)
         base_name = node.template.replace(".j2", "").replace("/", "_")
         if "." in base_name:
             stem, ext = base_name.rsplit(".", 1)
@@ -124,10 +136,35 @@ def _render_templates(plan: Plan, scripts_dir: Path, templates_dir: Path,
         except Exception as e:
             raise RuntimeError(f"failed to load template '{node.template}': {e}")
         rendered = tpl.render(**node.template_vars)
+        _assert_valid_python(rendered, node.template)
         out_name = node.template.replace(".j2", "").replace("/", "_")
         out_path = scripts_dir / out_name
         out_path.write_text(rendered)
         node.rendered_path = str(out_path.resolve())
+
+
+def _assert_valid_python(rendered: str, template_name: str) -> None:
+    """Raise RuntimeError if `rendered` is not parseable Python.
+
+    Cheap last-line-of-defense against an injection that survived the
+    spec validators and Jinja's `tojson` wrapping. If a quote breaks
+    out of `API_URL = {{ url | tojson }}`, the resulting code won't
+    parse — fail before writing the .py file rather than at import
+    inside TabPy.
+    """
+    try:
+        ast.parse(rendered)
+    except SyntaxError as e:
+        # Surface a small excerpt around the offending line so the
+        # operator can see what survived rendering.
+        lines = rendered.splitlines()
+        ln = max(1, (e.lineno or 1))
+        lo, hi = max(0, ln - 3), min(len(lines), ln + 2)
+        excerpt = "\n".join(f"{i+1:4d}: {lines[i]}" for i in range(lo, hi))
+        raise RuntimeError(
+            f"rendered template '{template_name}' is not valid Python "
+            f"(SyntaxError at line {ln}: {e.msg}). Excerpt:\n{excerpt}"
+        )
 
 
 _PROXY_TYPE_TO_PREP = {
@@ -441,14 +478,19 @@ def _make_trigger_xlsx(run_dir: Path, folder_path: str = "",
 
 def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
                   templates_dir: Optional[Path] = None,
-                  local_iteration: bool = False) -> Path:
+                  local_iteration: bool = False,
+                  tfl_basename: str = "flow") -> Path:
     """Generate a working .tfl. Returns the path to the produced file.
 
     `local_iteration=True` swaps every `published_data_source` output
     to a local WriteToHyper. Used by run_loop's pre-publish iteration
     loop on MFA-bound Cloud sites where prep-cli can't auth to push
     extracts to the server. Phase 10 (publish-time rewrite) flips them
-    back to `PublishExtract` before upload."""
+    back to `PublishExtract` before upload.
+
+    `tfl_basename` controls the on-disk filename (`<basename>.tfl`).
+    Run_loop passes the resolved `flow_name` so artifacts are
+    self-describing (e.g. `fed_outlays.tfl`)."""
     if templates_dir is None:
         templates_dir = Path(__file__).resolve().parents[1] / "templates"
 
@@ -685,7 +727,7 @@ def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
     # displaySettings is reset because our nodes have new IDs the seed doesn't
     # know about. Tableau Prep Builder lays out unknown nodes automatically
     # when the file is first opened.
-    tfl_path = run_dir / "flow.tfl"
+    tfl_path = run_dir / f"{tfl_basename}.tfl"
     if "displaySettings" in members:
         try:
             ds = json.loads(members["displaySettings"].decode("utf-8"))

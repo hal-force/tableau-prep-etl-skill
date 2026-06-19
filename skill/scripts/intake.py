@@ -28,6 +28,14 @@ from skill.scripts.lib import _REPO_ROOT  # noqa: F401
 
 
 from skill.scripts.llm_config import load_llm_config
+from skill.scripts.spec_validation import (
+    SpecValidationError,
+    safe_output_dict,
+    safe_source_dict,
+    safe_transform_dict,
+    validate_spec,
+)
+from skill.scripts import host_trust
 
 # Resolve LLM gateway config: env vars first, then ~/.tableau-prep-etl/config.json
 # (local-dev only — never published). If neither is available, _llm_chat raises
@@ -38,7 +46,11 @@ GATEWAY_URL = _LLM_CFG.url if _LLM_CFG else os.environ.get(
 )
 GATEWAY_KEY = _LLM_CFG.key if _LLM_CFG else os.environ.get("LLM_GATEWAY_KEY", "")
 GATEWAY_MODEL = _LLM_CFG.model if _LLM_CFG else os.environ.get("LLM_GATEWAY_MODEL", "claude-sonnet-4-6")
-GATEWAY_VERIFY_SSL = False
+# TLS verification on the gateway call. Defaults ON; flip with the env
+# var (lowercase 'false') for local dev against self-signed gateways.
+GATEWAY_VERIFY_SSL = (
+    os.environ.get("LLM_GATEWAY_VERIFY_SSL", "true").strip().lower() != "false"
+)
 
 
 SOURCE_TYPES = (
@@ -271,29 +283,11 @@ def _parse_json(raw: str) -> dict:
 
 
 def _validate_spec(spec_dict: dict) -> list[str]:
-    """Return a list of validation errors. Empty list = valid."""
-    errors: list[str] = []
-
-    sources = spec_dict.get("sources") or []
-    if not sources:
-        errors.append("at least one source required")
-    for i, s in enumerate(sources):
-        if s.get("type") not in SOURCE_TYPES:
-            errors.append(f"source[{i}].type must be one of {SOURCE_TYPES}")
-
-    if spec_dict.get("qa_tier") not in QA_TIERS:
-        errors.append(f"qa_tier must be one of {QA_TIERS}")
-    if spec_dict.get("eval_strategy") not in EVAL_STRATEGIES:
-        errors.append(f"eval_strategy must be one of {EVAL_STRATEGIES}")
-    cadence = spec_dict.get("refresh_cadence", "once")
-    if cadence not in REFRESH_CADENCES:
-        errors.append(f"refresh_cadence must be one of {REFRESH_CADENCES}")
-
-    outputs = spec_dict.get("outputs") or []
-    if not outputs:
-        errors.append("at least one output required")
-
-    return errors
+    """Defense-in-depth validation. Delegates to
+    `skill.scripts.spec_validation.validate_spec` so the intake LLM
+    path and the run_loop --spec archive path share one gate. Returns
+    a list of error strings; empty list = valid."""
+    return validate_spec(spec_dict)
 
 
 def intake(request: str, run_dir: Path) -> Spec:
@@ -325,11 +319,31 @@ def intake(request: str, run_dir: Path) -> Spec:
             ],
         )
 
+    # Host-approval gate. extract_hosts pulls every external host out
+    # of spec.sources[*].url; ensure_hosts_approved checks each against
+    # internal-trust + known_hosts.json and prompts (or hard-rejects in
+    # CI mode) for unfamiliar hosts.
+    try:
+        host_trust.ensure_hosts_approved(host_trust.extract_hosts(parsed))
+    except RuntimeError as e:
+        raise IntakeIncomplete(
+            f"intake aborted: {e}",
+            questions=[
+                "Approve the rejected host(s) interactively, or add their suffix to "
+                "~/.tableau-prep-etl/internal_hosts.txt, or pick a different data source."
+            ],
+        )
+
+    # safe_*_dict rejects unknown fields the LLM might invent — e.g.
+    # an attempt to set an internal flag via the spec.
     spec = Spec(
         request=request,
-        sources=[Source(**s) for s in parsed["sources"]],
-        transformations=[Transformation(**t) for t in (parsed.get("transformations") or [])],
-        outputs=[Output(**o) for o in parsed["outputs"]],
+        sources=[Source(**safe_source_dict(s)) for s in parsed["sources"]],
+        transformations=[
+            Transformation(**safe_transform_dict(t))
+            for t in (parsed.get("transformations") or [])
+        ],
+        outputs=[Output(**safe_output_dict(o)) for o in parsed["outputs"]],
         qa_tier=parsed["qa_tier"],
         eval_strategy=parsed["eval_strategy"],
         deployment=parsed.get("deployment", "local"),
@@ -339,7 +353,9 @@ def intake(request: str, run_dir: Path) -> Spec:
         open_questions=open_qs,
     )
 
-    run_dir.mkdir(parents=True, exist_ok=True)
+    # 0o700 directory mode keeps spec.json + per-run scratch readable
+    # only by the operator who launched the run.
+    run_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     (run_dir / "spec.json").write_text(json.dumps(spec.to_dict(), indent=2))
     return spec
 

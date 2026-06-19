@@ -33,21 +33,33 @@ from urllib.parse import urljoin, urlparse
 
 import pandas as pd
 
-API_URL = "{{ url }}"
-FORMAT = "{{ format or 'json' }}"
-{% if graphql %}
-GRAPHQL = True
-GRAPHQL_QUERY = """
-{{ extra.get('query', '# put your GraphQL query in spec.sources[*].extra.query') }}
-"""
-{% else %}
-GRAPHQL = False
-{% endif %}
+API_URL = {{ url | tojson }}
+FORMAT = {{ (format or 'json') | tojson }}
+GRAPHQL = {{ (graphql | default(false)) | tojson }}
+GRAPHQL_QUERY = {{ extra.get('query', '# put your GraphQL query in spec.sources[*].extra.query') | tojson }}
 
-VERIFY_SSL = {{ extra.get('verify_ssl', True) }}
-TIMEOUT_S = {{ extra.get('timeout_s', 120) }}
-MAX_RETRIES = {{ extra.get('max_retries', 3) }}
-COUNTRY_FILTER = "{{ extra.get('country_filter', '') }}"
+# Defense-in-depth: re-validate API_URL at script execution against
+# the same SSRF rules the spec validator applies, so a tampered .tfl
+# can't reach cloud-metadata or loopback even if it bypasses the
+# build-time gate. Hard-block list mirrors spec_validation._HARD_BLOCK_HOSTS.
+def _assert_url_safe(u: str) -> None:
+    p = urlparse(u)
+    if (p.scheme or "").lower() not in ("http", "https"):
+        raise ValueError(f"refusing to fetch URL with scheme {p.scheme!r}")
+    h = (p.hostname or "").strip().lower()
+    if h in ("localhost", "metadata.google.internal", "metadata.aws.com",
+             "metadata.azure.com", "169.254.169.254", "0.0.0.0"):
+        raise ValueError(f"refusing to fetch hard-blocked host {h!r}")
+
+VERIFY_SSL = {{ extra.get('verify_ssl', True) | tojson }}
+TIMEOUT_S = {{ extra.get('timeout_s', 120) | tojson }}
+MAX_RETRIES = {{ extra.get('max_retries', 3) | tojson }}
+# Hard cap on response body size — public-data endpoints rarely exceed
+# a few hundred MB even for full-history dumps; anything larger is
+# almost certainly an unbounded streaming endpoint we shouldn't drain
+# into TabPy's process memory. Configurable via spec.extra.max_response_bytes.
+MAX_RESPONSE_BYTES = {{ extra.get('max_response_bytes', 500_000_000) | tojson }}
+COUNTRY_FILTER = {{ extra.get('country_filter', '') | tojson }}
 {% set _ilp = extra.get('index_link_pattern', '') %}
 INDEX_LINK_PATTERN = {{ _ilp | tojson if _ilp else 'r\'href="([^"]+\\.CSV\\.zip)"\'' }}
 
@@ -143,6 +155,9 @@ JSON_PAGE_SIZE = {{ extra.get('json_page_size', 1000) }}
 JSON_PAGE_START = {{ extra.get('json_page_start', 1) }}
 JSON_PAGE_KIND = {{ extra.get('json_page_kind', 'index') | tojson }}
 JSON_MAX_PAGES = {{ extra.get('json_max_pages', 200) }}
+# Independent row-cap for paginated walks. Stops the walk even if
+# JSON_MAX_PAGES * JSON_PAGE_SIZE would otherwise exceed memory. 0 = no cap.
+JSON_MAX_ROWS = {{ extra.get('json_max_rows', 1_000_000) }}
 # When True, pagination params go in the POST body alongside JSON_BODY
 # instead of being appended to the URL. USAspending et al. paginate
 # by 'page' inside the body and ignore query-string offsets.
@@ -186,7 +201,29 @@ def _build_headers():
     return headers
 
 
+def _read_bounded(resp) -> bytes:
+    """Stream resp body in 1 MiB chunks; abort if total exceeds
+    MAX_RESPONSE_BYTES. Defends against unbounded streaming endpoints
+    that would otherwise drain into TabPy's process memory.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = resp.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if MAX_RESPONSE_BYTES and total > MAX_RESPONSE_BYTES:
+            raise RuntimeError(
+                f"response body exceeded MAX_RESPONSE_BYTES "
+                f"({total} > {MAX_RESPONSE_BYTES}); aborting fetch"
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def _http_get_bytes(url: str) -> bytes:
+    _assert_url_safe(url)
     headers = _build_headers()
     # GET has no body, so Content-Type is irrelevant and some publishers
     # reject the request when it's set (EPA AQS treats unexpected
@@ -200,7 +237,7 @@ def _http_get_bytes(url: str) -> bytes:
             req.add_header(k, v)
         try:
             with urlrequest.urlopen(req, timeout=TIMEOUT_S, context=ctx) as resp:
-                return resp.read()
+                return _read_bounded(resp)
         except error.HTTPError as e:
             # 4xx (other than 429 rate-limit) is permanent — re-raise
             # immediately so the caller can decide (e.g. paginated
@@ -221,6 +258,7 @@ def _http_get_bytes(url: str) -> bytes:
 
 
 def _http_request_json(payload=None, method="GET"):
+    _assert_url_safe(API_URL)
     body = json.dumps(payload).encode("utf-8") if payload else None
     headers = _build_headers()
     # No body -> no Content-Type (some strict APIs reject GET requests
@@ -236,7 +274,7 @@ def _http_request_json(payload=None, method="GET"):
             req.add_header(k, v)
         try:
             with urlrequest.urlopen(req, timeout=TIMEOUT_S, context=ctx) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+                return json.loads(_read_bounded(resp).decode("utf-8"))
         except (error.HTTPError, error.URLError, TimeoutError):
             if attempt < MAX_RETRIES:
                 attempt += 1
@@ -330,7 +368,29 @@ def _fetch_csv_index_then_zip() -> pd.DataFrame:
     Read API_URL as an HTML directory listing, find the latest .CSV.zip
     link, fetch + unzip + read the CSV. Tailored to GDELT events index."""
     index_html = _http_get_bytes(API_URL).decode("utf-8", errors="replace")
-    matches = re.findall(INDEX_LINK_PATTERN, index_html, flags=re.IGNORECASE)
+    # SIGALRM-based per-call timeout on the regex scan. INDEX_LINK_PATTERN
+    # comes from spec.extra and could be a ReDoS-prone shape; bound
+    # wall-time at 10s on POSIX. Windows/non-main-thread silently skips
+    # the bound (signal.alarm unsupported there).
+    matches = []
+    try:
+        import signal
+        def _redos_handler(signum, frame):
+            raise RuntimeError(
+                f"regex scan exceeded 10s on INDEX_LINK_PATTERN={INDEX_LINK_PATTERN!r}; "
+                "suspected ReDoS — refusing to continue"
+            )
+        signal.signal(signal.SIGALRM, _redos_handler)
+        signal.alarm(10)
+        try:
+            matches = re.findall(INDEX_LINK_PATTERN, index_html, flags=re.IGNORECASE)
+        finally:
+            signal.alarm(0)
+    except (ValueError, AttributeError):
+        # signal.alarm unavailable (Windows, non-main thread). Fall back
+        # to unbounded scan; the upstream INDEX_LINK_PATTERN went through
+        # validate_regex at intake time so the shape is already vetted.
+        matches = re.findall(INDEX_LINK_PATTERN, index_html, flags=re.IGNORECASE)
     if not matches:
         raise RuntimeError(f"no .CSV.zip links matched at {API_URL}")
     # Pick the most recent (lexicographic max for date-prefixed filenames)
@@ -447,6 +507,11 @@ def _fetch_json() -> pd.DataFrame:
             break
         all_rows.extend(rows)
         seen_pages += 1
+        # Independent row-cap. Stops the walk before memory explodes
+        # even when JSON_MAX_PAGES * JSON_PAGE_SIZE wasn't tight enough.
+        if JSON_MAX_ROWS and len(all_rows) >= JSON_MAX_ROWS:
+            all_rows = all_rows[:JSON_MAX_ROWS]
+            break
         # JSON:API style total-pages from meta.
         meta = doc.get("meta") if isinstance(doc, dict) else None
         if isinstance(meta, dict):

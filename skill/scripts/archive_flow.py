@@ -98,7 +98,9 @@ def next_version_dir(flows_root: Path, flow_name: str) -> Path:
 # but we double-check on archive.
 _CRED_KEYS_RE = re.compile(
     r"(token|secret|password|api[_\-]?key|bearer|client[_\-]?secret|"
-    r"private[_\-]?key|cert[_\-]?body|cert[_\-]?content)",
+    r"private[_\-]?key|cert(?:_?(?:pem|body|content))?|certificate|"
+    r"authorization|auth[_\-]?header|connection(?:[_\-]?string)?|"
+    r"cookie|session(?:id)?|credent)",
     re.IGNORECASE,
 )
 
@@ -326,9 +328,17 @@ def archive_flow(spec: Spec, run_dir: Path, flow_name: str,
     have a `flow.tfl` (the load-bearing artifact)."""
     flows_root = flows_root or FLOWS_ROOT
     run_dir = Path(run_dir).resolve()
-    tfl_src = run_dir / "flow.tfl"
-    if not tfl_src.exists():
-        raise RuntimeError(f"no flow.tfl at {tfl_src}; nothing to archive")
+    # The .tfl basename is now driven by flow_name (see run_loop's
+    # _safe_tfl_basename), but legacy runs still write `flow.tfl`. Pick
+    # the named file first, fall back to legacy, then any *.tfl in the
+    # run dir.
+    candidates = [
+        run_dir / f"{flow_name}.tfl",
+        run_dir / "flow.tfl",
+    ] + sorted(run_dir.glob("*.tfl"))
+    tfl_src = next((p for p in candidates if p.exists()), None)
+    if tfl_src is None:
+        raise RuntimeError(f"no .tfl in {run_dir}; nothing to archive")
 
     spec_src = spec_path or (run_dir / "spec.json")
     if not Path(spec_src).exists():
@@ -350,8 +360,10 @@ def archive_flow(spec: Spec, run_dir: Path, flow_name: str,
 
     # .tfl: pass through. The skill never embeds creds in the .tfl by
     # design, but we still scan it for the most common accidental
-    # leak shapes (TabPy passwords inline, embedded auth tokens).
-    shutil.copyfile(tfl_src, version_dir / "flow.tfl")
+    # leak shapes (TabPy passwords inline, embedded auth tokens). Name
+    # the archived copy after the flow itself so artifacts are
+    # self-describing once unzipped or downloaded.
+    shutil.copyfile(tfl_src, version_dir / f"{flow_name}.tfl")
 
     # Sample outputs.
     sample_files = _collect_sample_outputs(
