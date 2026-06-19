@@ -201,6 +201,16 @@
       },
       "hit_count": 9,
       "last_used_at": 1781842096.4389079
+    },
+    "fbe5184c5e476cf1": {
+      "signature": {
+        "type": "rest_api",
+        "host": "api.usaspending.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 9,
+      "last_used_at": 1781842657.2107599
     }
   }
 }

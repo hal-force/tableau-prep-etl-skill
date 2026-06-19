@@ -1,0 +1,148 @@
+{
+  "request": "Pull federal contract awards (award type A/B/C/D = definitive contracts and BPA/IDV variants) from USAspending.gov for the first half of 2025, enrich with NAICS code+description flattening, days_active = end_date - start_date, and trend analysis by Awarding Agency + NAICS code. Publish to 'Prep Agent / 10 - Federal Contract Awards' on Tableau Server for procurement analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "USAspending Contract Awards H1 2025",
+      "description": "USAspending.gov spending_by_award API. Each row = one federal contract action posted between 2025-01-01 and 2025-06-30. Award type codes A/B/C/D cover BPA Calls, Purchase Orders, Delivery Orders, and Definitive Contracts. Public, keyless. POST + JSON body; pagination uses 'page' field in body with hasNext termination signal.",
+      "url": "https://api.usaspending.gov/api/v2/search/spending_by_award/",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 2,
+        "json_http_method": "POST",
+        "json_body": {
+          "filters": {
+            "time_period": [
+              {
+                "start_date": "2025-01-01",
+                "end_date": "2025-06-30"
+              }
+            ],
+            "award_type_codes": [
+              "A",
+              "B",
+              "C",
+              "D"
+            ]
+          },
+          "fields": [
+            "Award ID",
+            "Recipient Name",
+            "Awarding Agency",
+            "Awarding Sub Agency",
+            "Award Amount",
+            "Start Date",
+            "End Date",
+            "Description",
+            "NAICS",
+            "Period of Performance Start Date",
+            "Period of Performance Current End Date",
+            "Place of Performance State Code"
+          ],
+          "limit": 100
+        },
+        "json_paginate": true,
+        "json_page_in_body": true,
+        "json_page_param": "page",
+        "json_page_size_param": "",
+        "json_page_size": 100,
+        "json_page_start": 1,
+        "json_page_kind": "index",
+        "json_max_pages": 30,
+        "json_records_path": "results",
+        "json_has_next_path": "page_metadata.hasNext",
+        "json_derived_columns": [
+          {
+            "name": "naics_code",
+            "kind": "dict_field",
+            "source_col": "NAICS",
+            "field": "code"
+          },
+          {
+            "name": "naics_description",
+            "kind": "dict_field",
+            "source_col": "NAICS",
+            "field": "description"
+          },
+          {
+            "name": "days_of_performance",
+            "kind": "days_between",
+            "start_col": "Start Date",
+            "end_col": "End Date"
+          }
+        ],
+        "json_schema": {
+          "Award ID": "string",
+          "Recipient Name": "string",
+          "Awarding Agency": "string",
+          "Awarding Sub Agency": "string",
+          "Award Amount": "decimal",
+          "Start Date": "string",
+          "End Date": "string",
+          "Description": "string",
+          "Place of Performance State Code": "string",
+          "naics_code": "string",
+          "naics_description": "string",
+          "days_of_performance": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Award Trend",
+        "date_col": "Start Date",
+        "dimensions": [
+          "Awarding Agency",
+          "naics_code"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level temporal features parsed from Start Date (year, month, quarter, day_of_week, iso_week). Pure pass-through of USAspending contract award rows.",
+        "stats_description": "Long-form federal contract award statistics (one row per dimension x value x year x month over Awarding Agency and NAICS code). Includes monthly_count, 30-day rolling counts, year-over-year deltas + pct change (limited use here since the demo window is six months), z-score anomalies vs baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Use to identify agencies with surging award volume or unusual NAICS-code concentrations."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Federal Award Detail",
+      "project": "10 - Federal Contract Awards",
+      "source": "Award Trend (Features)",
+      "description": "Row-level federal contract awards from USAspending.gov for the first half of 2025. Includes Award ID, Recipient Name, Awarding Agency + Sub Agency, Award Amount (USD), Start/End dates, Description, naics_code + naics_description (flattened from the API's nested NAICS object), days_of_performance (End - Start), Place of Performance State Code. Plus calendar features. Source: api.usaspending.gov/api/v2/search/spending_by_award. Refresh: monthly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "Federal Award Stats",
+      "project": "10 - Federal Contract Awards",
+      "source": "Award Trend (Stats)",
+      "description": "Long-form federal contract award statistics (one row per dimension x value x year x month over Awarding Agency and naics_code). Includes 30-day rolling counts, year-over-year deltas + pct change, z-score anomalies vs baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Source: USAspending.gov."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "10 - Federal Contract Awards",
+    "parent_project": "Prep Agent",
+    "flow_name": "USAspending Contract Awards",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 14,
+    "minute_utc": 30,
+    "weekday": "monday",
+    "day_of_month": 7,
+    "schedule_name_hint": "USAspending Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}
