@@ -161,6 +161,26 @@
       },
       "hit_count": 18,
       "last_used_at": 1781839729.807745
+    },
+    "f94a1fcd543869c4": {
+      "signature": {
+        "type": "rest_api",
+        "host": "api.data.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 7,
+      "last_used_at": 1781840255.4627168
+    },
+    "c10e4aaee743c38d": {
+      "signature": {
+        "type": "rest_api",
+        "host": "ed-public-download.scorecard.network",
+        "auth": "none",
+        "format": "csv_zip"
+      },
+      "hit_count": 4,
+      "last_used_at": 1781841070.1889899
     }
   }
 }
