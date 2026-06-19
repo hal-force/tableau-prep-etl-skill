@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "www.fema.gov",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1781838331.376106
+}

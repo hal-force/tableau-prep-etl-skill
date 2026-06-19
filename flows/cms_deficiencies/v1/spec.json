@@ -1,0 +1,115 @@
+{
+  "request": "Pull CMS Nursing Home Health Inspection Deficiencies (Provider Data) since 2025-12-01, treat each citation as a public-health-surveillance event, enrich with days_since_survey, days_to_correction, and trend analysis by state + deficiency_category. Publish to 'Prep Agent / 06 - CMS Nursing Home Surveillance' on Tableau Server for public-health analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "CMS Nursing Home Health Deficiencies",
+      "description": "CMS Nursing Home Health Inspection Deficiencies (Provider Data API datastore r5ix-sfxw). Each row = one health-inspection citation. Filtered to survey_date > 2025-12-01 (~33K rows). Public, keyless. limit/offset pagination on the datastore endpoint.",
+      "url": "https://data.cms.gov/provider-data/api/1/datastore/query/r5ix-sfxw/0?conditions%5B0%5D%5Bproperty%5D=survey_date&conditions%5B0%5D%5Bvalue%5D=2025-12-01&conditions%5B0%5D%5Boperator%5D=%3E",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_param": "offset",
+        "json_page_size_param": "limit",
+        "json_page_size": 1000,
+        "json_page_start": 1,
+        "json_page_kind": "offset",
+        "json_max_pages": 25,
+        "json_records_path": "results",
+        "json_derived_columns": [
+          {
+            "name": "days_since_survey",
+            "kind": "days_since",
+            "source_col": "survey_date"
+          },
+          {
+            "name": "days_to_correction",
+            "kind": "days_between",
+            "start_col": "survey_date",
+            "end_col": "correction_date"
+          }
+        ],
+        "json_schema": {
+          "cms_certification_number_ccn": "string",
+          "provider_name": "string",
+          "citytown": "string",
+          "state": "string",
+          "zip_code": "string",
+          "survey_date": "string",
+          "survey_type": "string",
+          "deficiency_prefix": "string",
+          "deficiency_category": "string",
+          "deficiency_tag_number": "string",
+          "deficiency_description": "string",
+          "scope_severity_code": "string",
+          "deficiency_corrected": "string",
+          "correction_date": "string",
+          "inspection_cycle": "string",
+          "standard_deficiency": "string",
+          "complaint_deficiency": "string",
+          "infection_control_inspection_deficiency": "string",
+          "days_since_survey": "int",
+          "days_to_correction": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Deficiency Trend",
+        "date_col": "survey_date",
+        "dimensions": [
+          "state",
+          "deficiency_category"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level temporal features parsed from survey_date (year, month, quarter, day_of_week, iso_week). Pure pass-through of CMS deficiency citations.",
+        "stats_description": "Long-form CMS deficiency statistics (one row per dimension x value x year x month over state and deficiency_category). Includes monthly_count, 30-day rolling counts, year-over-year deltas + pct change, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Use to identify states with surging citation volume or anomalous deficiency-category concentrations."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "CMS Deficiency Detail",
+      "project": "06 - CMS Nursing Home Surveillance",
+      "source": "Deficiency Trend (Features)",
+      "description": "Row-level CMS Nursing Home Health Inspection deficiencies (one row per citation since 2025-12-01). Includes provider CCN, name, location, survey_date, survey_type, deficiency_category + tag_number + description, scope_severity_code (A-L), correction_date, complaint vs standard flags, infection-control flag. Plus calendar features and days_since_survey + days_to_correction. Source: CMS Provider Data API r5ix-sfxw. Refresh: monthly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "CMS Deficiency Stats",
+      "project": "06 - CMS Nursing Home Surveillance",
+      "source": "Deficiency Trend (Stats)",
+      "description": "Long-form CMS deficiency statistics (one row per dimension x value x year x month over state and deficiency_category). Includes 30-day rolling counts, year-over-year deltas + pct change, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Source: CMS Provider Data API r5ix-sfxw."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "06 - CMS Nursing Home Surveillance",
+    "parent_project": "Prep Agent",
+    "flow_name": "CMS Nursing Home Deficiencies",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 13,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 5,
+    "schedule_name_hint": "CMS Deficiencies Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

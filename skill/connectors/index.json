@@ -121,6 +121,46 @@
       },
       "hit_count": 9,
       "last_used_at": 1781837735.2411761
+    },
+    "3fb732d2bb64aef1": {
+      "signature": {
+        "type": "rest_api",
+        "host": "data.cityofnewyork.us",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 3,
+      "last_used_at": 1781837925.8310452
+    },
+    "c75eeb30df90b0f5": {
+      "signature": {
+        "type": "rest_api",
+        "host": "www.fema.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 12,
+      "last_used_at": 1781838549.236269
+    },
+    "2aefd62d72e26a17": {
+      "signature": {
+        "type": "rest_api",
+        "host": "data.cdc.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 3,
+      "last_used_at": 1781838676.749185
+    },
+    "c1115306c8eda8dd": {
+      "signature": {
+        "type": "rest_api",
+        "host": "data.cms.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 18,
+      "last_used_at": 1781839729.807745
     }
   }
 }

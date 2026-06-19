@@ -1,0 +1,50 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 60,
+  "max_retries": 3,
+  "json_paginate": true,
+  "json_page_param": "$skip",
+  "json_page_size_param": "$top",
+  "json_page_size": 1000,
+  "json_page_start": 1,
+  "json_page_kind": "offset",
+  "json_max_pages": 20,
+  "json_records_path": "DisasterDeclarationsSummaries",
+  "json_derived_columns": [
+    {
+      "name": "days_since_declaration",
+      "kind": "days_since",
+      "source_col": "declarationDate"
+    },
+    {
+      "name": "days_open",
+      "kind": "days_between",
+      "start_col": "declarationDate",
+      "end_col": "disasterCloseoutDate"
+    }
+  ],
+  "json_schema": {
+    "femaDeclarationString": "string",
+    "disasterNumber": "int",
+    "state": "string",
+    "declarationType": "string",
+    "declarationDate": "string",
+    "fyDeclared": "int",
+    "incidentType": "string",
+    "declarationTitle": "string",
+    "incidentBeginDate": "string",
+    "incidentEndDate": "string",
+    "disasterCloseoutDate": "string",
+    "tribalRequest": "bool",
+    "fipsStateCode": "string",
+    "fipsCountyCode": "string",
+    "designatedArea": "string",
+    "ihProgramDeclared": "bool",
+    "iaProgramDeclared": "bool",
+    "paProgramDeclared": "bool",
+    "hmProgramDeclared": "bool",
+    "days_since_declaration": "int",
+    "days_open": "int"
+  },
+  "_skip_auto_casts": true
+}

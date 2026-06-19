@@ -1,0 +1,49 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 60,
+  "max_retries": 3,
+  "json_paginate": true,
+  "json_page_param": "offset",
+  "json_page_size_param": "limit",
+  "json_page_size": 5000,
+  "json_page_start": 1,
+  "json_page_kind": "offset",
+  "json_max_pages": 10,
+  "json_records_path": "results",
+  "json_derived_columns": [
+    {
+      "name": "days_since_survey",
+      "kind": "days_since",
+      "source_col": "survey_date"
+    },
+    {
+      "name": "days_to_correction",
+      "kind": "days_between",
+      "start_col": "survey_date",
+      "end_col": "correction_date"
+    }
+  ],
+  "json_schema": {
+    "cms_certification_number_ccn": "string",
+    "provider_name": "string",
+    "citytown": "string",
+    "state": "string",
+    "zip_code": "string",
+    "survey_date": "string",
+    "survey_type": "string",
+    "deficiency_prefix": "string",
+    "deficiency_category": "string",
+    "deficiency_tag_number": "string",
+    "deficiency_description": "string",
+    "scope_severity_code": "string",
+    "deficiency_corrected": "string",
+    "correction_date": "string",
+    "inspection_cycle": "string",
+    "standard_deficiency": "string",
+    "complaint_deficiency": "string",
+    "infection_control_inspection_deficiency": "string",
+    "days_since_survey": "int",
+    "days_to_correction": "int"
+  },
+  "_skip_auto_casts": true
+}
