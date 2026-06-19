@@ -125,14 +125,26 @@ download-modify-republish:
 ```
 1. server.datasources.download(luid, include_extract=True)  → .tdsx
 2. unzip; locate the .tds and Data/Extracts/*.hyper sidecar
-3. for each (col, description):
+3. PRUNE orphan <column> elements that no longer match the extract:
+     remove any <column name='[X]'> where X is not in the authoritative
+     column set, EXCEPT Tableau-internal cols (__tableau_internal_*,
+     [Number of Records]). Required because earlier writes may have
+     left stale columns from prior schema shapes.
+4. for each (col, description):
      find <column name='[col]' ...> element OR create one with the
        inferred datatype/role/type
      replace any existing <desc> child with:
        <desc><formatted-text><run>DESCRIPTION</run></formatted-text></desc>
-4. repack as .tdsx (preserve the .hyper sidecar verbatim)
-5. server.datasources.publish(item, path, mode="Overwrite")
+5. repack as .tdsx (preserve the .hyper sidecar verbatim)
+6. server.datasources.publish(item, path, mode="Overwrite")
 ```
+
+**Orphan pruning is non-negotiable.** Without it, a schema-changing
+republish leaves the prior shape's `<column>` elements in the .tds
+forever — invisible in Data Details but present in the file and
+echoed by Catalog readbacks. The skill's writer
+(`metadata_writer._apply_column_descriptions_via_tds:355-388`) emits
+`removed_orphan_elements` in its return dict for audit visibility.
 
 The DS LUID is **preserved** across the overwrite, so any
 references / dashboards / connections stay valid. Implemented in
@@ -162,6 +174,33 @@ reindexes asynchronously — readback queries (`fields { description }`)
 may show stale data for several minutes (occasionally longer). The
 .tds itself is authoritative; the descriptions appear in
 `Data Details` in the browser as soon as the republish completes.
+
+### Hyper-schema discovery for the description proposal
+
+Before generating descriptions, the skill reads the column list from
+the local .hyper file produced by prep-cli. Tableau-produced .hyper
+files contain **at least two schemas**: `public` (empty by Tableau
+convention) and `Extract` (the actual extract). Iteration must
+**skip empty schemas** before breaking — naive code that takes
+`get_schema_names()[0]` always reads the empty `public` schema and
+silently produces a zero-column proposal.
+
+The working pattern lives at `run_loop.py:549-571`:
+
+```python
+for sch in conn.catalog.get_schema_names():
+    tables = list(conn.catalog.get_table_names(sch))
+    if not tables:
+        continue
+    td = conn.catalog.get_table_definition(tables[0])
+    cols = [c.name.unescaped for c in td.columns]
+    break
+```
+
+When this is broken, the symptom is a "metadata write succeeded;
+nothing happened" deceptive success — the writer applies descriptions
+to zero columns and returns ok. Pair with orphan pruning above:
+together they guarantee the .tds matches the extract exactly.
 
 ## Performance notes
 
