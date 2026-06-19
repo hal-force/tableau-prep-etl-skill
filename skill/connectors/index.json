@@ -181,6 +181,16 @@
       },
       "hit_count": 4,
       "last_used_at": 1781841070.1889899
+    },
+    "1d08d071612a38bc": {
+      "signature": {
+        "type": "rest_api",
+        "host": "opensky-network.org",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 3,
+      "last_used_at": 1781841410.778574
     }
   }
 }
