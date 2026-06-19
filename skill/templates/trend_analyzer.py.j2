@@ -12,7 +12,7 @@ and trend dashboards in Tableau without a desktop-side join.
 Configured by spec:
   date_col           = "{{ date_col }}"          (ISO 8601 string column)
   time_col           = "{{ time_col }}"          ("HH:MM" string column or "")
-  dimensions         = {{ dimensions | tojson }}
+  dimensions         = {{ dimensions | pyrepr }}
   rolling_window_days= {{ rolling_window_days }}
   anomaly_z          = {{ anomaly_z }}
 
@@ -63,12 +63,12 @@ import pandas as pd
 
 DATE_COL = "{{ date_col }}"
 TIME_COL = "{{ time_col }}"
-DIMENSIONS = {{ dimensions | tojson }}
+DIMENSIONS = {{ dimensions | pyrepr }}
 ROLLING_WINDOW_DAYS = {{ rolling_window_days }}
 ANOMALY_Z = float({{ anomaly_z }})
 
 # Schema declared by upstream nodes — must match what we pass through.
-INPUT_SCHEMA: dict = {{ input_schema | tojson if input_schema is defined else '{}' }}
+INPUT_SCHEMA: dict = {{ input_schema | pyrepr if input_schema is defined else '{}' }}
 
 
 _DOW_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]

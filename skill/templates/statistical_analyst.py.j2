@@ -7,7 +7,7 @@ Operates on the FULL corpus (all rows in one DataFrame) — not per-row.
 Computes deterministic anomalies: per-group field completeness, IQR
 outliers on numeric columns, format diversity per group key.
 
-Transformations seen in spec: {{ transformations | tojson }}
+Transformations seen in spec: {{ transformations | pyrepr }}
 """
 import re
 from collections import defaultdict

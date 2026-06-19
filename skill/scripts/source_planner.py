@@ -951,6 +951,80 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
             parent=f"@sibling:{red_name}",
         ))
 
+    # Embassy threat join. Single-input script that consumes the GDELT
+    # feed dataframe, filters to threat-class CAMEO root codes within
+    # the configured lookback window, and emits one row per (US post,
+    # event) pair within haversine radius. Sibling `embassy_risk_summary`
+    # consumes this node's output to produce the per-post roll-up.
+    for tr in spec.transformations:
+        if tr.kind != "embassy_threat_join":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        join_name = args.get("name", "Embassy Threat Join")
+        join_desc = args.get("description") or (
+            f"Spatial-joins GDELT events to a curated US diplomatic-post roster. "
+            f"Filters to CAMEO root codes {args.get('cameo_root_codes')} within "
+            f"the past {args.get('lookback_days', 90)} days; haversine radius "
+            f"{args.get('radius_miles', 50)}mi. Emits one row per (post, event) "
+            f"pair with severity / proximity / recency / US-actor scoring."
+        )
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=join_name,
+            description=join_desc,
+            template="embassy_threat_join.py.j2",
+            template_vars={
+                "radius_miles":         int(args.get("radius_miles", 50)),
+                "lookback_days":        int(args.get("lookback_days", 90)),
+                "cameo_root_codes":     args.get("cameo_root_codes", ["13", "14", "17", "18", "19", "20"]),
+                "lat_col":              args.get("lat_col", "ActionGeo_Lat"),
+                "lon_col":              args.get("lon_col", "ActionGeo_Long"),
+                "date_col":             args.get("date_col", "SQLDATE"),
+                "event_root_col":       args.get("event_root_col", "EventRootCode"),
+                "goldstein_col":        args.get("goldstein_col", "GoldsteinScale"),
+                "actor1_country_col":   args.get("actor1_country_col", "Actor1CountryCode"),
+                "actor2_country_col":   args.get("actor2_country_col", "Actor2CountryCode"),
+                "num_mentions_col":     args.get("num_mentions_col", "NumMentions"),
+                "source_url_col":       args.get("source_url_col", "SOURCEURL"),
+                "input_schema":         input_schema,
+            },
+            function_name="join_threats",
+            branch=branch_idx,
+        ))
+
+    # Embassy risk summary. Sibling of embassy_threat_join. Consumes the
+    # event-pair dataframe and aggregates to one row per US post with
+    # weighted threat score and risk_band. Posts with zero events in
+    # the window still appear in the output (LOW band).
+    for tr in spec.transformations:
+        if tr.kind != "embassy_risk_summary":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        sum_name = args.get("name", "Embassy Risk Summary")
+        sum_desc = args.get("description") or (
+            f"Per-post weighted-threat-score roll-up of the Embassy Threat "
+            f"Join's event pairs over a {args.get('window_days', 7)}-day window. "
+            "Emits one row per post with risk_band (CRITICAL / HIGH / ELEVATED "
+            "/ GUARDED / LOW) plus per-class event counts."
+        )
+        # Linear child of the join: summary consumes the join's output
+        # (post×event pairs), not raw GDELT. The event-level output
+        # routes to the join via `output.source = "Embassy Threat Join"`;
+        # the summary output uses the linear tail (this node) by default.
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=sum_name,
+            description=sum_desc,
+            template="embassy_risk_summary.py.j2",
+            template_vars={
+                "window_days": int(args.get("window_days", 7)),
+            },
+            function_name="summarize",
+            branch=branch_idx,
+        ))
+
     plan.qa_nodes = _plan_qa(spec)
     plan.outputs = _plan_outputs(spec, outputs_dir)
     return plan

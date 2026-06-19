@@ -18,7 +18,7 @@ wide:
 
 Configured by spec:
   date_col           = "{{ date_col }}"
-  dimensions         = {{ dimensions | tojson }}
+  dimensions         = {{ dimensions | pyrepr }}
   rolling_window_days= {{ rolling_window_days }}
   anomaly_z          = {{ anomaly_z }}
 
@@ -49,7 +49,7 @@ Output columns (one row per (dim, value, year, month) bucket):
 import pandas as pd
 
 DATE_COL = "{{ date_col }}"
-DIMENSIONS = {{ dimensions | tojson }}
+DIMENSIONS = {{ dimensions | pyrepr }}
 ROLLING_WINDOW_DAYS = {{ rolling_window_days }}
 ANOMALY_Z = float({{ anomaly_z }})
 

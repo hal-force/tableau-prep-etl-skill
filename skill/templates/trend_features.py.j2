@@ -24,7 +24,7 @@ import pandas as pd
 DATE_COL = "{{ date_col }}"
 TIME_COL = "{{ time_col }}"
 
-INPUT_SCHEMA: dict = {{ input_schema | tojson if input_schema is defined else '{}' }}
+INPUT_SCHEMA: dict = {{ input_schema | pyrepr if input_schema is defined else '{}' }}
 
 _DOW_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 

@@ -30,7 +30,7 @@ Output columns (one row per detection):
                         the redactor (high = direct + health combined).
 
 Configured by spec:
-  enabled_categories = {{ enabled_categories | tojson }}
+  enabled_categories = {{ enabled_categories | pyrepr }}
   redaction_token    = "{{ redaction_token }}"
   hash_token_prefix  = "{{ hash_token_prefix }}"
   record_id_col      = "{{ record_id_col }}"
@@ -40,7 +40,7 @@ import re
 
 import pandas as pd
 
-ENABLED_CATEGORIES = set({{ enabled_categories | tojson }})
+ENABLED_CATEGORIES = set({{ enabled_categories | pyrepr }})
 REDACTION_TOKEN = "{{ redaction_token }}"
 HASH_TOKEN_PREFIX = "{{ hash_token_prefix }}"
 RECORD_ID_COL = "{{ record_id_col }}"
