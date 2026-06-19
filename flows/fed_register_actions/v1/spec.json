@@ -1,0 +1,111 @@
+{
+  "request": "Pull all Federal Register documents (Rule, Proposed Rule, Notice, Presidential Document) from federalregister.gov for the last 18 months. Treat each document as a regulatory 'case'. Enrich with primary agency name flattened from the agencies list, document type, days_since_publication, plus trend analysis by agency_primary so case-management analysts can see rule-making volume + lag per agency. Publish to 'Prep Agent / 04 - Federal Register Actions' on Tableau Server.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "Federal Register Documents",
+      "description": "Federal Register API (v1) - all documents (Rule, Proposed Rule, Notice, Presidential Document) since 2025-01-01. Each document represents one regulatory action, treated as a 'case' in this flow. Public, keyless. Page-based pagination (per_page=200, page=1..50, capped at 10000 results per query window).",
+      "url": "https://www.federalregister.gov/api/v1/documents.json?conditions%5Bpublication_date%5D%5Bgte%5D=2025-01-01",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_param": "page",
+        "json_page_size_param": "per_page",
+        "json_page_size": 200,
+        "json_page_start": 1,
+        "json_page_kind": "index",
+        "json_max_pages": 50,
+        "json_records_path": "results",
+        "json_derived_columns": [
+          {
+            "name": "agency_primary",
+            "kind": "list_first_field",
+            "source_col": "agencies",
+            "field": "name"
+          },
+          {
+            "name": "agency_slug",
+            "kind": "list_first_field",
+            "source_col": "agencies",
+            "field": "slug"
+          },
+          {
+            "name": "days_since_publication",
+            "kind": "days_since",
+            "source_col": "publication_date"
+          }
+        ],
+        "json_schema": {
+          "document_number": "string",
+          "title": "string",
+          "type": "string",
+          "publication_date": "string",
+          "html_url": "string",
+          "pdf_url": "string",
+          "abstract": "string",
+          "agency_primary": "string",
+          "agency_slug": "string",
+          "days_since_publication": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Reg Action Trend",
+        "date_col": "publication_date",
+        "dimensions": [
+          "agency_primary",
+          "type"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level temporal features parsed from publication_date (year, month, quarter, day_of_week, iso_week). Pure pass-through of Federal Register documents.",
+        "stats_description": "Long-form rule-making statistics: one row per (dimension, value, year, month) over agency_primary and document type. Includes monthly_count, 30-day rolling counts, year-over-year deltas + pct change, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Use to identify agencies with surging or anomalous rule-making volume."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Federal Register Detail",
+      "project": "04 - Federal Register Actions",
+      "source": "Reg Action Trend (Features)",
+      "description": "Row-level Federal Register documents (one row per published document since 2025-01-01). Includes document_number, title, type (Rule, Proposed Rule, Notice, Presidential Document), publication_date, agency_primary (first agency in the agencies list), agency_slug, days_since_publication, html_url, pdf_url, abstract, plus calendar features (year, month, quarter, day_of_week, iso_week). Source: federalregister.gov/api. Refresh: weekly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "Federal Register Stats",
+      "project": "04 - Federal Register Actions",
+      "source": "Reg Action Trend (Stats)",
+      "description": "Long-form Federal Register statistics (one row per dimension x value x year x month over agency_primary and type). Includes 30-day rolling counts, year-over-year deltas + pct change, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Source: federalregister.gov/api."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "weekly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "04 - Federal Register Actions",
+    "parent_project": "Prep Agent",
+    "flow_name": "Federal Register Actions",
+    "overwrite": true,
+    "cadence": "weekly",
+    "hour_utc": 11,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "Federal Register Weekly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}
