@@ -158,19 +158,47 @@ def sign_in(config: ServerConfig) -> TSC.Server:
     return server
 
 
-def find_project(server: TSC.Server, name_or_id: str) -> TSC.ProjectItem:
+def find_project(
+    server: TSC.Server,
+    name_or_id: str,
+    parent_name_or_id: str = "",
+) -> TSC.ProjectItem:
     """Locate a project by exact name or by id. Raises if ambiguous or
     missing. Names aren't unique site-wide (different parents can share
-    names), so prefer ids when in doubt."""
+    names), so prefer ids when in doubt.
+
+    When `parent_name_or_id` is set, the lookup is scoped to children
+    of that parent — disambiguating same-named child projects under
+    different parents (the common case in nested layouts like
+    `Prep Agent / 01 - Federal Outlays`)."""
     if not name_or_id:
         raise RuntimeError("project name or id is required")
-    all_projects, _ = server.projects.get()
-    by_id = [p for p in all_projects if p.id == name_or_id]
+    all_projects = list(TSC.Pager(server.projects))
+    parent_id_filter = ""
+    if parent_name_or_id:
+        parents = [p for p in all_projects
+                   if p.id == parent_name_or_id or p.name == parent_name_or_id]
+        if not parents:
+            raise RuntimeError(
+                f"Parent project {parent_name_or_id!r} not found on this site."
+            )
+        if len(parents) > 1:
+            raise RuntimeError(
+                f"Multiple projects named {parent_name_or_id!r}; "
+                f"pass the parent project id instead."
+            )
+        parent_id_filter = parents[0].id
+    pool = [p for p in all_projects
+            if not parent_id_filter or p.parent_id == parent_id_filter]
+    by_id = [p for p in pool if p.id == name_or_id]
     if by_id:
         return by_id[0]
-    by_name = [p for p in all_projects if p.name == name_or_id]
+    by_name = [p for p in pool if p.name == name_or_id]
     if not by_name:
-        raise RuntimeError(f"Project {name_or_id!r} not found on this site.")
+        scope = f" under parent {parent_name_or_id!r}" if parent_name_or_id else ""
+        raise RuntimeError(
+            f"Project {name_or_id!r} not found on this site{scope}."
+        )
     if len(by_name) > 1:
         raise RuntimeError(
             f"Multiple projects named {name_or_id!r}; pass the project id instead."
@@ -190,16 +218,18 @@ def create_project(
     server: TSC.Server,
     name: str,
     description: str = "",
+    parent_id: str = "",
 ) -> TSC.ProjectItem:
-    """Create a top-level project. Used by the publish picker when the
-    user opts to land the flow in a freshly-named bucket. No parent —
-    nested projects need explicit parent_id wiring; the skill defaults
-    to top-level so analysts can re-organize later."""
+    """Create a project. Top-level by default; pass `parent_id` to
+    create as a child of an existing project (nested-project layout).
+    Used by the publish picker when the user opts to land the flow in
+    a freshly-named bucket."""
     if not name:
         raise RuntimeError("project name is required")
     item = TSC.ProjectItem(
         name=name,
         description=description or None,
+        parent_id=parent_id or None,
     )
     return server.projects.create(item)
 
@@ -216,6 +246,27 @@ def publish_flow(
     new_flow = TSC.FlowItem(project_id=project_id, name=flow_name)
     mode = TSC.Server.PublishMode.Overwrite if overwrite else TSC.Server.PublishMode.CreateNew
     return server.flows.publish(new_flow, flow_path, mode)
+
+
+def publish_hyper_as_datasource(
+    server: TSC.Server,
+    hyper_path: str,
+    project_id: str,
+    datasource_name: str,
+    description: str = "",
+    overwrite: bool = True,
+) -> TSC.DatasourceItem:
+    """Upload a local .hyper file as a published data source. The
+    Cloud-friendly path for flows whose backgrounder run can't execute
+    (e.g. script-bearing flows on Tableau Cloud): run the flow locally
+    via prep-cli, then publish the resulting Hyper extract directly via
+    TSC. Overwrite preserves the LUID on re-runs so existing dashboards
+    stay wired up."""
+    item = TSC.DatasourceItem(project_id=project_id, name=datasource_name)
+    if description:
+        item.description = description
+    mode = TSC.Server.PublishMode.Overwrite if overwrite else TSC.Server.PublishMode.CreateNew
+    return server.datasources.publish(item, hyper_path, mode)
 
 
 def _rest_get(server: TSC.Server, path: str) -> ET.Element:

@@ -1,0 +1,103 @@
+{
+  "request": "Pull top-level monthly federal outlay totals from the Treasury Fiscal Data Monthly Treasury Statement (Table 5) for calendar years 2018-2025, run trend analysis with year-over-year change, rolling baselines and z-score anomalies, and publish to a 'Prep Agent / 01 - Federal Outlays' project on Tableau Server for finance analysts to track spending trends across the federal classification hierarchy.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "Treasury MTS Table 5 Outlays",
+      "description": "U.S. Treasury Fiscal Data API - Monthly Treasury Statement Table 5 (Receipts and Outlays of the U.S. Government by Department, Agency, and Function). Filtered to top-level rollup rows (sequence_level_nbr=1) for clean department/function totals and to calendar years 2018-2025 for an 8-year monthly series. Public, keyless, JSON:API style (page[number]/page[size] pagination).",
+      "url": "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/mts/mts_table_5?filter=record_calendar_year:gte:2018,record_calendar_year:lte:2025,sequence_level_nbr:eq:1",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 120,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_param": "page[number]",
+        "json_page_size_param": "page[size]",
+        "json_page_size": 500,
+        "json_page_start": 1,
+        "json_page_kind": "index",
+        "json_max_pages": 50,
+        "json_schema": {
+          "record_date": "string",
+          "classification_id": "string",
+          "classification_desc": "string",
+          "current_month_gross_outly_amt": "decimal",
+          "current_month_app_rcpt_amt": "decimal",
+          "current_month_net_outly_amt": "decimal",
+          "current_fytd_gross_outly_amt": "decimal",
+          "current_fytd_app_rcpt_amt": "decimal",
+          "current_fytd_net_outly_amt": "decimal",
+          "prior_fytd_gross_outly_amt": "decimal",
+          "prior_fytd_app_rcpt_amt": "decimal",
+          "prior_fytd_net_outly_amt": "decimal",
+          "record_fiscal_year": "int",
+          "record_fiscal_quarter": "int",
+          "record_calendar_year": "int",
+          "record_calendar_quarter": "int",
+          "record_calendar_month": "int",
+          "record_calendar_day": "int",
+          "table_nbr": "string",
+          "src_line_nbr": "int",
+          "data_type_cd": "string",
+          "record_type_cd": "string",
+          "sequence_level_nbr": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Outlay Trend",
+        "date_col": "record_date",
+        "dimensions": [
+          "classification_desc"
+        ],
+        "rolling_window_days": 90,
+        "anomaly_z": 2.5,
+        "features_description": "Adds row-level temporal features parsed from record_date: year, month, quarter, fiscal_year, day_of_week, iso_week. Pure pass-through, no per-class statistics rolled into the row.",
+        "stats_description": "Long-form monthly outlay statistics by federal classification: monthly_count (rows per dim/value/year/month), 90-day rolling counts, year-over-year deltas with pct change, z-score anomalies vs lifetime baseline (|z|>=2.5 flagged is_anomaly=True), and lifetime rank/pct_of_total to identify the highest-spend classifications."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Federal Outlays Detail",
+      "project": "01 - Federal Outlays",
+      "source": "Outlay Trend (Features)",
+      "description": "Row-level federal monthly outlay records (one row per Treasury MTS Table 5 top-level rollup row) with calendar features added: year, month, quarter, fiscal_year, day_of_week, iso_week. Use for transactional rollups in Tableau. Source: Treasury Fiscal Data Monthly Treasury Statement Table 5 (calendar years 2018-2025). Refresh: monthly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "Federal Outlays Stats",
+      "project": "01 - Federal Outlays",
+      "source": "Outlay Trend (Stats)",
+      "description": "Long-form federal monthly outlay statistics (one row per classification_desc x year x month) with 90-day rolling counts, year-over-year deltas + percent change, lifetime rank/pct_of_total, baseline mean/std, and z-score anomalies (|z| >= 2.5 flagged is_anomaly=True). Joinable from Tableau on (classification_desc, year, month). Source: Treasury Fiscal Data MTS Table 5. Refresh: monthly."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "01 - Federal Outlays",
+    "parent_project": "Prep Agent",
+    "flow_name": "Federal Outlays Trend",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 9,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "Federal Outlays Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}
