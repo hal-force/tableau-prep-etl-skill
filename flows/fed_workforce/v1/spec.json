@@ -1,0 +1,106 @@
+{
+  "request": "Pull monthly federal employment counts from the U.S. Bureau of Labor Statistics Public Data API (CES Federal employment series across the major federal branches: total federal, executive postal, total non-postal civilian, DOD civilian, military), 2018-2025. Enrich with year-over-year change, 12-month rolling averages, z-score anomalies, and lifetime ranks. Publish to a 'Prep Agent / 02 - Federal Workforce' project on Tableau Server for HR analysts to track federal headcount trends.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "BLS CES Federal Employment",
+      "description": "U.S. Bureau of Labor Statistics Public Data API v2 - Current Employment Statistics (CES) federal subsector. Five series codes covering Federal civilian (CES9091000001), Federal Postal (CES9091912001), Federal Government (CES9091000001), Federal Excluding Postal (CES9091000010), and total non-postal Federal (CES9091000010). Monthly cadence, jan-2018 onward. Public, keyless (rate-limited to 25 queries/day per IP without a registration key, plenty for monthly demos).",
+      "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_http_method": "POST",
+        "json_body": {
+          "seriesid": [
+            "CES9091000001",
+            "CES9091100001",
+            "CES9091200001",
+            "CES9091912001",
+            "CES9092000001",
+            "CES9093000001"
+          ],
+          "startyear": "2018",
+          "endyear": "2025"
+        },
+        "json_records_path": "Results.series",
+        "json_flatten_inner_key": "data",
+        "json_flatten_parent_keys": [
+          "seriesID"
+        ],
+        "json_derived_columns": [
+          {
+            "name": "obs_date",
+            "kind": "year_month_iso",
+            "year_col": "year",
+            "period_col": "period"
+          }
+        ],
+        "json_paginate": false,
+        "json_schema": {
+          "seriesID": "string",
+          "year": "int",
+          "period": "string",
+          "periodName": "string",
+          "value": "decimal",
+          "obs_date": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Workforce Trend",
+        "date_col": "obs_date",
+        "dimensions": [
+          "seriesID"
+        ],
+        "rolling_window_days": 365,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level temporal features parsed from obs_date (year, month, quarter, fiscal_year, day_of_week, iso_week). Pure pass-through of the BLS observation rows.",
+        "stats_description": "Long-form monthly workforce statistics by BLS series ID: monthly_count, 365-day rolling counts, year-over-year deltas with pct change, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Use to identify employment-trend inflections within a series."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Federal Workforce Detail",
+      "project": "02 - Federal Workforce",
+      "source": "Workforce Trend (Features)",
+      "description": "Row-level monthly federal employment observations (one row per BLS series x month). Includes seriesID, year, period (M01-M12), periodName, value (employment in thousands), obs_date, plus calendar features: year, month, quarter, fiscal_year, day_of_week_name, iso_week. Source: BLS Public Data API CES federal subsector. Refresh: monthly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "Federal Workforce Stats",
+      "project": "02 - Federal Workforce",
+      "source": "Workforce Trend (Stats)",
+      "description": "Long-form federal-employment statistics (one row per BLS series x year x month) with 365-day rolling counts, year-over-year deltas + pct change, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), and lifetime rank/pct_of_total. Joinable from Tableau on (dimension='seriesID', value, year, month). Source: BLS Public Data API CES federal subsector."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "02 - Federal Workforce",
+    "parent_project": "Prep Agent",
+    "flow_name": "Federal Workforce Trend",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 9,
+    "minute_utc": 30,
+    "weekday": "monday",
+    "day_of_month": 5,
+    "schedule_name_hint": "Federal Workforce Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

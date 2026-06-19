@@ -91,6 +91,16 @@
       },
       "hit_count": 27,
       "last_used_at": 1781836256.444384
+    },
+    "ea0ca47b62df8096": {
+      "signature": {
+        "type": "rest_api",
+        "host": "api.bls.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 12,
+      "last_used_at": 1781836800.234577
     }
   }
 }

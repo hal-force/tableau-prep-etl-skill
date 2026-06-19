@@ -1,0 +1,40 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 60,
+  "max_retries": 3,
+  "json_http_method": "POST",
+  "json_body": {
+    "seriesid": [
+      "CES9091000001",
+      "CES9091100001",
+      "CES9091200001",
+      "CES9091912001",
+      "CES9092000001",
+      "CES9093000001"
+    ],
+    "startyear": "2018",
+    "endyear": "2025"
+  },
+  "json_records_path": "Results.series",
+  "json_flatten_inner_key": "data",
+  "json_flatten_parent_keys": [
+    "seriesID"
+  ],
+  "json_derived_columns": [
+    {
+      "name": "obs_date",
+      "kind": "year_month_iso",
+      "year_col": "year",
+      "period_col": "period"
+    }
+  ],
+  "json_paginate": false,
+  "json_schema": {
+    "seriesID": "string",
+    "year": "int",
+    "period": "string",
+    "periodName": "string",
+    "value": "decimal",
+    "obs_date": "string"
+  }
+}
