@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "api.usaspending.gov",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1781842358.983846
+}
