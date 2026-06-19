@@ -127,6 +127,63 @@ GUI re-saves it cleanly on connection-test success.
 For the CLI side, hand-edit the JSON above to point at the unauth
 :9099 instance.
 
+## Template render conventions
+
+These are codified template-author rules. Violating them silently
+breaks runs (sometimes only on certain spec shapes), so the rules
+matter even when most templates currently obey them.
+
+### Use the `pyrepr` Jinja filter, not `tojson`
+
+`generate_flow.py` registers a custom filter:
+
+```python
+env.filters["pyrepr"] = repr
+```
+
+Use `| pyrepr` for every dict/list/scalar interpolation that lands
+inside a Python literal:
+
+```python
+INPUT_SCHEMA: dict = {{ input_schema | pyrepr if input_schema is defined else '{}' }}
+CAMEO_ROOTS    = {{ cameo_root_codes | pyrepr }}
+```
+
+`| tojson` emits JSON's `true`/`false`/`null`, which are syntax errors
+in Python. The breakage is silent until a spec carries a bool or a
+None default.
+
+### No `from __future__ import annotations` and no PEP 585 subscripts at module level
+
+Tableau Prep injects a preamble (the `prep_int()`/`prep_string()`
+helpers) into every script node before sending to TabPy. The preamble
+breaks both:
+
+- `from __future__ import annotations` is no longer the first
+  statement → `SyntaxError`.
+- `INPUT_SCHEMA: dict[str, str]` at module scope evaluates `dict[...]`
+  immediately, which fails without the future import.
+
+Use plain `dict` / `list` (no subscripts) at module level. Function
+bodies and lazy annotations are fine.
+
+### Sibling-output routing via `output.source.transformation`
+
+When two outputs need to consume different transformations off a
+shared upstream tail (the Embassy Threat Monitor pattern), set
+`output.source.transformation` on each output:
+
+```json
+"outputs": [
+  {"name": "Threat Events", "source": {"transformation": "embassy_threat_join"}},
+  {"name": "Risk Summary",  "source": {"transformation": "embassy_risk_summary"}}
+]
+```
+
+`generate_flow.py` connects each output edge to the named
+transformation's node id rather than the linear flow tail. Linear
+flows omit `output.source` and inherit the tail.
+
 ## Past failure modes (codified to prevent repeat)
 
 - **SSL via system trust store fails on macOS Python.org distros**

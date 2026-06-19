@@ -158,6 +158,38 @@ run; see `flows/otf_grants/v1/`, `flows/us_wildfires_eoc/v1/`, and
 `flows/us_grid_network/v1/` for worked examples that show the full
 sequence.
 
+## Catalog indexing lag on Tableau Cloud
+
+Cloud has two separate views of a published DS:
+
+- **REST + TSC** — `datasources.get_by_id(luid)` reflects publish
+  state synchronously. Authoritative.
+- **GraphQL Metadata API + the lineage / Data Details browser pages**
+  — backed by an async Catalog index that lags **10-30+ minutes**
+  after a publish. The lineage page typically returns
+  *"Information for this page not found. It may still be loading,
+  or you don't have permissions to view it."* during the window.
+
+Don't gate post-publish verification on the GraphQL readback or the
+lineage page. Use the REST DS-info call to confirm the artifact is
+on the site; use a re-download of the .tdsx + XML parse to verify
+column descriptions made it through the .tds round-trip. Both of
+those are synchronous.
+
+When a user reports a 404 on the lineage page right after publish:
+verify via REST first, then tell them to wait 10-30 min. It is not
+a publish failure or a permissions problem.
+
+## pds_uploads LUID injection
+
+For Cloud-friendly local-prep flows, `_maybe_publish_pds_uploads`
+returns the LUID of every freshly-uploaded DS. **Inject those LUIDs
+into `publish_result['datasources'][i]['luid']` before the metadata
+writer runs.** Otherwise the writer falls back to a name-based
+lookup that races the same Catalog search index — leading to writes
+against the wrong DS, or silent skips when the index hasn't caught
+up. See `feedback_pds_luid_injection.md`.
+
 ## Phase 11: post-publish metadata writer
 
 After a successful `--publish`, `_maybe_write_metadata` runs against
