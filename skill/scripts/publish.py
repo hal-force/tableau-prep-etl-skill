@@ -54,7 +54,9 @@ def publish_run(spec: Spec, tfl_path: Path,
 
     server = publishing.sign_in(cfg)
     try:
-        project = publishing.find_project(server, sp.project)
+        project = publishing.find_project(
+            server, sp.project, parent_name_or_id=sp.parent_project,
+        )
         flow_name = sp.flow_name or Path(tfl_path).stem
         flow = publishing.publish_flow(
             server, str(tfl_path), project.id,
@@ -176,27 +178,47 @@ def list_site_projects() -> list[dict]:
         except Exception:
             pass
     out = [
-        {"id": p.id, "name": p.name, "description": p.description or ""}
+        {
+            "id": p.id,
+            "name": p.name,
+            "description": p.description or "",
+            "parent_id": p.parent_id or "",
+        }
         for p in projects
     ]
     out.sort(key=lambda p: (p["name"] or "").lower())
     return out
 
 
-def create_site_project(name: str, description: str = "") -> dict:
-    """Sign in and create a top-level project. Returns the new project's
-    id+name. Used by the publish picker when the user opts to land the
-    flow in a fresh bucket rather than picking an existing one."""
+def create_site_project(
+    name: str, description: str = "", parent_name_or_id: str = "",
+) -> dict:
+    """Sign in and create a project. Top-level by default; pass
+    `parent_name_or_id` to create as a child of an existing project
+    (nested-project layout). Returns the new project's id+name+
+    parent_id. Used by the publish picker when the user opts to land
+    the flow in a fresh bucket rather than picking an existing one."""
     cfg = publishing.config_from_env()
     server = publishing.sign_in(cfg)
     try:
-        proj = publishing.create_project(server, name, description=description)
+        parent_id = ""
+        if parent_name_or_id:
+            parent = publishing.find_project(server, parent_name_or_id)
+            parent_id = parent.id
+        proj = publishing.create_project(
+            server, name, description=description, parent_id=parent_id,
+        )
     finally:
         try:
             server.auth.sign_out()
         except Exception:
             pass
-    return {"id": proj.id, "name": proj.name, "description": proj.description or ""}
+    return {
+        "id": proj.id,
+        "name": proj.name,
+        "description": proj.description or "",
+        "parent_id": proj.parent_id or "",
+    }
 
 
 if __name__ == "__main__":

@@ -102,7 +102,11 @@ class ServerPublish:
     runtime. This dataclass holds only routing + cadence info that's safe
     to keep alongside the spec.
     """
-    project: str = "default"           # project name OR id
+    project: str = "default"           # project (child) name OR id
+    parent_project: str = ""           # optional parent project name OR id;
+                                       #   when set, the publish path resolves
+                                       #   `project` as the child under this
+                                       #   parent (creating it if missing).
     flow_name: str = ""                # display name; defaults to spec name
     overwrite: bool = True             # replace existing flow on re-publish
     cadence: str = "daily"             # hourly|daily|weekly|monthly

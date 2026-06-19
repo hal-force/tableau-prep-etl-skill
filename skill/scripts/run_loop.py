@@ -723,6 +723,18 @@ def run(request: str, run_dir: Optional[Path] = None,
     if publish:
         result["publish"] = _maybe_publish(spec, tfl_path, run_dir,
                                             auto_create_project=auto_create_project)
+        # Phase 7a-bis: Cloud-friendly Hyper upload. Cloud backgrounder
+        # cannot execute script nodes; the .tfl was published for code-
+        # review/schedule visibility but its backgrounder run will fail.
+        # Upload the local Hyper extracts produced by prep-cli's verify
+        # run as published data sources so analysts have something to
+        # connect to immediately. Server (on-prem) sites can run the
+        # flow on their own backgrounder; this step is a Cloud-only
+        # convenience.
+        if result["publish"].get("status") == "ok" and result["publish"].get("is_cloud"):
+            result["pds_uploads"] = _upload_hypers_as_published_datasources(
+                spec, run_dir, result["publish"],
+            )
         # Phase 7b: metadata writer. Only runs after a successful publish.
         if result["publish"].get("status") == "ok":
             result["metadata"] = _maybe_write_metadata(
@@ -730,6 +742,79 @@ def run(request: str, run_dir: Optional[Path] = None,
             )
 
     return result
+
+
+def _upload_hypers_as_published_datasources(
+    spec, run_dir: Path, publish_result: dict,
+) -> dict:
+    """Upload local Hyper files (produced by prep-cli's verify run)
+    as published data sources. Used for Cloud sites where the
+    backgrounder cannot execute the .tfl's script nodes — the analyst-
+    facing data has to land on the server somehow.
+
+    Maps each spec.outputs[] of kind == 'published_data_source' to its
+    on-disk Hyper at runtime/<flow>/<run>/outputs/<name>.hyper, then
+    publishes via TSC into the same project the .tfl landed in. LUIDs
+    are preserved on overwrite so downstream dashboards keep working.
+    """
+    from tflb_lib import publishing
+    out: list[dict] = []
+    pd_outputs = [o for o in spec.outputs if o.kind == "published_data_source"]
+    if not pd_outputs:
+        return {"status": "skipped", "reason": "no published_data_source outputs"}
+    project_id = publish_result.get("project_id") or ""
+    project_name = publish_result.get("project_name") or ""
+    if not project_id:
+        return {"status": "skipped", "reason": "no project_id in publish_result"}
+    outputs_dir = run_dir / "outputs"
+    cfg = publishing.config_from_env()
+    server = publishing.sign_in(cfg)
+    try:
+        for o in pd_outputs:
+            hyper = outputs_dir / f"{o.name}.hyper"
+            if not hyper.exists():
+                out.append({
+                    "status": "skipped",
+                    "output_name": o.name,
+                    "reason": f"no Hyper at {hyper}",
+                })
+                continue
+            try:
+                ds = publishing.publish_hyper_as_datasource(
+                    server,
+                    str(hyper),
+                    project_id=project_id,
+                    datasource_name=o.name,
+                    description=o.description or "",
+                    overwrite=True,
+                )
+                out.append({
+                    "status": "ok",
+                    "output_name": o.name,
+                    "luid": ds.id,
+                    "name": ds.name,
+                    "project_id": project_id,
+                    "project_name": project_name,
+                    "hyper_size_bytes": hyper.stat().st_size,
+                })
+            except Exception as e:
+                out.append({
+                    "status": "error",
+                    "output_name": o.name,
+                    "type": type(e).__name__,
+                    "message": str(e),
+                })
+    finally:
+        try:
+            server.auth.sign_out()
+        except Exception:
+            pass
+    return {
+        "status": "ok",
+        "project_id": project_id,
+        "project_name": project_name,
+        "results": out,
+    }
 
 
 def _patch_publish_extract_routing(tfl_path: Path, project_luid: str,
@@ -819,32 +904,61 @@ def _maybe_publish(spec: Spec, tfl_path: Path, run_dir: Path,
         from dataclasses import asdict
 
         want = spec.server_publish.project or ""
+        parent_want = (spec.server_publish.parent_project or "").strip()
         projects = list_site_projects()
-        names = {p["name"]: p for p in projects}
+        # When a parent is specified, scope the existence/disambiguation
+        # check to children of that parent. Same name can appear under
+        # multiple parents on a busy site.
+        parent_id_filter = ""
+        if parent_want:
+            parent_match = next(
+                (p for p in projects
+                 if p["id"] == parent_want or p["name"] == parent_want),
+                None,
+            )
+            if not parent_match:
+                return {
+                    "status": "error",
+                    "type": "ParentProjectNotFound",
+                    "message": (
+                        f"parent_project {parent_want!r} not found on this site. "
+                        "Create it first or correct the spec."
+                    ),
+                }
+            parent_id_filter = parent_match["id"]
+        scoped = [p for p in projects
+                  if not parent_id_filter or p.get("parent_id") == parent_id_filter]
+        names = {p["name"]: p for p in scoped}
         if want and want not in names:
             wl = want.lower()
-            near = [p for p in projects if wl and wl in (p["name"] or "").lower()]
+            near = [p for p in scoped if wl and wl in (p["name"] or "").lower()]
             if not auto_create_project:
                 return {
                     "status": "needs_user_decision",
                     "reason": (
-                        f"Project {want!r} doesn't exist on this site. "
-                        "Pick an existing project, type a different name, "
-                        "or rerun with --auto-create-project to create it."
+                        f"Project {want!r} doesn't exist on this site"
+                        + (f" under parent {parent_want!r}" if parent_want else "")
+                        + ". Pick an existing project, type a different "
+                        "name, or rerun with --auto-create-project to "
+                        "create it."
                     ),
                     "want": want,
-                    "candidates": projects,
+                    "parent_want": parent_want,
+                    "candidates": scoped,
                     "near_matches": near,
                     "tfl": str(tfl_path),
                 }
             new = create_site_project(
                 want,
                 description=f"Auto-created by tableau-prep-etl skill for {spec.server_publish.flow_name or Path(tfl_path).stem!r}.",
+                parent_name_or_id=parent_want,
             )
             spec.server_publish.project = new["name"]
             # Re-fetch so the LUID-patch below sees the freshly-created project.
             projects = list_site_projects()
-            names = {p["name"]: p for p in projects}
+            scoped = [p for p in projects
+                      if not parent_id_filter or p.get("parent_id") == parent_id_filter]
+            names = {p["name"]: p for p in scoped}
 
         # Patch any .v1.PublishExtract nodes in the .tfl with the
         # resolved project LUID + serverUrl. Without this, backgrounder

@@ -81,6 +81,16 @@
       },
       "hit_count": 12,
       "last_used_at": 1781826160.684501
+    },
+    "ebe334f48d0f27d1": {
+      "signature": {
+        "type": "rest_api",
+        "host": "api.fiscaldata.treasury.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 27,
+      "last_used_at": 1781836256.444384
     }
   }
 }
