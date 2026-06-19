@@ -1,0 +1,86 @@
+{
+  "request": "Pull a live snapshot of all aircraft state vectors over the contiguous United States (lat 24-49.5, lon -125 to -66) from the OpenSky Network public API. Each row = one aircraft instance with position, velocity, heading, altitude, ground/airborne state. Publish to 'Prep Agent / 08 - Live US Air Traffic' on Tableau Server for transportation analysts to monitor airspace utilization in real time.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "OpenSky US Live Air Traffic",
+      "description": "OpenSky Network /api/states/all endpoint, bbox-filtered to the contiguous US (lamin=24, lamax=49.5, lomin=-125, lomax=-66). Each row = one aircraft state vector at the snapshot time. Public, keyless. Snapshot-only (no time series); refresh every 5 minutes via Prep schedule.",
+      "url": "https://opensky-network.org/api/states/all?lamin=24&lamax=49.5&lomin=-125&lomax=-66",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_paginate": false,
+        "json_records_path": "states",
+        "json_array_columns": [
+          "icao24",
+          "callsign",
+          "origin_country",
+          "time_position",
+          "last_contact",
+          "longitude",
+          "latitude",
+          "baro_altitude",
+          "on_ground",
+          "velocity",
+          "true_track",
+          "vertical_rate",
+          "sensors",
+          "geo_altitude",
+          "squawk",
+          "spi",
+          "position_source"
+        ],
+        "json_schema": {
+          "icao24": "string",
+          "callsign": "string",
+          "origin_country": "string",
+          "time_position": "int",
+          "last_contact": "int",
+          "longitude": "decimal",
+          "latitude": "decimal",
+          "baro_altitude": "decimal",
+          "on_ground": "bool",
+          "velocity": "decimal",
+          "true_track": "decimal",
+          "vertical_rate": "decimal",
+          "geo_altitude": "decimal",
+          "squawk": "string",
+          "spi": "bool",
+          "position_source": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "OpenSky US Live States",
+      "project": "08 - Live US Air Traffic",
+      "description": "Live snapshot of aircraft state vectors over the contiguous U.S. from OpenSky Network. One row per aircraft observed at snapshot time. Includes ICAO 24-bit address (icao24), callsign, registered origin_country, last position/contact timestamps (epoch seconds), longitude, latitude, baro_altitude (meters), on_ground (boolean), velocity (m/s), true_track (degrees, 0=N), vertical_rate (m/s), geo_altitude, squawk code, spi (special purpose indicator), position_source (0=ADS-B, 1=ASTERIX, 2=MLAT, 3=FLARM). Source: OpenSky Network (opensky-network.org). Refresh: 5 minutes."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "hourly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "08 - Live US Air Traffic",
+    "parent_project": "Prep Agent",
+    "flow_name": "OpenSky US Live States",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 0,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "OpenSky 5min Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}
