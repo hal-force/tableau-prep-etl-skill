@@ -96,6 +96,12 @@ gateway (configured via `LLM_GATEWAY_URL` / `LLM_GATEWAY_KEY` /
 - `server_publish.project`: target project name. The publish picker
   will prompt if it doesn't exist; pass `--auto-create-project` to
   pre-authorize creating it.
+- `server_publish.parent_project`: optional parent project name (or
+  id). When set, `project` is resolved as the child under this
+  parent — the project lookup is scoped accordingly, and
+  `--auto-create-project` creates the child nested under the
+  parent. Used for the Prep Agent demo collection's
+  `Prep Agent / 01 - Federal Outlays`-style nested layout.
 
 If confidence is low on any field, the skill asks the user 1–2
 clarifying questions before continuing.
@@ -114,11 +120,21 @@ For each `spec.sources[*]`, pick a strategy:
 |---|---|
 | `local_folder` | folder-listing input + per-file Script node |
 | `native_connector` | `.v1.SqlConnection` / `.v1.LoadCsv` / `.v1.LoadExcel` |
-| `rest_api` | `templates/api_caller.py.j2` Python step |
+| `rest_api` | `templates/api_caller.py.j2` Python step. Format-aware: `json`, `jsonl/ndjson`, `csv`, `csv_zip`, `csv_index_then_zip`, `arcgis_features`. Honors paginated walks (index, offset, body-side), POST + body, nested envelopes, derived columns, and per-column schema coercion. See `reference/api_caller_knobs.md`. |
 | `graphql_api` | `templates/api_caller.py.j2` (GraphQL variant) |
 | `web_crawl` | `templates/crawler.py.j2` Crawl4AI step + Prep parameter for query |
 | `pki_endpoint` | `templates/pki_connector.py.j2` cert-auth Python step |
 | `internal_published_ds` | Native Tableau Server input bound to a published DS LUID (no Python step). Resolved at backgrounder run time via the user's site session. |
+
+**Transformation kinds dispatched in `source_planner.py`:**
+
+| Kind | Template | Output shape |
+|---|---|---|
+| `join` | (planner-emitted `.v2018_2_3.SuperJoin`) | Native Maestro join. Multi-source flows; references `left_branch`/`right_branch` indices. |
+| `trend_analysis` | `trend_features.py.j2` + `trend_stats.py.j2` (siblings) | Two outputs: row-level Features (calendar features added) + long-form Stats (per dimension × value × year × month with monthly_count, rolling, YoY, z-score anomalies, lifetime rank). |
+| `graph_analysis` | `graph_analyzer.py.j2` | Per-node centralities (degree, betweenness, eigenvector, pagerank, closeness) + Fruchterman-Reingold spring layout x/y. One row per edge endpoint. |
+| `eoc_fire_metrics` | `eoc_fire_metrics.py.j2` | EOC analyst metrics for WFIGS/NIFC fire incidents (size_class, growth_band, containment_band, days_since_discovery, region_key, incident_summary). |
+| `pii_redaction` | `pii_redactor.py.j2` + `pii_audit.py.j2` (siblings) | Two outputs: row-preserving Redacted (PII masked in place) + long-form Audit (one row per detection, sha256 of original — never the original). |
 
 ### Phase 4: Source Acquisition + Schema Inference
 
