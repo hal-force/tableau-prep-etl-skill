@@ -356,7 +356,7 @@ def _declared_schema_for_source(src: Source) -> dict[str, str]:
             else:
                 schema.setdefault("longitude", "decimal")
                 schema.setdefault("latitude", "decimal")
-    elif src.format == "csv":
+    elif src.format in ("csv", "csv_zip"):
         for col, decl in (extra.get("csv_schema") or {}).items():
             schema[col] = (decl or "string").lower()
     elif src.format in ("json", "jsonl", "ndjson"):
@@ -585,7 +585,7 @@ def _input_schema_from_sources(spec: Spec) -> dict:
                     schema[c] = "decimal"
                 else:
                     schema[c] = "string"
-        elif src.format == "csv":
+        elif src.format in ("csv", "csv_zip"):
             # Plain CSV sources declare their post-rename schema in extra.csv_schema.
             # Validator + downstream nodes need this so column-passthrough
             # works after joins. Last-write-wins on column-name collisions

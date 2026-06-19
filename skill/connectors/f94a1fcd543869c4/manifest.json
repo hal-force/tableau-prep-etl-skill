@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "api.data.gov",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1781839935.067522
+}
