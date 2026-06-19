@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "www.federalregister.gov",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1781837389.3475661
+}

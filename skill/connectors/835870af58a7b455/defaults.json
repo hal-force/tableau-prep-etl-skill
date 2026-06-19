@@ -1,0 +1,45 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 60,
+  "max_retries": 3,
+  "json_paginate": true,
+  "json_page_param": "page",
+  "json_page_size_param": "per_page",
+  "json_page_size": 200,
+  "json_page_start": 1,
+  "json_page_kind": "index",
+  "json_max_pages": 50,
+  "json_records_path": "results",
+  "json_derived_columns": [
+    {
+      "name": "agency_primary",
+      "kind": "list_first_field",
+      "source_col": "agencies",
+      "field": "name"
+    },
+    {
+      "name": "agency_slug",
+      "kind": "list_first_field",
+      "source_col": "agencies",
+      "field": "slug"
+    },
+    {
+      "name": "days_since_publication",
+      "kind": "days_since",
+      "source_col": "publication_date"
+    }
+  ],
+  "json_schema": {
+    "document_number": "string",
+    "title": "string",
+    "type": "string",
+    "publication_date": "string",
+    "html_url": "string",
+    "pdf_url": "string",
+    "abstract": "string",
+    "agency_primary": "string",
+    "agency_slug": "string",
+    "days_since_publication": "int"
+  },
+  "_skip_auto_casts": true
+}

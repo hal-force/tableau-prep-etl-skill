@@ -111,6 +111,16 @@
       },
       "hit_count": 12,
       "last_used_at": 1781837127.0831392
+    },
+    "835870af58a7b455": {
+      "signature": {
+        "type": "rest_api",
+        "host": "www.federalregister.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 9,
+      "last_used_at": 1781837735.2411761
     }
   }
 }
