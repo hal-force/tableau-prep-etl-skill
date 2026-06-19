@@ -1,0 +1,101 @@
+{
+  "request": "Pull the CISA Known Exploited Vulnerabilities (KEV) catalog from cisa.gov, enrich with exploit window (days from added-to-due-date), normalized CWE list, ransomware-campaign flag, and run trend analysis by vendorProject. Publish to a 'Prep Agent / 03 - CISA KEV' project on Tableau Server for cyber analysts to track newly catalogued exploits and SLA pressure across vendors.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "CISA KEV Catalog",
+      "description": "U.S. Cybersecurity & Infrastructure Security Agency Known Exploited Vulnerabilities (KEV) catalog. Authoritative public list of CVEs with confirmed exploitation in the wild plus federal-civilian-agency remediation deadlines (BOD 22-01 / 26-04). Public, keyless. Refresh: at least daily on CISA's side; we pull weekly.",
+      "url": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_records_path": "vulnerabilities",
+        "json_paginate": false,
+        "json_derived_columns": [
+          {
+            "name": "cwe_list",
+            "kind": "list_join",
+            "source_col": "cwes",
+            "sep": ", "
+          },
+          {
+            "name": "exploit_sla_days",
+            "kind": "days_between",
+            "start_col": "dateAdded",
+            "end_col": "dueDate"
+          }
+        ],
+        "json_schema": {
+          "cveID": "string",
+          "vendorProject": "string",
+          "product": "string",
+          "vulnerabilityName": "string",
+          "dateAdded": "string",
+          "shortDescription": "string",
+          "requiredAction": "string",
+          "dueDate": "string",
+          "knownRansomwareCampaignUse": "string",
+          "notes": "string",
+          "cwe_list": "string",
+          "exploit_sla_days": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "KEV Trend",
+        "date_col": "dateAdded",
+        "dimensions": [
+          "vendorProject"
+        ],
+        "rolling_window_days": 90,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level temporal features parsed from dateAdded (year, month, quarter, day_of_week, iso_week). Pure pass-through of CISA KEV records.",
+        "stats_description": "Long-form CISA KEV statistics by vendorProject: monthly new-CVE counts, 90-day rolling counts, year-over-year deltas with pct change, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Use to identify vendors trending in exploit volume."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "CISA KEV Detail",
+      "project": "03 - CISA KEV",
+      "source": "KEV Trend (Features)",
+      "description": "Row-level CISA Known Exploited Vulnerabilities catalog (one row per CVE). Includes cveID, vendorProject, product, vulnerabilityName, dateAdded, shortDescription, requiredAction, dueDate, knownRansomwareCampaignUse, notes, cwe_list (semicolon-delimited), exploit_sla_days (days between dateAdded and dueDate), plus calendar features. Source: cisa.gov/known-exploited-vulnerabilities-catalog. Refresh: weekly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "CISA KEV Stats",
+      "project": "03 - CISA KEV",
+      "source": "KEV Trend (Stats)",
+      "description": "Long-form CISA KEV statistics (one row per vendorProject x year x month) with 90-day rolling new-CVE counts, year-over-year deltas + pct change, z-score anomalies vs lifetime baseline, lifetime rank/pct_of_total. Joinable from Tableau on (dimension='vendorProject', value, year, month). Source: CISA KEV catalog."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "weekly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "03 - CISA KEV",
+    "parent_project": "Prep Agent",
+    "flow_name": "CISA KEV Trend",
+    "overwrite": true,
+    "cadence": "weekly",
+    "hour_utc": 10,
+    "minute_utc": 0,
+    "weekday": "tuesday",
+    "day_of_month": 1,
+    "schedule_name_hint": "CISA KEV Weekly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}
