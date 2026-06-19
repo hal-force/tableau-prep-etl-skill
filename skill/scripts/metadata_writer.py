@@ -359,6 +359,28 @@ def _apply_column_descriptions_via_tds(
         types = column_types or {}
         added = 0
         updated = 0
+
+        # Prune orphan <column> elements left over from prior writes that
+        # described columns no longer in the published extract — e.g.
+        # when a transform reshapes the schema and the writer was
+        # previously fed the upstream input columns. Keep Tableau-
+        # internal columns (Number of Records, __tableau_internal_*).
+        authoritative = {f"[{c}]" for c in descriptions.keys() if c}
+        removed_orphans = 0
+        for name, elem in list(existing.items()):
+            if not name:
+                continue
+            if name in authoritative:
+                continue
+            # Keep Tableau-internal / system columns.
+            if "__tableau_internal_" in name or name == "[Number of Records]":
+                continue
+            # Anything else with a <desc> child that isn't a real column
+            # is a stale orphan from a prior write — drop it.
+            root.remove(elem)
+            removed_orphans += 1
+            existing.pop(name, None)
+
         for col, desc in descriptions.items():
             if not col or not desc:
                 continue
@@ -409,6 +431,7 @@ def _apply_column_descriptions_via_tds(
             "status": "ok",
             "added_column_elements": added,
             "updated_column_elements": updated,
+            "removed_orphan_elements": removed_orphans,
             "luid": pub.id,
         }
     except Exception as e:
