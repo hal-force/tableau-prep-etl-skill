@@ -1,0 +1,37 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 60,
+  "max_retries": 3,
+  "json_paginate": true,
+  "json_page_param": "$offset",
+  "json_page_size_param": "$limit",
+  "json_page_size": 5000,
+  "json_page_start": 1,
+  "json_page_kind": "offset",
+  "json_max_pages": 20,
+  "json_derived_columns": [
+    {
+      "name": "days_since_report",
+      "kind": "days_since",
+      "source_col": "rpt_dt"
+    }
+  ],
+  "json_schema": {
+    "cmplnt_num": "string",
+    "cmplnt_fr_dt": "string",
+    "rpt_dt": "string",
+    "boro_nm": "string",
+    "ofns_desc": "string",
+    "law_cat_cd": "string",
+    "prem_typ_desc": "string",
+    "latitude": "decimal",
+    "longitude": "decimal",
+    "vic_age_group": "string",
+    "vic_race": "string",
+    "vic_sex": "string",
+    "patrol_boro": "string",
+    "addr_pct_cd": "int",
+    "days_since_report": "int"
+  },
+  "_skip_auto_casts": true
+}

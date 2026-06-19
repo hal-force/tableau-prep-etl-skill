@@ -1,0 +1,117 @@
+{
+  "request": "Pull FEMA Disaster Declaration Summaries from OpenFEMA OData v2 since 2022-01-01, treat each declaration as a public-safety incident case, enrich with days_since_declaration, days_open (declarationDate to disasterCloseoutDate), incidentType-by-state hot-spot trend analysis, and publish to 'Prep Agent / 05 - FEMA Disaster Cases' on Tableau Server for emergency-management analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "FEMA Disaster Declarations",
+      "description": "OpenFEMA Disaster Declarations Summaries v2. Each row = one disaster declaration (county-level granularity for some entities). Filtered to declarationDate > 2022-01-01 (~7K rows). Public, keyless. OData v2 pagination: $top (page size) + $skip (offset).",
+      "url": "https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries?$filter=declarationDate%20gt%20%272022-01-01T00:00:00.000Z%27",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_param": "$skip",
+        "json_page_size_param": "$top",
+        "json_page_size": 1000,
+        "json_page_start": 1,
+        "json_page_kind": "offset",
+        "json_max_pages": 20,
+        "json_records_path": "DisasterDeclarationsSummaries",
+        "json_derived_columns": [
+          {
+            "name": "days_since_declaration",
+            "kind": "days_since",
+            "source_col": "declarationDate"
+          },
+          {
+            "name": "days_open",
+            "kind": "days_between",
+            "start_col": "declarationDate",
+            "end_col": "disasterCloseoutDate"
+          }
+        ],
+        "json_schema": {
+          "femaDeclarationString": "string",
+          "disasterNumber": "int",
+          "state": "string",
+          "declarationType": "string",
+          "declarationDate": "string",
+          "fyDeclared": "int",
+          "incidentType": "string",
+          "declarationTitle": "string",
+          "incidentBeginDate": "string",
+          "incidentEndDate": "string",
+          "disasterCloseoutDate": "string",
+          "tribalRequest": "bool",
+          "fipsStateCode": "string",
+          "fipsCountyCode": "string",
+          "designatedArea": "string",
+          "ihProgramDeclared": "bool",
+          "iaProgramDeclared": "bool",
+          "paProgramDeclared": "bool",
+          "hmProgramDeclared": "bool",
+          "days_since_declaration": "int",
+          "days_open": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Disaster Trend",
+        "date_col": "declarationDate",
+        "dimensions": [
+          "state",
+          "incidentType",
+          "declarationType"
+        ],
+        "rolling_window_days": 90,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level temporal features parsed from declarationDate (year, month, quarter, day_of_week, iso_week, is_weekend). Pure pass-through of FEMA disaster declaration records.",
+        "stats_description": "Long-form FEMA disaster statistics (one row per dimension x value x year x month over state, incidentType, declarationType). Includes monthly_count, 90-day rolling counts, year-over-year deltas + pct change, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Use to identify states with surging disaster declarations or anomalous incident-type concentrations."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "FEMA Disaster Detail",
+      "project": "05 - FEMA Disaster Cases",
+      "source": "Disaster Trend (Features)",
+      "description": "Row-level FEMA disaster declarations (one row per declaration since 2022-01-01) including femaDeclarationString, disasterNumber, state, declarationType (DR/FM/EM), declarationDate, fyDeclared, incidentType (Hurricane, Wildfire, Severe Storm, etc.), declarationTitle, designatedArea (county-level when applicable), days_since_declaration, days_open, plus boolean flags for IA/IH/PA/HM program declared and calendar features. Source: OpenFEMA v2. Refresh: monthly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "FEMA Disaster Stats",
+      "project": "05 - FEMA Disaster Cases",
+      "source": "Disaster Trend (Stats)",
+      "description": "Long-form FEMA disaster statistics (one row per dimension x value x year x month over state, incidentType, declarationType). Includes 90-day rolling counts, year-over-year deltas + pct change, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Source: OpenFEMA v2."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "05 - FEMA Disaster Cases",
+    "parent_project": "Prep Agent",
+    "flow_name": "FEMA Disaster Cases",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 12,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 5,
+    "schedule_name_hint": "FEMA Disaster Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

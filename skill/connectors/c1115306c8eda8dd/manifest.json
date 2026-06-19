@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "data.cms.gov",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1781839003.256866
+}
