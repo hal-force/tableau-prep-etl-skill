@@ -200,6 +200,76 @@ Flags:
 - `--review-metadata`: stop the metadata writer after generating
   proposals — surface to the user before push.
 
+## Authoring a spec from scratch (no LLM gateway needed)
+
+Most users start by copying the closest archived spec and editing.
+The full path with no LLM gateway / no `/tableau-prep-etl` invocation:
+
+```sh
+# 1. Pick the closest archive (see table below). Trend by date? Copy
+#    fed_outlays. POST + body? Copy fed_workforce. ZIP CSV? Copy
+#    college_scorecard. Live snapshot? Copy opensky_us.
+cp flows/fed_outlays/v1/spec.json runtime/specs/my_flow.json
+
+# 2. Edit it. Required edits per section:
+#
+#    sources[0]:
+#      url           - the publisher's endpoint
+#      extra.json_schema (or csv_schema) - declare every column you'll keep
+#      extra.json_records_path - dotted path if records aren't at top level
+#      extra._skip_auto_casts: true - safest default; the cast planner has
+#                                     edge cases on CamelCase column names
+#
+#    transformations[]:
+#      kind: "trend_analysis" - YoY/rolling/anomaly per dimension. Need a
+#                               date_col on the source.
+#      kind: "graph_analysis" - networkx centralities + spring layout.
+#                               Need source_id_col + target_id_col on edges.
+#      kind: "eoc_fire_metrics" - WFIGS/NIFC fire-incident enrichment.
+#      kind: "join"           - multi-source flows; index sources by branch.
+#      kind: "pii_redaction"  - mask PII per category, plus audit table.
+#      []                      - empty: just publish raw + derived columns.
+#
+#    outputs[]:
+#      One published_data_source entry per terminal node. trend_analysis
+#      and pii_redaction emit two siblings (Features+Stats / Redact+Audit) -
+#      both need an output with `source: "<NodeName>"` to land in Hyper.
+#
+#    server_publish:
+#      project + parent_project (both name strings). The publish step
+#      auto-creates the child under the named parent if --auto-create-project
+#      is passed.
+
+# 3. Verify locally (no server work):
+python3 -m skill.scripts.run_loop \
+    --spec runtime/specs/my_flow.json \
+    --flow-name my_flow --skip-scan --skip-cli   # generate scripts only
+python3 -m skill.scripts.run_loop \
+    --spec runtime/specs/my_flow.json \
+    --flow-name my_flow --skip-scan              # generate + verify with prep-cli
+
+# 4. Publish to server (will auto-create parent/child project if missing):
+python3 -m skill.scripts.run_loop \
+    --spec runtime/specs/my_flow.json \
+    --flow-name my_flow --skip-scan --publish --auto-create-project
+# If publish fails with "project not found" right after auto-create
+# (cache lag), rerun without --auto-create-project:
+python3 -m skill.scripts.run_loop \
+    --spec runtime/specs/my_flow.json \
+    --flow-name my_flow --skip-scan --publish
+
+# 5. Archive the working version once it lands cleanly:
+RD=$(ls -t runtime/my_flow/ | head -1)
+python3 -m skill.scripts.archive_flow \
+    --spec runtime/specs/my_flow.json \
+    --run-dir runtime/my_flow/$RD \
+    --flow-name my_flow --open-source     # --open-source: copies real Hyper sample
+```
+
+Reference for the `extra.*` knobs honored by api_caller (every JSON
+pagination shape, every derived column kind):
+**`skill/reference/api_caller_knobs.md`**.
+
 ## Worked examples
 
 Each archived flow has a self-contained spec.json + flow.tfl + sample
@@ -276,7 +346,10 @@ outputs are capped at 50 MB total per archive.
 - `skill/SKILL.md` — workflow / phase walkthrough.
 - `skill/reference/tabpy_setup.md` — the working TabPy recipe (read first).
 - `skill/reference/server_publishing.md` — `--publish` semantics, MFA,
-  project picker, local_iteration mode.
+  project picker, parent_project + nested layout, local_iteration mode.
+- `skill/reference/api_caller_knobs.md` — every `extra` knob the
+  REST/JSON/CSV/ArcGIS fetcher honors. Read this before authoring a
+  new spec.
 - `skill/reference/metadata_api.md` — Metadata API queries (read-only
   on Cloud) + .tds-roundtrip writes.
 - `skill/reference/tfl_format.md` — Maestro deserializer notes /
@@ -289,9 +362,17 @@ outputs are capped at 50 MB total per archive.
 |---|---|
 | `BasicAuthConfiguration.getPassword() is null` | TabPy auth — point CLI at unauth `:9099`. See `tabpy_setup.md`. |
 | `Unable to connect to the Tableau Python (TabPy) server` (despite curl /info working) | TabPy's evaluate timed out (default 30s). Set `TABPY_EVALUATE_TIMEOUT = 600` and restart. |
-| `An integer/string/datetime type is required for field [X]` | Schema mismatch. Check the rendered `INPUT_SCHEMA` in `runtime/<run>/scripts/<step>.py` matches the upstream cast nodes. |
+| `An integer/string/datetime type is required for field [X]` | Schema mismatch. Check the rendered `INPUT_SCHEMA` in `runtime/<run>/scripts/<step>.py` matches the upstream cast nodes. Most reliable shape: declare the column as `string` in `json_schema` / `csv_schema` and add `_skip_auto_casts: true` on the source. |
+| `Error running flow. The script didn't return any results.` | Almost always a downstream-Maestro empty after a cast/schema mismatch upstream. (a) Set `_skip_auto_casts: true` on the source. (b) Confirm your `json_records_path` resolves to a non-empty list. (c) Check trend_analysis siblings (Features + Stats) each have an `outputs[]` entry — both branches need a terminal output. |
+| `An integer type is required for field [...]` despite `JSON_SCHEMA` declaring `"int"` | Publisher serializes nulls as the string `"null"` (Treasury) or sentinel like `"PrivacySuppressed"` (College Scorecard). The fetcher coerces these to NaN automatically — but only for columns present in `json_schema`/`csv_schema`. Add the column to your schema. |
+| `HTTP Error 400: Bad Request` from a paginated walk that worked once | Some publishers cap offset depth (CMS Provider Data 400s past offset=30000) or page size (CMS caps at 1000, College Scorecard API at 100). Reduce `json_page_size` / `json_max_pages` to fit. The walker treats a mid-walk 4xx as "done" if rows were already collected. |
+| `HTTP Error 429: Too Many Requests` | DEMO_KEY-style shared keys (api.data.gov) are hourly-rate-limited. Either register a real key, switch to a keyless bulk-download path (e.g. csv_zip), or wait ≥1 hour. |
+| `HTTPError : HTTP Error 400: Bad Request` on first call to a JSON GET | Some strict APIs (EPA AQS) reject `Content-Type: application/json` on GET. Already handled — but if you see it on a fresh source, run a curl probe with no headers to confirm. |
 | `Project 'Foo' not found on this site` immediately after `--auto-create-project` | TSC project-list cache lag. Rerun `--publish` without `--auto-create-project`. |
+| `Project 'Foo' not found on this site under parent 'Bar'` | Either the parent project doesn't exist (create it first manually), or `parent_project` doesn't match exactly (case-sensitive). |
 | `Currently not signed in to any Tableau server` during prep-cli verify | Spec has a `published_data_source` output but `local_iteration` didn't kick in. Confirm `run_loop.py` is current — the trigger covers any PDS output. |
+| `LLM gateway not configured` during metadata-write phase | Set `LLM_GATEWAY_URL/KEY/MODEL` env vars (or run `python3 -m skill.scripts.llm_config`). The flow + DS publish succeed without it; only column metadata generation needs it. |
+| `name 'null' is not defined` runtime error inside an api_caller script | Stale rendered script from before the `JSON_BODY` Jinja fix. Delete `skill/connectors/<sig>/` and `runtime/<flow>/` to force a re-render. |
 | Metadata API `Internal Server Error(s) while executing query` on `updateField` / `updateColumn` | Cloud's Metadata API is read-only. Use the .tds-roundtrip writer (`apply_descriptions`). |
 
 ## v2 roadmap (not yet implemented)
