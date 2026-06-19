@@ -37,17 +37,43 @@ from skill.scripts.intake import (
 from skill.scripts.source_planner import plan_sources
 from skill.scripts.generate_flow import generate_flow
 from skill.scripts.synthesize_eval import synthesize_eval
+from skill.scripts.spec_validation import (
+    SpecValidationError,
+    safe_output_dict,
+    safe_source_dict,
+    safe_transform_dict,
+    validate_spec_strict,
+)
+from skill.scripts import host_trust
 
 
 def _spec_from_dict(spec_dict: dict, request: str = "") -> Spec:
-    """Hydrate a Spec from a JSON dict (no-LLM mode)."""
+    """Hydrate a Spec from a JSON dict (no-LLM mode).
+
+    The archive load path was previously trusting `flows/<flow>/v*/spec.json`
+    verbatim — meaning an edited archive could ship a `file://` URL or
+    `../../etc/foo` output name straight to code rendering. Both this
+    function and intake.intake() now run through `validate_spec_strict`
+    + the host-approval gate before any rendering.
+    """
+    validate_spec_strict(spec_dict)
+
+    # Host-approval gate — same as intake.intake. Internal hosts /
+    # previously-approved hosts pass without prompting; unknown hosts
+    # surface to the operator (or hard-fail under TPE_HOST_APPROVAL=
+    # deny-unknown for unattended runs).
+    host_trust.ensure_hosts_approved(host_trust.extract_hosts(spec_dict))
+
     sp = spec_dict.get("server_publish")
     server_publish = ServerPublish(**sp) if isinstance(sp, dict) else None
     return Spec(
         request=spec_dict.get("request") or request,
-        sources=[Source(**s) for s in spec_dict.get("sources", [])],
-        transformations=[Transformation(**t) for t in spec_dict.get("transformations", [])],
-        outputs=[Output(**o) for o in spec_dict.get("outputs", [])],
+        sources=[Source(**safe_source_dict(s)) for s in spec_dict.get("sources", [])],
+        transformations=[
+            Transformation(**safe_transform_dict(t))
+            for t in spec_dict.get("transformations", [])
+        ],
+        outputs=[Output(**safe_output_dict(o)) for o in spec_dict.get("outputs", [])],
         qa_tier=spec_dict.get("qa_tier", "deterministic"),
         eval_strategy=spec_dict.get("eval_strategy", "sample_validation"),
         deployment=spec_dict.get("deployment", "local"),
@@ -70,6 +96,17 @@ TABLEAU_PREP_CLI = os.environ.get(
 
 def _new_run_id() -> str:
     return time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
+
+
+def _safe_tfl_basename(flow_name: Optional[str]) -> str:
+    """Filesystem-safe basename for the .tfl artifact. Falls back to
+    'flow' when no flow_name is set (preserves the legacy default for
+    direct callers of generate_flow)."""
+    if not flow_name:
+        return "flow"
+    import re
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", flow_name).strip("._-")
+    return cleaned or "flow"
 
 
 def _run_prep_cli(tfl: Path, log_path: Path, timeout_s: int = 1800) -> int:
@@ -99,6 +136,14 @@ def _run_prep_cli(tfl: Path, log_path: Path, timeout_s: int = 1800) -> int:
         creds_synth_result = synthesize_cli_credentials_json(tfl, tmp_creds)
         if creds_synth_result.get("status") == "ok":
             creds_path = Path(creds_synth_result["path"])
+            # The synthesized file contains plaintext server PAT/password
+            # by necessity (Tableau Prep CLI's contract). chmod 600 the
+            # moment it exists so umask defaults can't leave it readable
+            # to other users on shared workstations.
+            try:
+                os.chmod(creds_path, 0o600)
+            except OSError:
+                pass
     except Exception as e:
         creds_synth_result = {"status": "error", "type": type(e).__name__,
                               "message": str(e)}
@@ -131,12 +176,20 @@ def _run_prep_cli(tfl: Path, log_path: Path, timeout_s: int = 1800) -> int:
             rc = -1
 
     # Always remove the synthesized creds file - it contains plaintext
-    # password by necessity (Tableau Prep CLI requires it).
+    # password by necessity (Tableau Prep CLI requires it). Failures
+    # used to be swallowed silently, which masked NFS permission bugs
+    # and leaked the file. Log + re-attempt rather than pass.
     if creds_path is not None and creds_path.exists():
         try:
             creds_path.unlink()
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                with log_path.open("a") as logf:
+                    logf.write(
+                        f"# WARN: failed to delete {creds_path}: {type(e).__name__}: {e}\n"
+                    )
+            except Exception:
+                pass
     return rc
 
 
@@ -348,6 +401,38 @@ def _maybe_write_metadata(spec: Spec, publish_result: dict, run_dir: Path,
                 project_name = (publish_result or {}).get("project_name") or (
                     spec.server_publish.project if spec.server_publish else ""
                 )
+                # Resolve the target project's LUID once so we can
+                # disambiguate same-named DSes that legitimately exist
+                # in sibling projects under different parents (Cloud
+                # nested-project layouts, e.g. the Prep Agent demo
+                # collection's `01 - Federal Outlays` child project
+                # under the `Prep Agent` parent).
+                parent_want = ""
+                if spec.server_publish:
+                    parent_want = (spec.server_publish.parent_project or "").strip()
+                target_project_id = ""
+                try:
+                    from skill.scripts.publish import list_site_projects
+                    projects = list_site_projects()
+                    parent_id_filter = ""
+                    if parent_want:
+                        parent_match = next(
+                            (p for p in projects
+                             if p["id"] == parent_want or p["name"] == parent_want),
+                            None,
+                        )
+                        if parent_match:
+                            parent_id_filter = parent_match["id"]
+                    for p in projects:
+                        if p["name"] != project_name:
+                            continue
+                        if parent_id_filter and p.get("parent_id") != parent_id_filter:
+                            continue
+                        target_project_id = p["id"]
+                        break
+                except Exception:
+                    pass
+
                 import tableauserverclient as TSC
                 req = TSC.RequestOptions()
                 for o in pd_outputs:
@@ -359,6 +444,12 @@ def _maybe_write_metadata(spec: Spec, publish_result: dict, run_dir: Path,
                             "projectName", TSC.RequestOptions.Operator.Equals,
                             project_name))
                     for ds in TSC.Pager(srv.datasources, req):
+                        # If we resolved a parent-scoped project LUID,
+                        # require the DS sit inside it. Skips
+                        # same-named DSes living under a different
+                        # parent's identically-named child project.
+                        if target_project_id and ds.project_id != target_project_id:
+                            continue
                         luids_by_name[o.name] = ds.id
                         break
             finally:
@@ -366,8 +457,37 @@ def _maybe_write_metadata(spec: Spec, publish_result: dict, run_dir: Path,
                     srv.auth.sign_out()
                 except Exception:
                     pass
-        except Exception:
-            pass
+        except Exception as e:
+            # The bare-except here used to mask 401s on the LUID lookup,
+            # which surfaced downstream as "no LUID found, skipping
+            # metadata write" — making PAT expiry look like a benign
+            # absence of data. Log the real reason so the operator can
+            # tell auth from absence. Only TSC's auth/server response
+            # exceptions reach this branch; anything else is a bug.
+            try:
+                import tableauserverclient as TSC
+                _auth_classes: tuple = tuple(
+                    cls for cls in (
+                        getattr(TSC, "ServerResponseError", None),
+                        getattr(TSC, "NotSignedInError", None),
+                    ) if cls is not None
+                )
+            except Exception:
+                _auth_classes = ()
+            if _auth_classes and isinstance(e, _auth_classes):
+                # Auth failures must NOT silently degrade — they almost
+                # always mean the PAT rotated and downstream metadata
+                # writes will hit the same wall. Re-raise so the caller
+                # surfaces it on the run summary.
+                raise
+            # Anything else (network blip, transient TSC parsing error)
+            # falls back to the empty-LUID path with a logged note.
+            try:
+                (run_dir / "metadata_luid_lookup_warning.txt").write_text(
+                    f"LUID lookup non-fatal error: {type(e).__name__}: {e}\n"
+                )
+            except Exception:
+                pass
 
     # Build {column_name: declared_type} from the planned upstream
     # schema so the .tds-roundtrip path can declare datatypes for
@@ -451,7 +571,10 @@ def run(request: str, run_dir: Optional[Path] = None,
         parent = Path("./runtime") / flow_name if flow_name else Path("./runtime")
         run_dir = parent / _new_run_id()
     run_dir = Path(run_dir).resolve()
-    run_dir.mkdir(parents=True, exist_ok=True)
+    # 0o700: per-run scratch holds spec.json, hyper extracts, and the
+    # transient _cli_credentials.json — keep readable only to the
+    # operator who launched the run.
+    run_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     # Phase 1: intake (or load pre-built spec)
     if spec_path is not None:
@@ -582,8 +705,10 @@ def run(request: str, run_dir: Optional[Path] = None,
         (s.extra or {}).get("_pds_local_csv_path") for s in spec.sources
     )
     has_pds_output = any(o.kind == "published_data_source" for o in spec.outputs)
+    tfl_basename = _safe_tfl_basename(flow_name)
     tfl_path = generate_flow(spec, plan, run_dir,
-                             local_iteration=has_downloaded_pds or has_pds_output)
+                             local_iteration=has_downloaded_pds or has_pds_output,
+                             tfl_basename=tfl_basename)
 
     # Phase 3b: verify the .tfl actually deserializes + runs in tableau-prep-cli.
     # This is the load-bearing test — earlier we shipped flows that passed

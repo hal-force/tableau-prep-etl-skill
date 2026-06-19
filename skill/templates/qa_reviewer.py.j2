@@ -29,7 +29,12 @@ GATEWAY_URL = os.environ.get(
 GATEWAY_KEY = os.environ.get("LLM_GATEWAY_KEY", "")
 GATEWAY_MODEL = os.environ.get("LLM_GATEWAY_QA_MODEL",
                                os.environ.get("LLM_GATEWAY_MODEL", "claude-sonnet-4-6"))
-GATEWAY_VERIFY_SSL = False
+# Defaults ON. Local dev with self-signed gateways can flip via env.
+# Reads at module-import time so a misconfigured gateway fails the
+# first call rather than silently MITM-able.
+GATEWAY_VERIFY_SSL = (
+    os.environ.get("LLM_GATEWAY_VERIFY_SSL", "true").strip().lower() != "false"
+)
 
 
 SYSTEM_PROMPT = """You are a senior QA reviewer for an ETL extraction pipeline.

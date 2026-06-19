@@ -13,41 +13,101 @@ Format hint: {{ format }}
 import json
 import os
 import ssl
+from pathlib import Path
 from urllib import request as urlrequest
+from urllib.parse import urlparse
 
 import pandas as pd
 
 
-API_URL = "{{ url }}"
-CERT_PATH_ENV = "{{ cert_path_env }}"
-CERT_KEY_ENV = "{{ cert_key_env }}"
-TIMEOUT_S = {{ extra.get('timeout_s', 120) | default(120) }}
+API_URL = {{ url | tojson }}
+CERT_PATH_ENV = {{ cert_path_env | tojson }}
+CERT_KEY_ENV = {{ cert_key_env | tojson }}
+TIMEOUT_S = {{ extra.get('timeout_s', 120) | default(120) | tojson }}
+MAX_RESPONSE_BYTES = {{ extra.get('max_response_bytes', 500_000_000) | tojson }}
+
+
+def _assert_url_safe(u: str) -> None:
+    p = urlparse(u)
+    if (p.scheme or "").lower() not in ("http", "https"):
+        raise ValueError(f"refusing to fetch URL with scheme {p.scheme!r}")
+    h = (p.hostname or "").strip().lower()
+    if h in ("localhost", "metadata.google.internal", "metadata.aws.com",
+             "metadata.azure.com", "169.254.169.254", "0.0.0.0"):
+        raise ValueError(f"refusing to fetch hard-blocked host {h!r}")
+
+
+def _allowed_cert_dir() -> Path:
+    """The cert realm. Operators can override with $TPE_CERT_DIR for
+    bespoke deployments; default is ~/.tableau-prep-etl/certs/."""
+    override = os.environ.get("TPE_CERT_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return (Path.home() / ".tableau-prep-etl" / "certs").resolve()
+
+
+def _resolve_under_cert_dir(env_name: str, raw_path: str) -> Path:
+    """Resolve `raw_path` and assert it lives under the allowed cert dir.
+    Closes a path-traversal class where TabPy's env var could be edited
+    (or inherited from a hostile parent) to point at /etc/ssl/private/
+    or another credential store."""
+    if not raw_path:
+        raise RuntimeError(
+            f"PKI cert path env ${env_name} is empty; set it to the absolute "
+            "path of the client cert/key file."
+        )
+    realm = _allowed_cert_dir()
+    resolved = Path(raw_path).expanduser().resolve()
+    try:
+        resolved.relative_to(realm)
+    except ValueError:
+        raise RuntimeError(
+            f"PKI cert ${env_name}={raw_path!r} resolves to {resolved!s} which is "
+            f"not inside the allowed cert dir {realm!s}. Move the cert under that "
+            "directory, or set $TPE_CERT_DIR to an explicit allowed root."
+        )
+    if not resolved.exists():
+        raise RuntimeError(f"PKI cert file missing: {resolved!s}")
+    return resolved
 
 
 def _ssl_ctx_with_cert():
     """Build SSL context with client cert for mutual-TLS auth."""
     cert_path = os.environ.get(CERT_PATH_ENV, "")
     key_path = os.environ.get(CERT_KEY_ENV, "")
-    if not (cert_path and key_path):
-        raise RuntimeError(
-            f"PKI cert paths not set: ${CERT_PATH_ENV} / ${CERT_KEY_ENV} "
-            f"must point at the client cert + key in TabPy's environment."
-        )
-    if not (os.path.exists(cert_path) and os.path.exists(key_path)):
-        raise RuntimeError(f"cert files missing: {cert_path}, {key_path}")
+    cert = _resolve_under_cert_dir(CERT_PATH_ENV, cert_path)
+    key = _resolve_under_cert_dir(CERT_KEY_ENV, key_path)
     ctx = ssl.create_default_context()
-    ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
+    ctx.load_cert_chain(certfile=str(cert), keyfile=str(key))
     return ctx
+
+
+def _read_bounded(resp) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = resp.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if MAX_RESPONSE_BYTES and total > MAX_RESPONSE_BYTES:
+            raise RuntimeError(
+                f"response body exceeded MAX_RESPONSE_BYTES "
+                f"({total} > {MAX_RESPONSE_BYTES}); aborting fetch"
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def call_pki_endpoint(df):
     """Tableau Prep entry point. Input df is a trigger row; we ignore it.
     Output: parsed records as a DataFrame."""
+    _assert_url_safe(API_URL)
     ctx = _ssl_ctx_with_cert()
     req = urlrequest.Request(API_URL, method="GET")
     req.add_header("Accept", "application/json")
     with urlrequest.urlopen(req, timeout=TIMEOUT_S, context=ctx) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+        data = json.loads(_read_bounded(resp).decode("utf-8"))
 
     # ESRI feature service convention: features under 'features' with
     # 'attributes' per-row. Generic fallback: top-level list, else wrap.
