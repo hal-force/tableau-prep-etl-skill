@@ -1,0 +1,36 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 60,
+  "max_retries": 3,
+  "json_records_path": "vulnerabilities",
+  "json_paginate": false,
+  "json_derived_columns": [
+    {
+      "name": "cwe_list",
+      "kind": "list_join",
+      "source_col": "cwes",
+      "sep": ", "
+    },
+    {
+      "name": "exploit_sla_days",
+      "kind": "days_between",
+      "start_col": "dateAdded",
+      "end_col": "dueDate"
+    }
+  ],
+  "json_schema": {
+    "cveID": "string",
+    "vendorProject": "string",
+    "product": "string",
+    "vulnerabilityName": "string",
+    "dateAdded": "string",
+    "shortDescription": "string",
+    "requiredAction": "string",
+    "dueDate": "string",
+    "knownRansomwareCampaignUse": "string",
+    "notes": "string",
+    "cwe_list": "string",
+    "exploit_sla_days": "int"
+  },
+  "_skip_auto_casts": true
+}

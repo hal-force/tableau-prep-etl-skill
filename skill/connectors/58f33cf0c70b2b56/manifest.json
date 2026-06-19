@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "www.cisa.gov",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1781836964.60109
+}
