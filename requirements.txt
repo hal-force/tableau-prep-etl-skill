@@ -4,8 +4,17 @@ rapidfuzz>=3.0
 python-dateutil>=2.8
 openpyxl>=3.1
 
-# Tableau hyper file reading (needed by skill's verification step + run_loop)
+# Network analysis (graph_analyzer template — centralities + Fruchterman-Reingold layout)
+networkx>=3.0
+
+# HTTPS via certifi (api_caller fallback when system trust store is incomplete)
+certifi>=2023.0
+
+# Tableau hyper file reading (skill's verification step + run_loop + Hyper-as-DS uploads)
 tableauhyperapi>=0.0.18000
+
+# Tableau Server / Cloud REST + Metadata API client (publish + metadata writer)
+tableauserverclient>=0.25
 
 # PDF handling (only needed for local_folder + pdf_portfolio sources)
 PyPDF2>=3.0

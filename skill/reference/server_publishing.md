@@ -1,53 +1,177 @@
-# Tableau Server publishing (v2 placeholder)
+# Tableau Server / Cloud publishing
 
-Server publishing is **not implemented in v1** of this skill. The skill
-produces a working `.tfl` that can be:
+The skill publishes a built `.tfl` to Tableau Server or Tableau Cloud
+when `--publish` is passed to `run_loop.py`. The publish step is
+PAT-authenticated, project-pickered, schedule-aware, and Cloud-aware.
 
-- Opened in Tableau Prep Builder and run interactively.
-- Run headlessly via `tableau-prep-cli -t flow.tfl`.
-- Manually published via Tableau Prep Builder's "Publish to Tableau
-  Server" menu, or via the Tableau Server REST API.
+## What `--publish` actually does
 
-## What v2 will add
+1. **Auth.** `tflb_lib.publishing.config_from_env()` + TSC sign-in
+   using a Personal Access Token. Required env vars:
 
-A `--publish` flag on `scripts/run_loop.py` that:
+   ```
+   TABLEAU_SERVER_URL          # e.g. https://prod-useast-a.online.tableau.com
+   TABLEAU_SERVER_PAT_NAME
+   TABLEAU_SERVER_PAT_SECRET
+   TABLEAU_SERVER_SITE         # site contentUrl ("" for default site on Server)
+   ```
 
-1. Authenticates to Tableau Server via Personal Access Token (PAT).
-2. Selects the target site + project.
-3. Uploads the `.tfl` via `POST /api/<api-version>/sites/<site-id>/flows`
-   (multipart with the `.tfl` payload + connection metadata).
-4. Returns the published flow URL + Conductor schedule (if requested).
+2. **Project picker.** `_maybe_publish` lists site projects, matches
+   `spec.server_publish.project` exactly. If no match, returns
+   `needs_user_decision` with candidates + near-matches so the
+   orchestrator can prompt the user — UNLESS `--auto-create-project`
+   was passed, in which case the project is created with a generic
+   description.
 
-## Required environment variables (v2)
+3. **Cloud-vs-Server flow execution.** Flows in this repo carry
+   `published_data_source` outputs. On Server, a backgrounder run
+   executes the flow and creates the DS. **On Cloud, backgrounder
+   cannot run script nodes** (TabPy is not supported in Cloud's
+   flow runner per
+   `https://help.tableau.com/current/prep/en-us/prep_scripts_TabPy.htm`).
+   The Cloud-friendly pattern this skill uses:
+
+   - Run the flow locally via `prep-cli` to produce a `.hyper` extract.
+   - Upload that `.hyper` as a published data source via
+     `TSC.Server.datasources.publish(item, path, mode="Overwrite")`.
+   - Publish the `.tfl` itself with `--publish` so the flow definition
+     and schedule are visible on the site (the schedule is a no-op
+     on Cloud for script-bearing flows, but the artifact is preserved
+     for code review and re-running locally).
+
+4. **PublishExtract routing patch.** Before upload,
+   `_patch_publish_extract_routing` resolves the project LUID and:
+
+   - Swaps any local `WriteToHyper` nodes carrying `_pds_target_*`
+     markers (left over from `local_iteration` mode) back into
+     `.v1.PublishExtract` nodes.
+   - Patches every `.v1.PublishExtract` with `projectLuid` +
+     `serverUrl`. Maestro requires the LUID — project names alone
+     are non-unique site-wide and the Cloud backgrounder rejects
+     run tasks without it.
+
+5. **Schedule wiring.** Per `spec.server_publish.cadence` /
+   `hour_utc` / `minute_utc`. On Cloud, hour/minute are stored as
+   UTC; the skill returns `next_run_utc` so the user knows when to
+   expect the next run.
+
+## local_iteration mode
+
+`run_loop` flips `local_iteration=True` whenever the spec has any
+`published_data_source` output OR any `internal_published_ds` source
+has been downloaded (Phase 4a). In this mode:
+
+- Every `published_data_source` output becomes a local
+  `WriteToHyper` carrying `_pds_target_*` markers.
+- Every `internal_published_ds` source becomes a `LoadCsv` reading
+  the Phase 4a download.
+- The flow runs end-to-end locally with no live server auth (which
+  bypasses MFA on Cloud sites).
+
+At publish time, `_patch_publish_extract_routing` does the inverse
+swap so the .tfl uploaded to the server has the proper
+PublishExtract shape.
+
+## Local-dev helper: macOS Keychain auto-load
+
+The skill has a `~/.tableau-prep-etl/load_env.sh` convention. On
+first setup, run:
 
 ```sh
-export TABLEAU_SERVER_URL='https://<server>/'
-export TABLEAU_SERVER_PAT_NAME='<PAT name>'
-export TABLEAU_SERVER_PAT_SECRET='<PAT secret>'
-export TABLEAU_SERVER_SITE='<site contentUrl, or "" for default site>'
-export TABLEAU_SERVER_PROJECT='<project name or id>'
+python3 -m skill.scripts.server_creds --load
 ```
 
-## Reference (for the v2 implementer)
+Walks env → macOS Keychain (`security find-generic-password`) →
+Linux libsecret (`secret-tool`) → `~/.tableau-prep-etl/server.json`
+(chmod 600 plaintext, local dev only). Stores the values it finds
+in Keychain so future shells just `source ~/.tableau-prep-etl/load_env.sh`.
 
-- Tableau Server REST API: https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api.htm
-- Flow publish endpoint: `POST /api/<api-version>/sites/<site-id>/flows`
-- Authentication via PAT: `POST /api/<api-version>/auth/signin` with
-  `<personalAccessTokenName>` + `<personalAccessTokenSecret>`.
-- Multipart upload: `Content-Type: multipart/mixed; boundary=...`,
-  with one part being the `<tsRequest>` XML metadata and a second part
-  being the `.tfl` payload.
+Keychain accounts under service `tableau-prep-etl`:
 
-## Why deferred
+- `url`, `pat-name`, `pat-secret`, `site` — REQUIRED for publish.
+- `tableau-username`, `tableau-password` — only used to synthesize
+  prep-cli credentials.json for `sqlproxy` connections (legacy
+  Server path; not needed on Cloud).
 
-1. The v1 `.tfl` shape is still iterating; locking down the upload
-   format is premature.
-2. A misconfigured PAT could push a bad flow into a production site —
-   the deploy path needs explicit per-run confirmation, dry-run mode,
-   and rollback support, which is meaningful design work.
-3. Most users we've seen prefer reviewing the `.tfl` in Builder before
-   publishing manually anyway.
+## MFA / Tableau Cloud — PATs only
 
-When ready, the work is well-scoped: ~1 day to author `scripts/deploy.py`
-and the auth/multipart helpers in `tflb_lib.publishing` (new submodule),
-plus a verification run against a test site.
+Tableau Cloud's MFA-on-every-login blocks prep-cli's
+`credentials.json` username/password path entirely. The PAT path
+works because PATs don't go through the interactive auth flow.
+For MFA-protected sites:
+
+- All server interactions use PAT auth (REST + Metadata API).
+- Flow execution stays local (script nodes can't run on Cloud
+  backgrounder anyway).
+- Data sources are published via TSC's `datasources.publish` rather
+  than left to backgrounder.
+
+## Project picker: avoiding silent project creation
+
+By default, missing projects bounce back as `needs_user_decision`
+so the orchestrator can prompt before creating anything. The user
+can:
+
+- Pick an existing project (replaces `spec.server_publish.project`).
+- Type a different name (re-prompts; recursive).
+- Approve creating the configured project.
+
+`--auto-create-project` flips this to auto-approve — useful for
+CI / batch runs where there's no interactive user.
+
+**Cache-warmup quirk:** if `--auto-create-project` creates a project
+and the publish step runs in the same TSC session, `publish_run`'s
+project lookup may not see the freshly-created project (TSC re-fetches
+projects but the server-side index sometimes lags by a few seconds).
+Workaround: when this fails, rerun `--publish` without
+`--auto-create-project` — the project exists by then and the publish
+lands cleanly. See `feedback_publish_project_create_quirk.md`.
+
+## Output
+
+The `--publish` step adds a `publish` block to the run result:
+
+```json
+{
+  "publish": {
+    "status": "ok",
+    "flow_id": "0919ba1d-2eb3-40a7-9765-f33498fece4a",
+    "flow_name": "OTF Grants Enriched",
+    "project_id": "a201202f-28bd-43b2-ab2c-f59a2c31ad3e",
+    "project_name": "Grants",
+    "schedule_id": "1b7f521a-...",
+    "schedule_name": "OTF Grants Monthly Refresh",
+    "task_id": "4a8ab79c-...",
+    "fire_hour": 8,
+    "fire_minute": 0,
+    "cadence": "monthly",
+    "web_url": "https://...",
+    "is_cloud": true,
+    "next_run_utc": "2026-07-01T12:00:00Z"
+  }
+}
+```
+
+The DS itself (for the Cloud-friendly local-prep-then-publish-DS
+pattern) is uploaded **separately** via TSC after the local prep-cli
+run; see `flows/otf_grants/v1/`, `flows/us_wildfires_eoc/v1/`, and
+`flows/us_grid_network/v1/` for worked examples that show the full
+sequence.
+
+## Phase 11: post-publish metadata writer
+
+After a successful `--publish`, `_maybe_write_metadata` runs against
+each `published_data_source` output. It looks up the DS LUID by
+name in the target project (since flow-publish doesn't carry DS
+LUIDs), then:
+
+1. Calls `metadata_writer.generate_descriptions` (LLM-assisted
+   descriptions; needs `LLM_GATEWAY_URL/KEY/MODEL` configured).
+2. Always saves the proposal to
+   `runtime/<run>/metadata_<output>.json` as audit trail.
+3. Calls `metadata_writer.apply_descriptions`:
+   - DS-level via TSC `datasources.update`.
+   - Per-column via the .tds round-trip (see `metadata_api.md`).
+
+`--review-metadata` stops after step 2 so the user can approve
+the proposal before push.

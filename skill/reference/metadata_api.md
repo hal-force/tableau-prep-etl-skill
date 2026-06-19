@@ -93,34 +93,75 @@ Used by the metadata writer to seed proposals against existing column
 descriptions, and by future workflows that want to show the user a
 column inventory before they pick the DS.
 
-## Mutations we use
+## Writes — important: Metadata API is read-only on Cloud
+
+The Metadata API is **read-only on Tableau Cloud** as of 2026-06.
+GraphiQL's "Docs" panel reports the Mutation root is empty;
+historical mutations (`updateField`, `updateColumn`,
+`updateColumnDescription`, `updateColumnField`,
+`updateFieldDescription`, etc.) all return a generic
+`Internal Server Error(s) while executing query` regardless of
+auth scope or Data Management licensing. This is the canonical
+Tableau-side behavior for Cloud — verified against
+`prod-useast-a.online.tableau.com / usfederaldemos`. On older
+Tableau Server builds (≤ 2022.x) the GraphQL mutations existed; on
+modern Server they have been deprecated in favor of REST.
+
+The skill therefore uses two **non-GraphQL** paths to apply
+metadata writes:
 
 ### Update DS-level description
 
 REST, not GraphQL — `PUT /api/{ver}/sites/{site}/datasources/{luid}`
 with the standard `<datasource>` payload. We let TSC handle this via
 `server.datasources.update(item)` after setting `item.description`.
+Works on Cloud and Server.
 
-### Update column description
+### Update column descriptions — .tds round-trip
 
-```graphql
-mutation UpdateField($luid: String!, $field: String!, $description: String!) {
-  updateField(
-    input: { luid: $luid, name: $field, description: $description }
-  ) {
-    field { name description }
-  }
-}
+The supported write surface for column descriptions on Cloud is
+download-modify-republish:
+
+```
+1. server.datasources.download(luid, include_extract=True)  → .tdsx
+2. unzip; locate the .tds and Data/Extracts/*.hyper sidecar
+3. for each (col, description):
+     find <column name='[col]' ...> element OR create one with the
+       inferred datatype/role/type
+     replace any existing <desc> child with:
+       <desc><formatted-text><run>DESCRIPTION</run></formatted-text></desc>
+4. repack as .tdsx (preserve the .hyper sidecar verbatim)
+5. server.datasources.publish(item, path, mode="Overwrite")
 ```
 
-`updateField` is the canonical mutation on Server >= 2023.1 and Cloud.
-On older Server builds the equivalent mutation is named
-`updateColumn`; the writer falls back automatically when the server
-reports `updateField` as unknown.
+The DS LUID is **preserved** across the overwrite, so any
+references / dashboards / connections stay valid. Implemented in
+`metadata_writer._apply_column_descriptions_via_tds` (single
+atomic round-trip — no per-field network call).
 
-One round-trip per column. Tableau's GraphQL surface has no batch
-column update — sites with hundreds of columns will see a few seconds
-of sequential calls. That's a server-side limitation, not a client one.
+The .tds XML is well-defined: the column element shape is
+
+```xml
+<column caption='display_name' datatype='real' name='[internal_name]'
+        role='measure' type='quantitative'>
+  <desc><formatted-text><run>Description text.</run></formatted-text></desc>
+</column>
+```
+
+Datatype values: `integer`, `real`, `string`, `date`, `datetime`,
+`boolean`. Role: `measure` for numeric quantitative, `dimension`
+for categorical. The skill's writer carries a `column_types` map
+through from `run_loop._maybe_write_metadata` so newly-created
+column elements get correct types; existing columns retain their
+declared types and only the `<desc>` child is rewritten.
+
+### Async indexing on Cloud
+
+After a `mode="Overwrite"` republish, Cloud's Metadata API
+reindexes asynchronously — readback queries (`fields { description }`)
+may show stale data for several minutes (occasionally longer). The
+.tds itself is authoritative; the descriptions appear in
+`Data Details` in the browser as soon as the republish completes.
 
 ## Performance notes
 

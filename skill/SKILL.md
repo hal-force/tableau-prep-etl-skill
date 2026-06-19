@@ -38,7 +38,8 @@ It is **not** the right tool for:
 
 - Modifying an existing flow's individual transformations (use Tableau
   Prep Builder directly).
-- Schedule / Conductor management (server-side concern, v2 of this skill).
+- Conductor schedule introspection / management beyond the
+  basic-cadence wiring `--publish` already does.
 - Running production ETL ad-hoc (run the produced `.tfl` via
   `tableau-prep-cli` directly).
 
@@ -89,7 +90,12 @@ gateway (configured via `LLM_GATEWAY_URL` / `LLM_GATEWAY_KEY` /
 - `qa_tier`: `none` | `deterministic` | `llm`.
 - `eval_strategy`: `extract_from_source` | `sample_validation` |
   `synthesized` | `user_supplied` | `self_consistency`.
-- `deployment`: `local` (v1) | `tableau_server` (v2).
+- `deployment`: `local` | `tableau_server`. With `tableau_server`, the
+  spec must include a `server_publish` block (project, cadence,
+  hour_utc, etc.) and `--publish` triggers the upload via TSC.
+- `server_publish.project`: target project name. The publish picker
+  will prompt if it doesn't exist; pass `--auto-create-project` to
+  pre-authorize creating it.
 
 If confidence is low on any field, the skill asks the user 1–2
 clarifying questions before continuing.
