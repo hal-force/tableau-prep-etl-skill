@@ -516,20 +516,66 @@ def _maybe_write_metadata(spec: Spec, publish_result: dict, run_dir: Path,
         "growth_band": "string", "size_class": "string",
         "containment_band": "string", "is_active": "bool",
         "region_key": "string", "incident_summary": "string",
+        # embassy_threat_join
+        "post_name": "string", "post_country": "string",
+        "post_classification": "string", "post_lat": "decimal",
+        "post_lon": "decimal", "event_id": "int", "event_date": "string",
+        "event_root_code": "string", "event_root_name": "string",
+        "event_lat": "decimal", "event_lon": "decimal",
+        "distance_miles": "decimal", "severity_score": "int",
+        "proximity_score": "int", "recency_score": "int",
+        "us_actor_flag": "int", "composite_score": "int",
+        "goldstein_scale": "decimal", "num_mentions": "int",
+        "source_url": "string", "actor1_country": "string",
+        "actor2_country": "string",
+        # embassy_risk_summary
+        "events_in_window": "int", "max_severity_score": "int",
+        "mass_violence_count": "int", "assault_count": "int",
+        "fight_count": "int", "threaten_count": "int",
+        "protest_count": "int", "coerce_count": "int",
+        "weighted_threat_score": "decimal", "risk_band": "string",
+        "top_event_type": "string", "last_event_date": "string",
     }
     column_types.update(_TRANSFORM_COLUMN_TYPES)
 
     per_output: list[dict] = []
     for o in pd_outputs:
         luid = luids_by_name.get(o.name, "")
-        # Sample rows aren't piped through yet; metadata_writer accepts
-        # an empty list and the LLM still produces useful column blurbs
-        # from the column-name list and the spec's flow_intent.
-        cols = list(column_types.keys())
+        # Prefer the actual produced Hyper schema over the upstream
+        # input schema — when a transform reshapes the data (joins, new
+        # derived columns), the input schema is stale and the LLM ends
+        # up describing source columns that aren't in the published DS.
+        cols = []
+        per_out_types = dict(column_types)
+        try:
+            from tableauhyperapi import (
+                Connection as _HConn, HyperProcess as _HProc,
+                Telemetry as _HTel,
+            )
+            hyper_path = run_dir / "outputs" / f"{o.name}.hyper"
+            if hyper_path.exists():
+                with _HProc(telemetry=_HTel.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU) as _hp:
+                    with _HConn(endpoint=_hp.endpoint,
+                                database=str(hyper_path)) as _conn:
+                        # Tableau-produced .hyper has both 'public'
+                        # (empty) and 'Extract' schemas; pick the first
+                        # schema that actually contains a table.
+                        for sch in _conn.catalog.get_schema_names():
+                            tables = list(_conn.catalog.get_table_names(sch))
+                            if not tables:
+                                continue
+                            td = _conn.catalog.get_table_definition(tables[0])
+                            for c in td.columns:
+                                cols.append(c.name.unescaped)
+                            break
+        except Exception:
+            cols = []
+        if not cols:
+            cols = list(column_types.keys())
         try:
             res = write_for_output(spec, o.name, luid, cols, [], run_dir,
                                    review=review,
-                                   column_types=column_types)
+                                   column_types=per_out_types)
             per_output.append(res)
         except Exception as e:
             per_output.append({
@@ -740,7 +786,9 @@ def run(request: str, run_dir: Optional[Path] = None,
             )
             has_script_nodes = any(
                 t.kind in ("trend_analysis", "graph_analysis", "pii_redaction",
-                          "qa_review", "stats_review", "validate")
+                          "qa_review", "stats_review", "validate",
+                          "eoc_fire_metrics",
+                          "embassy_threat_join", "embassy_risk_summary")
                 or "script" in (t.kind or "").lower()
                 for t in spec.transformations
             )
@@ -861,9 +909,20 @@ def run(request: str, run_dir: Optional[Path] = None,
                 spec, run_dir, result["publish"],
             )
         # Phase 7b: metadata writer. Only runs after a successful publish.
+        # Inject the DS LUIDs from `pds_uploads` into the publish_result
+        # so the writer can apply column descriptions without doing its
+        # own server-side name lookup (faster + avoids race with Cloud
+        # search-index latency right after a fresh upload).
         if result["publish"].get("status") == "ok":
+            _enriched_pub = dict(result["publish"])
+            _ds_luids = []
+            for r in (result.get("pds_uploads", {}) or {}).get("results", []) or []:
+                if r.get("status") == "ok" and r.get("luid") and r.get("name"):
+                    _ds_luids.append({"name": r["name"], "luid": r["luid"]})
+            if _ds_luids:
+                _enriched_pub["datasources"] = _ds_luids
             result["metadata"] = _maybe_write_metadata(
-                spec, result["publish"], run_dir, review=review_metadata,
+                spec, _enriched_pub, run_dir, review=review_metadata,
             )
 
     return result

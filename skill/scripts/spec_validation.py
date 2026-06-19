@@ -50,7 +50,8 @@ EVAL_STRATEGIES = (
     "extract_from_source", "sample_validation", "synthesized",
     "user_supplied", "self_consistency",
 )
-REFRESH_CADENCES = ("once", "hourly", "daily", "weekly", "monthly", "on_demand")
+REFRESH_CADENCES = ("once", "hourly", "every_3_hours", "every_6_hours",
+                    "daily", "weekly", "monthly", "on_demand")
 OUTPUT_KINDS = ("hyper", "csv", "published_data_source")
 
 

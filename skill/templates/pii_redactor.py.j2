@@ -24,7 +24,7 @@ Three new columns are added per row:
                                low = geographic-only or single direct)
 
 Configured by spec:
-  enabled_categories = {{ enabled_categories | tojson }}
+  enabled_categories = {{ enabled_categories | pyrepr }}
   redaction_token    = "{{ redaction_token }}"
   hash_token_prefix  = "{{ hash_token_prefix }}"  (sha256-prefix replacement
                        used for IDs where downstream still needs joinability —
@@ -35,11 +35,11 @@ import re
 
 import pandas as pd
 
-ENABLED_CATEGORIES = set({{ enabled_categories | tojson }})
+ENABLED_CATEGORIES = set({{ enabled_categories | pyrepr }})
 REDACTION_TOKEN = "{{ redaction_token }}"
 HASH_TOKEN_PREFIX = "{{ hash_token_prefix }}"
 
-INPUT_SCHEMA: dict = {{ input_schema | tojson if input_schema is defined else '{}' }}
+INPUT_SCHEMA: dict = {{ input_schema | pyrepr if input_schema is defined else '{}' }}
 
 
 # === Detection patterns ===

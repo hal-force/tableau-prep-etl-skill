@@ -9,8 +9,8 @@
         "auth": "none",
         "format": "csv_index_then_zip"
       },
-      "hit_count": 9,
-      "last_used_at": 1781804808.0078888
+      "hit_count": 36,
+      "last_used_at": 1781891304.2288451
     },
     "87373f435ea745fc": {
       "signature": {
@@ -19,8 +19,8 @@
         "auth": "none",
         "format": "arcgis_features"
       },
-      "hit_count": 65,
-      "last_used_at": 1781817263.056988
+      "hit_count": 77,
+      "last_used_at": 1781883373.419601
     },
     "3d842373ebd622d9": {
       "signature": {
@@ -29,8 +29,8 @@
         "auth": "none",
         "format": "csv"
       },
-      "hit_count": 48,
-      "last_used_at": 1781809259.324585
+      "hit_count": 57,
+      "last_used_at": 1781883373.382899
     },
     "a92bd7846025f8e1": {
       "signature": {
@@ -79,8 +79,8 @@
         "auth": "none",
         "format": "arcgis_features"
       },
-      "hit_count": 12,
-      "last_used_at": 1781826160.684501
+      "hit_count": 18,
+      "last_used_at": 1781883373.4011168
     },
     "ebe334f48d0f27d1": {
       "signature": {
@@ -89,8 +89,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 27,
-      "last_used_at": 1781836256.444384
+      "hit_count": 36,
+      "last_used_at": 1781883373.290406
     },
     "ea0ca47b62df8096": {
       "signature": {
@@ -99,8 +99,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 12,
-      "last_used_at": 1781836800.234577
+      "hit_count": 21,
+      "last_used_at": 1781883373.321704
     },
     "58f33cf0c70b2b56": {
       "signature": {
@@ -109,8 +109,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 12,
-      "last_used_at": 1781837127.0831392
+      "hit_count": 21,
+      "last_used_at": 1781883373.1336782
     },
     "835870af58a7b455": {
       "signature": {
@@ -119,8 +119,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 9,
-      "last_used_at": 1781837735.2411761
+      "hit_count": 18,
+      "last_used_at": 1781883373.3059762
     },
     "3fb732d2bb64aef1": {
       "signature": {
@@ -139,8 +139,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 12,
-      "last_used_at": 1781838549.236269
+      "hit_count": 21,
+      "last_used_at": 1781883373.3372931
     },
     "2aefd62d72e26a17": {
       "signature": {
@@ -159,8 +159,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 18,
-      "last_used_at": 1781839729.807745
+      "hit_count": 27,
+      "last_used_at": 1781883373.246063
     },
     "f94a1fcd543869c4": {
       "signature": {
@@ -179,8 +179,8 @@
         "auth": "none",
         "format": "csv_zip"
       },
-      "hit_count": 4,
-      "last_used_at": 1781841070.1889899
+      "hit_count": 7,
+      "last_used_at": 1781883373.258912
     },
     "1d08d071612a38bc": {
       "signature": {
@@ -189,8 +189,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 3,
-      "last_used_at": 1781841410.778574
+      "hit_count": 6,
+      "last_used_at": 1781883373.3638358
     },
     "0cbbddab0f9611ba": {
       "signature": {
@@ -199,8 +199,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 9,
-      "last_used_at": 1781842096.4389079
+      "hit_count": 18,
+      "last_used_at": 1781883373.2746959
     },
     "fbe5184c5e476cf1": {
       "signature": {
@@ -209,8 +209,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 9,
-      "last_used_at": 1781842657.2107599
+      "hit_count": 18,
+      "last_used_at": 1781883373.435654
     }
   }
 }

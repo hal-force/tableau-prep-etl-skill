@@ -85,6 +85,11 @@ def _render_templates(plan: Plan, scripts_dir: Path, templates_dir: Path,
         autoescape=False,
         undefined=StrictUndefined,
     )
+    # `tojson` emits JSON literals (`true`/`false`/`null`) that are
+    # invalid Python; rendered .py files were SyntaxError'ing on
+    # `GRAPHQL = false`. `pyrepr` produces a `repr()` of the value, which
+    # round-trips through ast.literal_eval and is always valid Python.
+    env.filters["pyrepr"] = repr
     sources = sources or []
 
     # Map plan.transforms[i] → sources[transforms[i].branch]. Each

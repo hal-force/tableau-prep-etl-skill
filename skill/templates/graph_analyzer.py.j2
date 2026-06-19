@@ -64,8 +64,8 @@ import math
 import networkx as nx
 import pandas as pd
 
-SOURCE_COL = {{ source_id_col | tojson }}
-TARGET_COL = {{ target_id_col | tojson }}
+SOURCE_COL = {{ source_id_col | pyrepr }}
+TARGET_COL = {{ target_id_col | pyrepr }}
 LAYOUT_ITERATIONS = {{ layout_iterations }}
 LAYOUT_SCALE = {{ layout_scale }}
 LAYOUT_SEED_FROM_GEOGRAPHY = {{ layout_seed_from_geography }}
@@ -74,7 +74,7 @@ CLOSENESS_FULL_THRESHOLD = {{ closeness_full_threshold }}
 # Schema declared by upstream nodes (validator INPUT_SCHEMA-style).
 # Every key here is preserved in the output (twice — once per endpoint)
 # so the Hyper writer doesn't drop edge attributes.
-INPUT_SCHEMA: dict = {{ input_schema | tojson if input_schema is defined else '{}' }}
+INPUT_SCHEMA: dict = {{ input_schema | pyrepr if input_schema is defined else '{}' }}
 
 
 def _node_coords_from_edges(df: pd.DataFrame) -> dict:

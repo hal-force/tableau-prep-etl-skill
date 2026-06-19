@@ -64,7 +64,7 @@ TYPE_COL          = "{{ type_col }}"
 REFERENCE_NOW     = "{{ reference_now }}"
 FIRE_OUT_COL      = "{{ fire_out_col | default('FireOutDateTime') }}"
 
-INPUT_SCHEMA: dict = {{ input_schema | tojson if input_schema is defined else '{}' }}
+INPUT_SCHEMA: dict = {{ input_schema | pyrepr if input_schema is defined else '{}' }}
 
 
 def _now_utc():

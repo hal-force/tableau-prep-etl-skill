@@ -10,7 +10,7 @@ parameters block; the value lands as a column in the input DataFrame.
 Engine: {{ engine }}
 Query parameter: {{ query_param_name }}
 Max results per run: {{ max_results_per_run }}
-Domains allowlist: {{ domains_allowlist | tojson }}
+Domains allowlist: {{ domains_allowlist | pyrepr }}
 """
 import asyncio
 import os
@@ -18,17 +18,17 @@ from urllib.parse import quote_plus, urlparse
 
 import pandas as pd
 
-QUERY_PARAM_NAME = {{ query_param_name | tojson }}
+QUERY_PARAM_NAME = {{ query_param_name | pyrepr }}
 MAX_RESULTS = {{ max_results_per_run }}
-DOMAINS_ALLOWLIST = {{ domains_allowlist | tojson }}
-SEARCH_HOST = {{ (engine_search_host or 'www.google.com') | tojson }}
-SEARCH_PATH = {{ (engine_search_path or '/search') | tojson }}
-SEARCH_QUERY_PARAM = {{ (engine_search_query_param or 'q') | tojson }}
+DOMAINS_ALLOWLIST = {{ domains_allowlist | pyrepr }}
+SEARCH_HOST = {{ (engine_search_host or 'www.google.com') | pyrepr }}
+SEARCH_PATH = {{ (engine_search_path or '/search') | pyrepr }}
+SEARCH_QUERY_PARAM = {{ (engine_search_query_param or 'q') | pyrepr }}
 # Total wall-time bound for one crawl call. Defends against an unbounded
 # headless-browser session that could otherwise wedge the TabPy worker.
-CRAWL_TIMEOUT_S = {{ crawl_timeout_s | default(60) | tojson }}
+CRAWL_TIMEOUT_S = {{ crawl_timeout_s | default(60) | pyrepr }}
 # Hard cap on bytes the browser will hand back per page.
-MAX_RESPONSE_BYTES = {{ max_response_bytes | default(50_000_000) | tojson }}
+MAX_RESPONSE_BYTES = {{ max_response_bytes | default(50_000_000) | pyrepr }}
 
 # Operator policy: refuse to run an unfiltered crawl. Empty allowlist =>
 # the planner forgot to seed one, which means we'd happily follow links

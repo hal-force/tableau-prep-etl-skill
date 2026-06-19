@@ -20,11 +20,11 @@ from urllib.parse import urlparse
 import pandas as pd
 
 
-API_URL = {{ url | tojson }}
-CERT_PATH_ENV = {{ cert_path_env | tojson }}
-CERT_KEY_ENV = {{ cert_key_env | tojson }}
-TIMEOUT_S = {{ extra.get('timeout_s', 120) | default(120) | tojson }}
-MAX_RESPONSE_BYTES = {{ extra.get('max_response_bytes', 500_000_000) | tojson }}
+API_URL = {{ url | pyrepr }}
+CERT_PATH_ENV = {{ cert_path_env | pyrepr }}
+CERT_KEY_ENV = {{ cert_key_env | pyrepr }}
+TIMEOUT_S = {{ extra.get('timeout_s', 120) | default(120) | pyrepr }}
+MAX_RESPONSE_BYTES = {{ extra.get('max_response_bytes', 500_000_000) | pyrepr }}
 
 
 def _assert_url_safe(u: str) -> None:
