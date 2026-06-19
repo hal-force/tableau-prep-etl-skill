@@ -211,6 +211,21 @@ Hyper output you can run cold:
 | `flows/otf_grants/v1/` | otf.ca/open CSVs | 3-source multi-CSV join, bilingual headers, Latin-1 encoding |
 | `flows/us_wildfires_eoc/v1/` | NIFC/WFIGS ArcGIS | EOC analyst metrics (size_class, growth_band, region_key) |
 | `flows/us_grid_network/v1/` | HIFLD transmission lines | networkx centralities + Fruchterman-Reingold layout |
+| `flows/fed_outlays/v1/` | Treasury Fiscal Data | JSON:API page[number]/page[size] paginated walk (3K rows) |
+| `flows/fed_workforce/v1/` | BLS Public Data API | POST + JSON body, flatten inner records, derived obs_date |
+| `flows/cisa_kev/v1/` | CISA KEV catalog | list_join + days_between (exploit SLA window) |
+| `flows/fed_register_actions/v1/` | Federal Register API | list_first_field + days_since (regulatory case-mgmt) |
+| `flows/fema_disasters/v1/` | OpenFEMA OData v2 | $top/$skip pagination + nested envelope |
+| `flows/cms_deficiencies/v1/` | CMS Provider Data | 4xx-graceful pagination + page-size cap discovery |
+| `flows/college_scorecard/v1/` | Dept of Ed bulk ZIP | csv_zip + per-column CSV_SCHEMA coercion |
+| `flows/opensky_us/v1/` | OpenSky Network | json_array_columns positional projection (3.5K aircraft) |
+| `flows/epa_aqs_ozone/v1/` | EPA AQS Data API | Drop Content-Type on bodyless GET (EPA strict-API fix) |
+| `flows/usaspending_contracts/v1/` | USAspending.gov | json_page_in_body + has_next + dict_field flatten |
+
+The bottom 10 are the **Prep Agent demo collection** — published
+together under a nested `Prep Agent` parent project on Cloud, each
+in its own `01 - Federal Outlays`, `02 - Federal Workforce`, …
+child project for browseable side-by-side demos.
 
 Reproduce any one with:
 
