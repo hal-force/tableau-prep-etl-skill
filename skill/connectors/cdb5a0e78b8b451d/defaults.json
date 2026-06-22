@@ -1,0 +1,16 @@
+{
+  "json_records_path": "",
+  "json_schema": {
+    "date": "date",
+    "day": "int",
+    "personnel": "int",
+    "personnel_qualifier": "string",
+    "POW": "int"
+  },
+  "json_column_aliases": {
+    "personnel*": "personnel_qualifier"
+  },
+  "verify_ssl": true,
+  "timeout_s": 60,
+  "max_retries": 3
+}

@@ -291,11 +291,14 @@ Hyper output you can run cold:
 | `flows/opensky_us/v1/` | OpenSky Network | json_array_columns positional projection (3.5K aircraft) |
 | `flows/epa_aqs_ozone/v1/` | EPA AQS Data API | Drop Content-Type on bodyless GET (EPA strict-API fix) |
 | `flows/usaspending_contracts/v1/` | USAspending.gov | json_page_in_body + has_next + dict_field flatten |
+| `flows/russia_ukraine_attrition/v1/` | PetroIvaniuk dataset (GitHub) | Multi-source join + per-branch output routing; built via advanced collections route |
 
-The bottom 10 are the **Prep Agent demo collection** — published
-together under a nested `Prep Agent` parent project on Cloud, each
-in its own `01 - Federal Outlays`, `02 - Federal Workforce`, …
-child project for browseable side-by-side demos.
+The first 14 form a baseline; flows 1-10 of the **Prep Agent demo
+collection** are the ten archived flows below
+`flows/russia_ukraine_attrition/v1/` (the eleventh sits in slot 11).
+The collection lives under a nested `Prep Agent` parent project on
+Cloud, each in its own `01 - Federal Outlays`, `02 - Federal Workforce`,
+… child project for browseable side-by-side demos.
 
 Reproduce any one with:
 

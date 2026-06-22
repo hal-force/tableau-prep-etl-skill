@@ -1,0 +1,142 @@
+{
+  "request": "Build a Russia/Ukraine war attrition dashboard. Pull the daily Russian-loss series (personnel + equipment) and the Oryx per-model visual-confirmation register from the public PetroIvaniuk/2022-Ukraine-Russia-War-Dataset GitHub feed, join them on date, and emit one Hyper extract that supports trajectory analysis: cumulative-by-class, 30-day rolling, week-over-week %change, and recent-mix vs lifetime-mix.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "Russia Losses Personnel",
+      "description": "Daily personnel-loss series from the Ukraine MoD, normalized by PetroIvaniuk/2022-Ukraine-Russia-War-Dataset. One row per day from 2022-02-25 to present. 'about' qualifier preserved on personnel rows; figures are UA MoD self-reports \u2014 runs higher than independent OSINT.",
+      "path": "",
+      "url": "https://raw.githubusercontent.com/PetroIvaniuk/2022-Ukraine-Russia-War-Dataset/main/data/russia_losses_personnel.json",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "json_records_path": "",
+        "json_schema": {
+          "date": "date",
+          "day": "int",
+          "personnel": "int",
+          "POW": "int"
+        },
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3
+      }
+    },
+    {
+      "type": "rest_api",
+      "name": "Russia Losses Equipment",
+      "description": "Daily equipment-loss series. 13+ classes including tank, APC, field artillery, MRL, aircraft, helicopter, drone, naval ship, anti-aircraft warfare, plus later additions (cruise missiles, submarines, ground robotic systems, special equipment, vehicles and fuel tanks). Sourced from PetroIvaniuk/2022-Ukraine-Russia-War-Dataset; figures are UA MoD self-reports.",
+      "path": "",
+      "url": "https://raw.githubusercontent.com/PetroIvaniuk/2022-Ukraine-Russia-War-Dataset/main/data/russia_losses_equipment.json",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "json_records_path": "",
+        "json_schema": {
+          "date": "date",
+          "day": "int",
+          "aircraft": "int",
+          "helicopter": "int",
+          "tank": "int",
+          "APC": "int",
+          "field artillery": "int",
+          "MRL": "int",
+          "military auto": "int",
+          "fuel tank": "int",
+          "drone": "int",
+          "naval ship": "int",
+          "anti-aircraft warfare": "int",
+          "cruise missiles": "int",
+          "submarines": "int",
+          "vehicles and fuel tanks": "int",
+          "special equipment": "int",
+          "ground robotic systems": "int"
+        },
+        "json_fill_missing_with_zero": true,
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3
+      }
+    },
+    {
+      "type": "rest_api",
+      "name": "Russia Losses Equipment Oryx",
+      "description": "Per-model visual-confirmation OSINT register from Oryx, normalized in PetroIvaniuk/2022-Ukraine-Russia-War-Dataset. One row per Russian equipment model with a `losses_total` count Oryx has photo-confirmed. NOT a time series; provides a conservative ground floor for total equipment lost and a model-level taxonomy. The equipment_ua column bridges Oryx's model taxonomy to UA MoD's class buckets.",
+      "path": "",
+      "url": "https://raw.githubusercontent.com/PetroIvaniuk/2022-Ukraine-Russia-War-Dataset/main/data/russia_losses_equipment_oryx.json",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "json_records_path": "",
+        "json_schema": {
+          "equipment_oryx": "string",
+          "model": "string",
+          "manufacturer": "string",
+          "losses_total": "int",
+          "equipment_ua": "string"
+        },
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "join",
+      "args": {
+        "name": "Personnel + Equipment by Date",
+        "left_branch": 0,
+        "right_branch": 1,
+        "on": "date",
+        "join_type": "inner"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "russia_ukraine_losses_daily",
+      "path": "",
+      "description": "Daily Russian-loss series in Ukraine (Feb 2022 \u2192 present). One row per day with personnel cumulative count, POW, and cumulative equipment counts across 13+ classes. Sourced from PetroIvaniuk/2022-Ukraine-Russia-War-Dataset (UA MoD self-reports). Use this to drive trajectory dashboards: cumulative-by-class, 30-day rolling, week-over-week %change, recent-mix vs lifetime-mix.\n\nONE-SIDED DATASET \u2014 Russian losses only; Ukrainian losses are not represented. UA MoD figures run higher than independent OSINT estimates.\n\nGaps from the collections plan:\n- F4 territorial change (sq-km Russian-controlled): not in this dataset. Three passes attempted; ISW + DeepStateMap data lives behind interactive map services and is out of scope. Effect: 'trajectory' here is attrition-only \u2014 do not infer territorial change from these numbers.\n- F5.1 OSINT confirmation lag (median days from event to listing): the Oryx mirror in this dataset is a normalized rollup, not a per-loss-event feed with listing dates. Effect: we cannot quantify under-counting in recent 30/90-day windows. Treat recent figures as floors.",
+      "source": "Personnel + Equipment by Date"
+    },
+    {
+      "kind": "published_data_source",
+      "name": "russia_ukraine_losses_oryx_register",
+      "path": "",
+      "description": "Per-model Russian equipment loss register from Oryx (visual-confirmation OSINT). One row per equipment model with a photo-confirmed loss count. Use for compositional drilldown (T-72B vs T-72B3 vs T-90, etc.) and as a conservative ground floor against the UA-MoD daily class totals. Bridge column: equipment_ua maps Oryx model taxonomy to the UA-MoD class buckets used in the daily series.",
+      "source": "Russia Losses Equipment Oryx"
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "confidence": 0.9,
+  "open_questions": [],
+  "server_publish": {
+    "project": "11 - Russia Ukraine War Attrition",
+    "parent_project": "Prep Agent",
+    "flow_name": "Russia Ukraine War Attrition",
+    "overwrite": true,
+    "cadence": "daily",
+    "hour_utc": 13,
+    "minute_utc": 0,
+    "schedule_name_hint": "Russia Ukraine Attrition Daily Refresh"
+  },
+  "_advanced_route": {
+    "question": "How have Russian military losses in Ukraine evolved over the past 24 months \u2014 by category (personnel, equipment by class, territory) \u2014 and what does the trajectory of those losses suggest about the tempo and intensity of the conflict?",
+    "sat_brief": "runtime/russia_losses_ukraine_dryrun/sat_brief.md",
+    "collections_plan": "runtime/russia_losses_ukraine_dryrun/collections_plan.json",
+    "collections_log": "runtime/russia_losses_ukraine_dryrun/collections_log.md",
+    "indicators_satisfied": 10,
+    "indicators_planned": 13,
+    "gaps_declared": [
+      "F4.1",
+      "F4.2",
+      "F5.1"
+    ]
+  }
+}

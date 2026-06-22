@@ -221,9 +221,13 @@ To fill these gaps, the most likely next steps are:
 - {concrete suggestion 2}
 ```
 
-The metadata writer's DS-level description prompt already accepts
-a `gaps_addendum` field — populate it from `collections_log.md` so
-the gap text reaches the site.
+**Where the gap text lives.** The validator does NOT accept a
+top-level `gaps_addendum` output field. Fold the verbatim gap
+declaration into the `output.description` string in `spec.json` —
+the metadata writer's DS-level description prompt incorporates the
+description as-is, so the gap text reaches the site that way. The
+authoritative artifact for review remains `collections_log.md`
+alongside the run.
 
 Two non-negotiable rules for gap declaration:
 
@@ -241,10 +245,24 @@ Two non-negotiable rules for gap declaration:
 Once the collections plan is satisfied (every indicator GREEN, or
 AMBER/RED gaps documented), the planner emits a normal `spec.json`
 that the simplified route consumes. The advanced route's artifact
-trail (`sat_brief.md`, `collections_plan.json`, `collections_log.md`,
-`gaps_addendum.md`) lives alongside the run for audit and gets
-archived under `flows/<flow>/v<N>/` along with the .tfl on a
-successful publish.
+trail (`sat_brief.md`, `collections_plan.json`, `collections_log.md`)
+lives alongside the run for audit and gets archived under
+`flows/<flow>/v<N>/` along with the .tfl on a successful publish.
+
+**Server-publish is the default.** Step 5's `spec.json` MUST include a
+`server_publish` block targeting the Prep Agent (or operator-named)
+parent project with the next sequential `NN - Title` child-project
+name. The handed-off run command always uses
+`--publish --auto-create-project` unless the operator explicitly asks
+for local-only. The deliverable is a Server-side asset, not a local
+Hyper.
+
+**`output.source` is a string.** Route an output to a specific
+upstream by setting `"source": "<name>"` where `<name>` is either a
+transformation's name or one of `spec.sources[*].name`. The validator
+rejects the dict form `{"transformation": "..."}`. Sibling outputs
+hanging off un-joined source branches resolve via the source-name
+lookup; outputs that name a joined branch resolve to the join tail.
 
 From here, Phases 1-11 of the simplified route apply unchanged.
 

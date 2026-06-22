@@ -211,6 +211,16 @@
       },
       "hit_count": 18,
       "last_used_at": 1781883373.435654
+    },
+    "cdb5a0e78b8b451d": {
+      "signature": {
+        "type": "rest_api",
+        "host": "raw.githubusercontent.com",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 30,
+      "last_used_at": 1782148841.3623822
     }
   }
 }

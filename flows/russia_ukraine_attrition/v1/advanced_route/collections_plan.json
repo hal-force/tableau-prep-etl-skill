@@ -1,0 +1,100 @@
+{
+  "question": "How have Russian military losses in Ukraine evolved over the past 24 months — by category (personnel, equipment by class, territory) — and what does the trajectory of those losses suggest about the tempo and intensity of the conflict?",
+  "internal_scan": {
+    "site": "prod-useast-a.online.tableau.com / usfederaldemos",
+    "ran_at_utc": "2026-06-22T00:00:00Z",
+    "matches": [],
+    "verdict": "Zero internal candidates. Phase 0 returned 0 hits with score > 0; remaining results were filler. Proceeding to external."
+  },
+  "indicators": [
+    {
+      "id": "F1.1",
+      "name": "Cumulative equipment losses by class",
+      "window": "full war to date",
+      "data_required": [
+        "Per-loss-event record: date, equipment_type, equipment_class, side (Russia), confirmation_method",
+        "Loss-class taxonomy covering tanks, IFVs, APCs, artillery, MLRS, AD, aircraft, helicopters, UAVs, naval"
+      ],
+      "candidates": [
+        {"tier": "internal", "source": "Tableau Server published DS", "result": "NONE — Phase 0 scan empty"},
+        {"tier": "external", "source": "Oryx (oryxspioenkop.com)", "rationale": "Visual-confirmation OSINT register. Per-equipment row, photographic evidence, mature taxonomy. Gold standard for equipment.", "format": "HTML tables, requires scrape"},
+        {"tier": "external", "source": "WarSpotting / Lostarmour", "rationale": "Russian-side OSINT trackers; useful for cross-checking", "format": "HTML"},
+        {"tier": "external", "source": "Ukraine MoD daily loss bulletins", "rationale": "Self-report; counts higher than OSINT. Useful for compositional shape but not absolute totals", "format": "Daily posts on mil.gov.ua + Facebook"}
+      ],
+      "acceptance": "≥18 months of daily-granular records; ≥10 distinct equipment classes; each row has a confirmation_method field"
+    },
+    {
+      "id": "F1.2",
+      "name": "30-day rolling equipment loss count by class",
+      "window": "30d",
+      "data_required": ["Same as F1.1 — derived in-flow via window function"],
+      "candidates": [{"tier": "derived", "source": "computed from F1.1 source"}],
+      "acceptance": "F1.1 acceptance met; rolling window computable"
+    },
+    {
+      "id": "F1.3",
+      "name": "Week-over-week %change in equipment loss rate by class",
+      "window": "7d vs prior 7d",
+      "data_required": ["Same as F1.1"],
+      "candidates": [{"tier": "derived", "source": "computed from F1.1 source"}],
+      "acceptance": "F1.1 acceptance met"
+    },
+    {
+      "id": "F2.1",
+      "name": "Cumulative personnel losses",
+      "window": "full war to date",
+      "data_required": ["Per-day per-side personnel-loss count, with source attribution"],
+      "candidates": [
+        {"tier": "internal", "source": "Tableau Server published DS", "result": "NONE"},
+        {"tier": "external", "source": "Ukraine MoD daily losses bulletin (mil.gov.ua)", "rationale": "Daily figure since invasion; widely reported but is a self-report and runs high", "format": "HTML / X / Facebook"},
+        {"tier": "external", "source": "UALosses.org named-KIA database", "rationale": "Open-source name-confirmed KIA — conservative ground floor", "format": "DB-backed site"},
+        {"tier": "external", "source": "BBC Russia + Mediazona named-KIA tally", "rationale": "Cross-referenced KIA counter for Russian fatalities", "format": "Article + dataset"}
+      ],
+      "acceptance": "≥18 months daily series; clear attribution"
+    },
+    {"id": "F2.2", "name": "30-day rolling personnel loss count", "window": "30d", "data_required": ["Derived from F2.1"], "candidates": [{"tier": "derived", "source": "computed from F2.1"}], "acceptance": "F2.1 met"},
+    {"id": "F2.3", "name": "Week-over-week %change in personnel loss rate", "window": "7d vs prior 7d", "data_required": ["Derived from F2.1"], "candidates": [{"tier": "derived", "source": "computed from F2.1"}], "acceptance": "F2.1 met"},
+    {
+      "id": "F3.1",
+      "name": "Equipment-loss mix — % of total losses by class for last 90 days vs prior-war average",
+      "window": "90d vs lifetime",
+      "data_required": ["F1.1 fields; computed in-flow"],
+      "candidates": [{"tier": "derived", "source": "computed from F1.1"}],
+      "acceptance": "F1.1 met"
+    },
+    {"id": "F3.2", "name": "Top 3 equipment classes by recent loss share", "window": "30d", "data_required": ["F1.1 fields; computed in-flow"], "candidates": [{"tier": "derived", "source": "computed from F1.1"}], "acceptance": "F1.1 met"},
+    {
+      "id": "F4.1",
+      "name": "Net Russian-controlled territory change",
+      "window": "30d",
+      "data_required": ["Daily sq-km estimate of Russian-controlled area in Ukraine"],
+      "candidates": [
+        {"tier": "internal", "source": "Tableau Server published DS", "result": "NONE"},
+        {"tier": "external", "source": "ISW interactive control-of-terrain map daily JSON exports", "rationale": "Daily polygons; the standard OSINT territorial reference", "format": "JSON / GeoJSON"},
+        {"tier": "external", "source": "DeepStateMap.live (Ukrainian OSINT)", "rationale": "Higher-frequency updates, polygonal control areas", "format": "Web-rendered map; data behind interactive layer"}
+      ],
+      "acceptance": "Daily sq-km series, ≥18 months"
+    },
+    {"id": "F4.2", "name": "Cumulative territory change since invasion", "window": "full war", "data_required": ["Derived from F4.1"], "candidates": [{"tier": "derived", "source": "computed from F4.1"}], "acceptance": "F4.1 met"},
+    {
+      "id": "F5.1",
+      "name": "OSINT confirmation lag — median days between loss event and confirmed listing",
+      "window": "last 90d",
+      "data_required": ["Per-loss row with both event_date and listing_date / confirmation_date"],
+      "candidates": [{"tier": "external", "source": "Oryx (oryxspioenkop.com) — listing date inferred from page-edit history; may require git of an Oryx mirror like Tom Cooper's CSV mirror"}],
+      "acceptance": "≥80% of recent-window rows have both dates"
+    },
+    {
+      "id": "F5.2",
+      "name": "Share of recent-window losses with photographic / geolocated confirmation",
+      "window": "30d",
+      "data_required": ["confirmation_method field on each loss row"],
+      "candidates": [{"tier": "external", "source": "Oryx — confirmation_method is the implicit Oryx contract (every listing is photo-backed)"}],
+      "acceptance": "F1.1 met; confirmation_method present"
+    }
+  ],
+  "preference_order_rule": "INTERNAL → DERIVED → EXTERNAL. Internal exhausted (zero hits); 6 of 13 indicators are derived from the same external source as their parent indicator.",
+  "approval_required_before_acquisition": [
+    "External web fetch on first-time hosts: oryxspioenkop.com, mil.gov.ua, ualosses.org, isw.pub, deepstatemap.live"
+  ]
+}
