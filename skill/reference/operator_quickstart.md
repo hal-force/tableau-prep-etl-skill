@@ -4,6 +4,23 @@ A cold-start guide for using `tableau-prep-etl` without prior session
 context. Read top-to-bottom the first time; after that, the section
 headers are an index.
 
+## Which route? Simplified vs Advanced
+
+This guide documents the **simplified** route — the one-shot path
+that's fastest when the user already has a clean ask or a spec.json.
+
+If the user instead has a *question* ("which posts are most exposed?",
+"where's our supplier risk concentrating?") and the data sources
+haven't been picked yet, switch to the **advanced** route — an
+intelligence-collections-style workflow that refines the question via
+Structured Analytic Techniques, derives factors and indicators, builds
+a collections plan, and iterates over up to three passes (INTERNAL
+sources first, external second) before handing off to the simplified
+pipeline. Full walkthrough: `advanced_collections_route.md`.
+
+Activate the advanced route with `--route advanced` on `run_loop.py`,
+or `--question "..."` in place of `--spec`. Default is simplified.
+
 ## What this skill does
 
 You give it a natural-language ETL request (or an existing spec.json).
