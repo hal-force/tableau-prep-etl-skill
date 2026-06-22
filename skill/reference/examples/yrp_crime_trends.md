@@ -144,8 +144,7 @@ python3 -m skill.scripts.run_loop \
 
 ## Gotchas codified from this run
 
-See [`feedback-trend-enrichment-gotchas`](../../../../../../../Users/jgillmore/.claude/projects/-Users-jgillmore-claude-projects/memory/feedback_trend_enrichment_gotchas.md)
-for:
+Codified gotchas:
 
 1. **Inverted YoY lookup keys.** Building an intermediate dict with
    `{(v, y - 1, m): c}` and then querying with `(v, y, m)` reads

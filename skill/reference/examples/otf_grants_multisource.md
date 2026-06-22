@@ -144,8 +144,7 @@ python3 -m skill.scripts.run_loop \
 
 ## Gotchas codified from this run
 
-See [`feedback-tfl-seed-clone-gotchas`](../../../../../../../Users/jgillmore/.claude/projects/-Users-jgillmore-claude-projects/memory/feedback_tfl_seed_clone_gotchas.md)
-("Multi-source / join traps" section) for:
+Codified gotchas (multi-source / join traps):
 
 1. `JoinType` enum strings must be `inner|left|right|full|notInner|leftOnly|rightOnly` — NOT `leftOuter`/`rightOuter`/`fullOuter`. The planner aliases the SQL forms automatically.
 2. Edges *into* a `SuperJoin` need `nextNamespace: "Left"` / `"Right"`. Edges *out* of a join stay `Default`.

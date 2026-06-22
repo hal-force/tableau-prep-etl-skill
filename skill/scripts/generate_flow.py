@@ -675,6 +675,18 @@ def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
     # If there were no joins, fall back to branch 0 (single-source flow).
     final_tail = branch_tails[plan.joins[-1].join_left] if plan.joins else branch_tails[0]
 
+    # Source-name → branch-tail lookup so outputs can route to a source
+    # branch by name (e.g. `output.source = "<spec.sources[i].name>"`).
+    # When that branch was the left side of a join, its entry already
+    # points to the join id (line above advances branch_tails[join_left]
+    # to the join), so source-named outputs on a joined branch resolve
+    # to the join tail — correct. Un-joined sibling branches keep their
+    # original tail and route to it.
+    source_tails_by_name: dict[str, str] = {}
+    for i, src in enumerate(spec.sources):
+        if i < len(branch_tails) and src.name:
+            source_tails_by_name[src.name] = branch_tails[i]
+
     # 2c. QA nodes (linear after the final join)
     for node in plan.qa_nodes:
         sid, snode = make_script_node(
@@ -699,7 +711,14 @@ def generate_flow(spec: Spec, plan: Plan, run_dir: Path,
         attrs = o.connector_attrs or {}
         kind = attrs.get("kind", "hyper")
         source_name = attrs.get("source", "") or ""
-        upstream_id = transform_ids_by_name.get(source_name, final_tail) if source_name else final_tail
+        if source_name:
+            upstream_id = (
+                transform_ids_by_name.get(source_name)
+                or source_tails_by_name.get(source_name)
+                or final_tail
+            )
+        else:
+            upstream_id = final_tail
         if kind == "published_data_source" and not local_iteration:
             project_name = attrs.get("project") or default_project
             oid, onode = make_published_datasource_node(

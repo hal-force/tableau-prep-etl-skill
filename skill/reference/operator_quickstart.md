@@ -61,13 +61,19 @@ page is the "I want to drive it" guide.
    For self-signed dev gateways: `LLM_GATEWAY_VERIFY_SSL=false`.
 
 5. **Tableau Server creds** — only needed for publish, INTERNAL scan,
-   and metadata writer. Store in macOS Keychain:
+   and metadata writer. Store in macOS Keychain (replace the placeholder
+   values with your own server URL, PAT, and site contentUrl — the
+   strings below are *examples*, not defaults):
    ```sh
-   security add-generic-password -s tableau-prep-etl -a url         -U -w 'https://prod-useast-a.online.tableau.com'
+   security add-generic-password -s tableau-prep-etl -a url         -U -w 'https://YOUR-POD.online.tableau.com'
    security add-generic-password -s tableau-prep-etl -a pat-name    -U -w 'YOUR_PAT_NAME'
    security add-generic-password -s tableau-prep-etl -a pat-secret  -U -w 'YOUR_PAT_SECRET'
-   security add-generic-password -s tableau-prep-etl -a site        -U -w 'usfederaldemos'
+   security add-generic-password -s tableau-prep-etl -a site        -U -w 'YOUR_SITE_CONTENT_URL'
    ```
+   On Tableau **Server** (on-prem), use the Server URL and leave the
+   `site` entry empty (`-w ''`) for the default site. On Tableau
+   **Cloud**, use your pod URL (e.g. `prod-useast-a.online.tableau.com`,
+   `10ax.online.tableau.com`, etc.) and your site contentUrl.
    Then load them into the shell:
    ```sh
    source ~/.tableau-prep-etl/load_env.sh
