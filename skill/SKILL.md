@@ -43,10 +43,44 @@ It is **not** the right tool for:
 - Running production ETL ad-hoc (run the produced `.tfl` via
   `tableau-prep-cli` directly).
 
+## Routes — Simplified vs Advanced
+
+The skill has two entry routes. Pick the one that matches the user's
+ask, not the data shape.
+
+- **Simplified (one-shot).** Default. The user has a known source or
+  a spec and wants the .tfl + Hyper + optional publish in a single
+  pass. Phase 0 still runs INTERNAL-first; everything after it is
+  the straight pipeline below. Cold-start how-to:
+  `reference/operator_quickstart.md`.
+- **Advanced (collections planning).** The user has a *question*
+  rather than a dataset. Inserts a **Phase 0.5** ahead of the
+  pipeline: Structured-Analytic-Techniques question refinement →
+  factors → indicators → collections plan → up to **three passes**
+  of iterative data acquisition (INTERNAL-first, then external) →
+  explicit gap declaration for any indicator that ends RED. The
+  collections plan then emits a `spec.json` that Phases 1-11 below
+  consume unchanged. Full workflow + templates:
+  `reference/advanced_collections_route.md`.
+
+Trigger the advanced route with `--route advanced` (or by passing
+`--question "..."` instead of `--spec`); otherwise the simplified
+route is the default.
+
+**Internal-first sourcing** applies to both routes — Phase 0 always
+runs first unless `--skip-scan` is passed. The advanced route makes
+this preference structural: every indicator in the collections plan
+lists internal candidates ahead of external ones, and the planner
+won't reach for external sources until the INTERNAL scan + any named
+warehouse connections are exhausted.
+
 ## Workflow
 
 When invoked, the skill walks through these phases. Each phase has a
-script under `scripts/`; the skill orchestrates them.
+script under `scripts/`; the skill orchestrates them. The advanced
+route's Phase 0.5 is described in
+`reference/advanced_collections_route.md`; Phases 0 + 1-11 below run
+identically in both routes.
 
 ### Phase 0: INTERNAL data scan (`scripts/server_scan.py`)
 
