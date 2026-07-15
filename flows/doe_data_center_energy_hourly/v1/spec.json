@@ -1,0 +1,69 @@
+{
+  "request": "DOE Data-Center Energy Hourly: RTO/ISO grid-operator hourly demand (`type=D`) across the four US regions where data centers are heaviest \u2014 PJM (Northern Virginia / Ashburn), ERCOT (Central Texas / San Antonio Loop), CAISO (Silicon Valley), MISO (Chicago/Ohio). One row per (respondent, hour). This dataset supports diurnal load-curve analysis, weekend vs. weekday load shape (a fingerprint for data-center dominance since DC load is flat while HVAC/lighting is peaky), and cross-RTO comparison of how DC growth is bending each region's load curve. Source: EIA Open Data v2 electricity/rto/region-data endpoint (grid-operator-reported demand, refreshed hourly with a ~24h lag).",
+  "sources": [
+    {
+      "type": "rest_api",
+      "path": "",
+      "url": "https://api.eia.gov/v2/electricity/rto/region-data/data/?frequency=hourly&data[0]=value&facets[type][]=D&facets[respondent][]=PJM&facets[respondent][]=ERCO&facets[respondent][]=CISO&facets[respondent][]=MISO&sort[0][column]=period&sort[0][direction]=desc",
+      "format": "json",
+      "auth": "query_key",
+      "extra": {
+        "query_key_param_name": "api_key",
+        "api_key_env": "<redacted>",
+        "timeout_s": 120,
+        "max_retries": 3,
+        "verify_ssl": true,
+        "json_records_path": "response.data",
+        "json_paginate": true,
+        "json_page_param": "offset",
+        "json_page_size_param": "length",
+        "json_page_size": 5000,
+        "json_page_start": 0,
+        "json_page_kind": "offset",
+        "json_max_pages": 40,
+        "json_max_rows": 200000,
+        "json_schema": {
+          "period": "string",
+          "respondent": "string",
+          "respondent-name": "string",
+          "type": "string",
+          "type-name": "string",
+          "value": "decimal"
+        }
+      },
+      "name": "EIA RTO Region Hourly Demand",
+      "description": "EIA Open Data v2 electricity/rto/region-data at hourly cadence, filtered to type=D (demand) and the four highest-DC-density RTOs: PJM, ERCO (ERCOT), CISO (CAISO), MISO. Columns: period (ISO-8601 hour), respondent (RTO code), respondent-name, type ('D'), type-name, value (MWh, hourly demand). Server-side sorted desc by period so newest hours land first; paginated at 5000 rows/page. Auth via ?api_key= from $EIA_API_KEY."
+    }
+  ],
+  "transformations": [],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "DOE Data Center Energy Hourly - RTO Demand",
+      "path": "",
+      "description": "Hourly grid-operator demand (MWh) for the four highest-DC-density US RTOs: PJM (Ashburn), ERCOT (Texas), CAISO (Silicon Valley), MISO (Midwest). Source: EIA Open Data v2 electricity/rto/region-data. Columns: period (ISO-8601 hour), respondent (RTO code), respondent-name, type ('D'), type-name, value (MWh). Cadence: hourly (with ~24h data lag). Use for diurnal load-curve analysis, weekend/weekday shape comparison, and tracking how DC growth flattens the daily load curve in each RTO.",
+      "source": "EIA RTO Region Hourly Demand Fetcher",
+      "project": "DOE Data Center Energy"
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "every_6_hours",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "DOE Data Center Energy",
+    "parent_project": "Prep Agent",
+    "flow_name": "DOE Data Center Energy Hourly",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 3,
+    "minute_utc": 15,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "DOE Data Center Energy Hourly Every 6h",
+    "balance_tolerance_hours": 1
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

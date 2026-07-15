@@ -51,9 +51,13 @@ LAT_COL              = "{{ lat_col }}"
 LON_COL              = "{{ lon_col }}"
 DATE_COL             = "{{ date_col }}"
 EVENT_ROOT_COL       = "{{ event_root_col }}"
+EVENT_CODE_COL       = "{{ event_code_col }}"
 GOLDSTEIN_COL        = "{{ goldstein_col }}"
 ACTOR1_COUNTRY_COL   = "{{ actor1_country_col }}"
 ACTOR2_COUNTRY_COL   = "{{ actor2_country_col }}"
+ACTOR1_NAME_COL      = "{{ actor1_name_col }}"
+ACTOR2_NAME_COL      = "{{ actor2_name_col }}"
+ACTION_GEO_FULL_COL  = "{{ action_geo_full_col }}"
 NUM_MENTIONS_COL     = "{{ num_mentions_col }}"
 SOURCE_URL_COL       = "{{ source_url_col }}"
 
@@ -72,6 +76,98 @@ _CAMEO_SEVERITY = {
     "19": (3, "Fight"),
     "20": (4, "Mass violence"),
 }
+
+
+# Threat-class CAMEO EventCode -> human label. GDELT 1.0 ships only the
+# event taxonomy code, not a narrative description, so the dashboard's
+# best "free-text" surface is a composed sentence using these labels +
+# the as-reported actor names + the geocoded place. Covers the leaf
+# codes under threat roots 13/14/17/18/19/20; falls back to the root
+# label for any codes not in this table.
+_CAMEO_EVENT_LABEL = {
+    "130": "threatened",
+    "131": "threatened with non-force",
+    "132": "threatened with administrative sanctions",
+    "133": "threatened to halt negotiations",
+    "134": "threatened to halt mediation",
+    "135": "threatened to halt international involvement",
+    "136": "threatened with repression",
+    "137": "threatened with force",
+    "138": "threatened with massive force",
+    "139": "issued an ultimatum to",
+    "140": "engaged in political dissent against",
+    "141": "demonstrated against",
+    "1411": "demonstrated for policy change against",
+    "1412": "demonstrated for leadership change against",
+    "1413": "demonstrated for rights against",
+    "1414": "demonstrated for regime change against",
+    "142": "conducted a hunger strike against",
+    "143": "conducted a strike or boycott against",
+    "144": "obstructed passage or blocked",
+    "145": "protested violently against",
+    "170": "coerced",
+    "171": "seized or damaged property of",
+    "172": "imposed administrative sanctions on",
+    "173": "arrested or detained",
+    "174": "expelled or deported",
+    "175": "took hostage of",
+    "176": "imposed restrictions on",
+    "180": "used unconventional violence against",
+    "181": "abducted or hijacked",
+    "182": "physically assaulted",
+    "1821": "sexually assaulted",
+    "1822": "tortured",
+    "1823": "killed by physical assault",
+    "183": "conducted a suicide, car, or other non-military bombing against",
+    "1831": "carried out a suicide bombing against",
+    "1832": "carried out a car bombing against",
+    "1833": "carried out a roadside bombing against",
+    "184": "used as human shield",
+    "185": "attempted to assassinate",
+    "186": "assassinated",
+    "190": "fought with",
+    "191": "imposed blockade or restricted movement of",
+    "192": "occupied territory of",
+    "193": "fought with small-arms or light weapons against",
+    "194": "fought with artillery and tanks against",
+    "195": "employed aerial weapons against",
+    "196": "violated a ceasefire with",
+    "200": "engaged in mass-violence against",
+    "201": "engaged in mass-expulsion of",
+    "202": "engaged in mass-killing of",
+    "203": "engaged in ethnic cleansing of",
+}
+
+
+def _event_label(event_code: str, root_code: str, root_label: str) -> str:
+    """Pick the most-specific human verb available for the EventCode."""
+    code = (event_code or "").strip()
+    if code in _CAMEO_EVENT_LABEL:
+        return _CAMEO_EVENT_LABEL[code]
+    # Try the 3-digit base if a 4-digit leaf wasn't in the table.
+    if len(code) >= 3 and code[:3] in _CAMEO_EVENT_LABEL:
+        return _CAMEO_EVENT_LABEL[code[:3]]
+    return root_label.lower() + "ed" if root_label else "engaged with"
+
+
+def _compose_summary(actor1: str, actor2: str, verb: str, place: str, date_str: str) -> str:
+    """Compose a one-sentence narrative from the available coded fields.
+
+    Falls back gracefully when actor names are missing (GDELT often
+    reports a verb against an unspecified counter-party).
+    """
+    a1 = (actor1 or "").strip().title() or "Unknown actor"
+    a2 = (actor2 or "").strip().title()
+    where = (place or "").strip()
+    if a2:
+        sentence = f"{a1} {verb} {a2}"
+    else:
+        sentence = f"{a1} {verb}"
+    if where:
+        sentence += f" in {where}"
+    if date_str:
+        sentence += f" on {date_str}"
+    return sentence + "."
 
 
 # Curated US diplomatic posts roster (demo).
@@ -228,10 +324,19 @@ def join_threats(df):
             ev_dt = ev.get("_event_dt")
             days_old = (now - ev_dt).total_seconds() / 86400.0 if ev_dt is not None and not pd.isna(ev_dt) else float("nan")
             recency = _recency_score(days_old)
-            a1 = str(ev.get(ACTOR1_COUNTRY_COL) or "").strip().upper()
-            a2 = str(ev.get(ACTOR2_COUNTRY_COL) or "").strip().upper()
-            us_actor = 1 if a1 == "USA" or a2 == "USA" else 0
+            a1c = str(ev.get(ACTOR1_COUNTRY_COL) or "").strip().upper()
+            a2c = str(ev.get(ACTOR2_COUNTRY_COL) or "").strip().upper()
+            us_actor = 1 if a1c == "USA" or a2c == "USA" else 0
             composite = sev_score * 2 + prox + recency + us_actor
+
+            actor1_name = str(ev.get(ACTOR1_NAME_COL) or "").strip()
+            actor2_name = str(ev.get(ACTOR2_NAME_COL) or "").strip()
+            place_full  = str(ev.get(ACTION_GEO_FULL_COL) or "").strip()
+            event_code  = str(ev.get(EVENT_CODE_COL) or "").strip()
+            event_full_name = _event_label(event_code, ev[EVENT_ROOT_COL], sev_label)
+            event_date_str = ev_dt.strftime("%Y-%m-%d") if ev_dt is not None and not pd.isna(ev_dt) else ""
+            event_summary = _compose_summary(actor1_name, actor2_name, event_full_name, place_full, event_date_str)
+
             rows.append({
                 "post_name":           post["post_name"],
                 "post_country":        post["post_country"],
@@ -239,9 +344,11 @@ def join_threats(df):
                 "post_lat":            float(post["post_lat"]),
                 "post_lon":            float(post["post_lon"]),
                 "event_id":            str(ev.get("GLOBALEVENTID") or ""),
-                "event_date":          ev_dt.strftime("%Y-%m-%d") if ev_dt is not None and not pd.isna(ev_dt) else "",
+                "event_date":          event_date_str,
                 "event_root_code":     ev[EVENT_ROOT_COL],
                 "event_root_name":     sev_label,
+                "event_code":          event_code,
+                "event_full_name":     event_full_name,
                 "event_lat":           ev_lat,
                 "event_lon":           ev_lon,
                 "distance_miles":      round(d, 2),
@@ -253,8 +360,12 @@ def join_threats(df):
                 "goldstein_scale":     float(pd.to_numeric(ev.get(GOLDSTEIN_COL), errors="coerce") or 0.0),
                 "num_mentions":        int(pd.to_numeric(ev.get(NUM_MENTIONS_COL), errors="coerce") or 0),
                 "source_url":          str(ev.get(SOURCE_URL_COL) or ""),
-                "actor1_country":      a1,
-                "actor2_country":      a2,
+                "actor1_country":      a1c,
+                "actor2_country":      a2c,
+                "actor1_name":         actor1_name,
+                "actor2_name":         actor2_name,
+                "action_geo_fullname": place_full,
+                "event_summary":       event_summary,
             })
 
     if not rows:
@@ -268,12 +379,15 @@ def _added_cols():
         "post_name", "post_country", "post_classification",
         "post_lat", "post_lon",
         "event_id", "event_date", "event_root_code", "event_root_name",
+        "event_code", "event_full_name",
         "event_lat", "event_lon",
         "distance_miles",
         "severity_score", "proximity_score", "recency_score",
         "us_actor_flag", "composite_score",
         "goldstein_scale", "num_mentions", "source_url",
         "actor1_country", "actor2_country",
+        "actor1_name", "actor2_name", "action_geo_fullname",
+        "event_summary",
     ]
 
 
@@ -288,6 +402,8 @@ def get_output_schema():
         "event_date":          prep_string(),    # noqa: F821
         "event_root_code":     prep_string(),    # noqa: F821
         "event_root_name":     prep_string(),    # noqa: F821
+        "event_code":          prep_string(),    # noqa: F821
+        "event_full_name":     prep_string(),    # noqa: F821
         "event_lat":           prep_decimal(),   # noqa: F821
         "event_lon":           prep_decimal(),   # noqa: F821
         "distance_miles":      prep_decimal(),   # noqa: F821
@@ -301,4 +417,8 @@ def get_output_schema():
         "source_url":          prep_string(),    # noqa: F821
         "actor1_country":      prep_string(),    # noqa: F821
         "actor2_country":      prep_string(),    # noqa: F821
+        "actor1_name":         prep_string(),    # noqa: F821
+        "actor2_name":         prep_string(),    # noqa: F821
+        "action_geo_fullname": prep_string(),    # noqa: F821
+        "event_summary":       prep_string(),    # noqa: F821
     })

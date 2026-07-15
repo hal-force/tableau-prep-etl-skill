@@ -1,0 +1,111 @@
+{
+  "request": "DOE Data-Center Energy Monthly: state-level electricity consumption at monthly cadence, focused on the commercial sector (EIA sectorid=COM) which encompasses data-center load. Two composed EIA v2 sources: (1) retail-sales COM sector by state \u00d7 month \u2014 sales (MWh) and average price \u2014 the canonical demand-side signal that the DOE tracks for commercial-sector electrification; (2) state-electricity-profiles/source-disposition \u2014 annual state totals for net-generation and supply, tying commercial demand to the supply-side story that drives siting decisions (PJM/ERCOT gas-and-nuclear vs. CAISO renewables). Region focus: 50 US states + DC. The narrative the dataset supports: Virginia's commercial-sector growth curve vs. rest-of-country (Loudoun-County data-center concentration), and how the state's supply mix constrains DC growth. All rows carry `region_type='state'` so downstream Tableau vizzes can filter by state, group by census region, or compare against national aggregates.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "path": "",
+      "url": "https://api.eia.gov/v2/electricity/retail-sales/data/?frequency=monthly&data[0]=sales&data[1]=price&facets[sectorid][]=COM&sort[0][column]=period&sort[0][direction]=desc",
+      "format": "json",
+      "auth": "query_key",
+      "extra": {
+        "query_key_param_name": "api_key",
+        "api_key_env": "<redacted>",
+        "timeout_s": 120,
+        "max_retries": 3,
+        "verify_ssl": true,
+        "json_records_path": "response.data",
+        "json_paginate": true,
+        "json_page_param": "offset",
+        "json_page_size_param": "length",
+        "json_page_size": 5000,
+        "json_page_start": 0,
+        "json_page_kind": "offset",
+        "json_max_pages": 20,
+        "json_max_rows": 100000,
+        "json_schema": {
+          "period": "string",
+          "stateid": "string",
+          "stateDescription": "string",
+          "sectorid": "string",
+          "sectorName": "string",
+          "sales": "decimal",
+          "price": "decimal"
+        }
+      },
+      "name": "EIA Retail Sales COM Monthly",
+      "description": "EIA Open Data v2 retail-sales endpoint, filtered to the COMmercial sector at monthly cadence. Columns: period (YYYY-MM), stateid (2-letter), stateDescription, sectorid ('COM'), sectorName, sales (million kWh), price (cents/kWh). Server-side sorted desc by period to fetch newest months first; paginated at length=5000 per page (EIA v2 hard cap). Auth via ?api_key= appended at request time from $EIA_API_KEY."
+    },
+    {
+      "type": "rest_api",
+      "path": "",
+      "url": "https://api.eia.gov/v2/electricity/state-electricity-profiles/source-disposition/data/?frequency=annual&data[0]=total-net-generation&data[1]=total-supply&data[2]=direct-use&sort[0][column]=period&sort[0][direction]=desc",
+      "format": "json",
+      "auth": "query_key",
+      "extra": {
+        "query_key_param_name": "api_key",
+        "api_key_env": "<redacted>",
+        "timeout_s": 120,
+        "max_retries": 3,
+        "verify_ssl": true,
+        "json_records_path": "response.data",
+        "json_paginate": true,
+        "json_page_param": "offset",
+        "json_page_size_param": "length",
+        "json_page_size": 5000,
+        "json_page_start": 0,
+        "json_page_kind": "offset",
+        "json_max_pages": 10,
+        "json_max_rows": 20000,
+        "json_schema": {
+          "period": "string",
+          "state": "string",
+          "stateDescription": "string",
+          "total-net-generation": "decimal",
+          "total-supply": "decimal",
+          "direct-use": "decimal"
+        }
+      },
+      "name": "EIA State Supply and Disposition Annual",
+      "description": "EIA Open Data v2 state-electricity-profiles/source-disposition endpoint, annual cadence. Columns: period (YYYY), state (2-letter), stateDescription, total-net-generation (MWh), total-supply (MWh), direct-use (MWh). Supply-side annual context for the commercial-demand monthly series; a state whose direct-use is climbing while total-net-generation is flat is a candidate for capacity-constraint analysis."
+    }
+  ],
+  "transformations": [],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "DOE Data Center Energy Monthly - Retail Sales",
+      "path": "",
+      "description": "State \u00d7 month commercial-sector electricity sales and average retail price. Source: EIA Open Data v2, retail-sales endpoint, sectorid=COM. Columns: period (YYYY-MM), stateid, stateDescription, sectorid, sectorName, sales (million kWh), price (cents/kWh). Cadence: monthly. Use for Virginia commercial-sector growth analysis and cross-state peer comparisons.",
+      "source": "EIA Retail Sales COM Monthly Fetcher",
+      "project": "DOE Data Center Energy"
+    },
+    {
+      "kind": "published_data_source",
+      "name": "DOE Data Center Energy Annual - Supply Disposition",
+      "path": "",
+      "description": "State \u00d7 year net-generation, total-supply, direct-use. Source: EIA Open Data v2, state-electricity-profiles/source-disposition. Columns: period (YYYY), state, stateDescription, total-net-generation, total-supply, direct-use (all MWh). Supply-side annual context for the commercial-demand monthly series.",
+      "source": "EIA State Supply and Disposition Annual Fetcher",
+      "project": "DOE Data Center Energy"
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "weekly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "DOE Data Center Energy",
+    "parent_project": "Prep Agent",
+    "flow_name": "DOE Data Center Energy Monthly",
+    "overwrite": true,
+    "cadence": "weekly",
+    "hour_utc": 6,
+    "minute_utc": 30,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "DOE Data Center Energy Monthly 0630 Monday",
+    "balance_tolerance_hours": 2
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

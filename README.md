@@ -292,6 +292,9 @@ Hyper output you can run cold:
 | `flows/epa_aqs_ozone/v1/` | EPA AQS Data API | Drop Content-Type on bodyless GET (EPA strict-API fix) |
 | `flows/usaspending_contracts/v1/` | USAspending.gov | json_page_in_body + has_next + dict_field flatten |
 | `flows/russia_ukraine_attrition/v1/` | PetroIvaniuk dataset (GitHub) | Multi-source join + per-branch output routing; built via advanced collections route |
+| `flows/embassy_threat_monitor_v2/v1/` | GDELT × US diplomatic-post roster | Haversine spatial join + weighted risk-bands + narrative event_summary. Every-3h cadence via publisher-cadence workaround. |
+| `flows/doe_data_center_energy_monthly/v1/` | EIA Open Data v2 (retail-sales + state-profiles) | `auth: query_key` (`?api_key=…`) — first flow to exercise the new query-string auth path. Monthly. |
+| `flows/doe_data_center_energy_hourly/v1/` | EIA Open Data v2 (RTO region-data) | Sub-daily hourly RTO demand pull (PJM/ERCOT/CAISO/MISO); every-6h refresh via publisher-cadence workaround. |
 
 The first 14 form a baseline; flows 1-10 of the **Prep Agent demo
 collection** are the ten archived flows below
@@ -371,6 +374,8 @@ outputs are capped at 50 MB total per archive.
 | `HTTP Error 400: Bad Request` from a paginated walk that worked once | Some publishers cap offset depth (CMS Provider Data 400s past offset=30000) or page size (CMS caps at 1000, College Scorecard API at 100). Reduce `json_page_size` / `json_max_pages` to fit. The walker treats a mid-walk 4xx as "done" if rows were already collected. |
 | `HTTP Error 429: Too Many Requests` | DEMO_KEY-style shared keys (api.data.gov) are hourly-rate-limited. Either register a real key, switch to a keyless bulk-download path (e.g. csv_zip), or wait ≥1 hour. |
 | `HTTPError : HTTP Error 400: Bad Request` on first call to a JSON GET | Some strict APIs (EPA AQS) reject `Content-Type: application/json` on GET. Already handled — but if you see it on a fresh source, run a curl probe with no headers to confirm. |
+| `RuntimeError: query_key auth requires env var $<VAR> to be set` inside a script node | TabPy daemon was launched before `<VAR>` was added to `load_env.sh`. Daemon env is frozen at launch time. Kill + relaunch TabPy from a shell that just sourced `load_env.sh` — see `tabpy_setup.md #Restart TabPy after adding a source-credential env var`. |
+| `KeyError: 'every_6_hours'` / `KeyError: 'every_3_hours'` at publish time | `tflb_lib.publishing` only maps `hourly/daily/weekly/monthly`. Set `server_publish.cadence: 'hourly'` and keep the semantic `refresh_cadence` as-is. See `server_publishing.md #Publisher cadence map`. |
 | `Project 'Foo' not found on this site` immediately after `--auto-create-project` | TSC project-list cache lag. Rerun `--publish` without `--auto-create-project`. |
 | `Project 'Foo' not found on this site under parent 'Bar'` | Either the parent project doesn't exist (create it first manually), or `parent_project` doesn't match exactly (case-sensitive). |
 | `Currently not signed in to any Tableau server` during prep-cli verify | Spec has a `published_data_source` output but `local_iteration` didn't kick in. Confirm `run_loop.py` is current — the trigger covers any PDS output. |

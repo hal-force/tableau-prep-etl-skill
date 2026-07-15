@@ -350,6 +350,11 @@ _EXTRA_KEYS_BY_TYPE: dict[str, frozenset[str]] = {
         "json_page_kind", "json_max_pages", "json_page_in_body",
         "json_has_next_path", "api_key_env", "user_env", "pwd_env",
         "max_response_bytes", "max_response_rows",
+        # query_key auth (EIA v2 / NREL / Data.gov style: `?api_key=…`)
+        "query_key_param_name",
+        # ACLED-specific
+        "email_env", "lookback_days", "page_size", "max_pages", "max_rows",
+        "acled_query_params",
     }),
     "graphql_api": frozenset({
         "query", "verify_ssl", "timeout_s", "max_retries",

@@ -1,0 +1,102 @@
+{
+  "request": "v2 of the Embassy Threat Monitor. Same upstream feed (GDELT 1.0 every 3 hours), same 60-post US diplomatic roster, same 50mi/90d windows and 5-band risk scoring. Adds the GDELT free-text-ish columns the v1 flow already pulled but didn't surface: Actor1Name, Actor2Name, ActionGeo_FullName, EventCode (leaf taxonomy + human label), and a composed one-sentence event_summary (Actor1Name + verb + Actor2Name @ ActionGeo_FullName on YYYY-MM-DD) so each row reads as a sentence. The per-post roll-up also gains top_event_summary + top_event_source_url so an analyst sees *why* a post is rated where it is without drilling. GDELT 1.0 has no narrative description field; this is the most natural-language surface available short of switching to the GKG feed.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "path": "",
+      "url": "http://data.gdeltproject.org/events/index.html",
+      "format": "csv_index_then_zip",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": false,
+        "timeout_s": 240,
+        "max_retries": 3,
+        "index_link_pattern": "([0-9]{8}\\.export\\.CSV\\.zip)",
+        "country_filter": "",
+        "_skip_auto_casts": true
+      },
+      "name": "GDELT Global Events (Threat Filter)",
+      "description": "GDELT 1.0 latest daily events feed from data.gdeltproject.org. Daily index file is scraped, the most recent .CSV.zip is downloaded, unzipped, parsed. The downstream embassy_threat_join script applies CAMEO root-code filtering (13/14/17/18/19/20) and 90-day date filtering; the API caller pulls the full feed unfiltered."
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "embassy_threat_join",
+      "args": {
+        "branch": 0,
+        "name": "Embassy Threat Join",
+        "radius_miles": 50,
+        "lookback_days": 90,
+        "cameo_root_codes": [
+          "13",
+          "14",
+          "17",
+          "18",
+          "19",
+          "20"
+        ],
+        "lat_col": "ActionGeo_Lat",
+        "lon_col": "ActionGeo_Long",
+        "date_col": "SQLDATE",
+        "event_root_col": "EventRootCode",
+        "event_code_col": "EventCode",
+        "goldstein_col": "GoldsteinScale",
+        "actor1_country_col": "Actor1CountryCode",
+        "actor2_country_col": "Actor2CountryCode",
+        "actor1_name_col": "Actor1Name",
+        "actor2_name_col": "Actor2Name",
+        "action_geo_full_col": "ActionGeo_FullName",
+        "num_mentions_col": "NumMentions",
+        "source_url_col": "SOURCEURL",
+        "description": "Spatial-joins GDELT events to a curated US diplomatic-post roster (50mi haversine). Same scoring as v1 (severity, proximity, recency, US-actor, composite). v2 additions: actor1_name, actor2_name, action_geo_fullname, event_code, event_full_name (human verb for the leaf CAMEO code), and event_summary \u2014 a composed one-sentence narrative per row."
+      }
+    },
+    {
+      "kind": "embassy_risk_summary",
+      "args": {
+        "branch": 0,
+        "name": "Embassy Risk Summary",
+        "window_days": 7,
+        "description": "Per-post weighted threat-score roll-up over a 7-day window with the same 5-band classification as v1 (CRITICAL / HIGH / ELEVATED / GUARDED / LOW). v2 additions: top_event_summary (sentence describing the top-severity recent event at this post) and top_event_source_url (the news link backing that event)."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Embassy Threat Events v2",
+      "path": "",
+      "description": "v2: one row per (US diplomatic post, GDELT event) within 50mi of the post over the most recent feed window. Adds the GDELT as-reported descriptive fields the v1 flow already fetched but didn't surface: actor1_name, actor2_name, action_geo_fullname, event_code (4-digit leaf CAMEO code, e.g. 1822 = tortured), event_full_name (human verb for that leaf), and event_summary (composed one-sentence narrative \u2014 'Police Force threatened with force Protesters in Cairo, Egypt on 2026-06-22.'). All other columns identical to v1. Refresh: every 3 hours via local prep-cli + .hyper upload.",
+      "source": "Embassy Threat Join",
+      "project": "Embassy Threat Monitor v2"
+    },
+    {
+      "kind": "published_data_source",
+      "name": "Embassy Risk Summary v2",
+      "path": "",
+      "description": "v2: one row per US diplomatic post in the curated roster. All v1 fields (risk_band, weighted_threat_score, per-class counts, top_event_type) plus top_event_summary (the as-reported sentence describing the highest-severity recent event at this post) and top_event_source_url (the GDELT source URL for that event). Use these new columns so the operations dashboard shows *why* a post is in its current band without drilling into the events extract.",
+      "source": "Embassy Risk Summary",
+      "project": "Embassy Threat Monitor v2"
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "every_3_hours",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "Embassy Threat Monitor v2",
+    "parent_project": "Prep Agent",
+    "flow_name": "Embassy Threat Monitor v2",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 0,
+    "minute_utc": 25,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "Embassy Threat Monitor v2 3h Refresh",
+    "balance_tolerance_hours": 2
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

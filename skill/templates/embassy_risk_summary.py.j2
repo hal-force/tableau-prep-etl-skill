@@ -141,6 +141,8 @@ def summarize(df):
         base["weighted_threat_score"] = 0.0
         base["risk_band"]             = "LOW"
         base["top_event_type"]        = ""
+        base["top_event_summary"]     = ""
+        base["top_event_source_url"]  = ""
         base["last_event_date"]       = ""
         return base[cols_out]
 
@@ -188,9 +190,17 @@ def summarize(df):
     counts = counts[[c for c in keep if c in counts.columns]]
 
     # Top event type per post (highest-severity, then most recent).
+    # Also lift the as-reported narrative sentence + source URL so the
+    # per-post row tells the analyst *why* this post is rated where it is.
+    top_cols = ["post_name", "event_root_name"]
+    for extra in ("event_summary", "source_url"):
+        if extra in in_window.columns:
+            top_cols.append(extra)
     top = (in_window.sort_values(["severity_score", "event_dt"], ascending=[False, False])
-                    .drop_duplicates("post_name")[["post_name", "event_root_name"]]
-                    .rename(columns={"event_root_name": "top_event_type"}))
+                    .drop_duplicates("post_name")[top_cols]
+                    .rename(columns={"event_root_name": "top_event_type",
+                                     "event_summary": "top_event_summary",
+                                     "source_url":   "top_event_source_url"}))
 
     # Merge everything onto the full roster (left join: posts with no
     # events still appear).
@@ -210,6 +220,8 @@ def summarize(df):
         out.get("weighted_threat_score", 0), errors="coerce").fillna(0.0).round(2)
     out["last_event_date"] = out.get("last_event_date", "").fillna("").astype(str)
     out["top_event_type"]  = out.get("top_event_type", "").fillna("").astype(str)
+    out["top_event_summary"]    = out.get("top_event_summary", "").fillna("").astype(str)
+    out["top_event_source_url"] = out.get("top_event_source_url", "").fillna("").astype(str)
     out["critical_flag"]   = out.get("critical_flag", False).fillna(False).astype(bool)
 
     out["risk_band"] = [
@@ -227,6 +239,7 @@ def _added_cols():
         "mass_violence_count", "assault_count", "fight_count",
         "threaten_count", "protest_count", "coerce_count",
         "weighted_threat_score", "risk_band", "top_event_type",
+        "top_event_summary", "top_event_source_url",
         "last_event_date",
     ]
 
@@ -249,5 +262,7 @@ def get_output_schema():
         "weighted_threat_score": prep_decimal(),   # noqa: F821
         "risk_band":             prep_string(),    # noqa: F821
         "top_event_type":        prep_string(),    # noqa: F821
+        "top_event_summary":     prep_string(),    # noqa: F821
+        "top_event_source_url":  prep_string(),    # noqa: F821
         "last_event_date":       prep_string(),    # noqa: F821
     })

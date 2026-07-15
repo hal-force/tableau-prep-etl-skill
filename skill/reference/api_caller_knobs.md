@@ -19,7 +19,7 @@ example — when in doubt, copy the closest one and edit.
   "description": "...",       // becomes the input node description
   "url": "https://...",       // base URL; pagination knobs append query params or POST a JSON body
   "format": "json",           // 'json' | 'jsonl' | 'ndjson' | 'csv' | 'csv_zip' | 'csv_index_then_zip' | 'arcgis_features'
-  "auth": "none",             // 'none' | 'api_key' | 'basic'
+  "auth": "none",             // 'none' | 'api_key' | 'basic' | 'query_key'
   "extra": {                  // EVERYTHING below goes here
     "...": "..."
   }
@@ -39,9 +39,20 @@ the actual data shape, dropping rows silently.
 | `verify_ssl`        | `true`                 | Set to `false` only for self-signed dev endpoints.                    |
 | `timeout_s`         | `120`                  | Per-request timeout. Bump for slow public APIs (EPA AQS, Federal Register at scale). |
 | `max_retries`       | `3`                    | Retries on `URLError` / `TimeoutError` and 5xx / 429. 4xx other than 429 is treated as permanent. |
-| `api_key_env`       | `'API_KEY'`            | (auth=='api_key') env var holding the bearer token. Never put the secret in the spec. |
+| `api_key_env`       | `'API_KEY'`            | (auth=='api_key' \| 'query_key') env var holding the bearer token / query-string key. Never put the secret in the spec. |
 | `user_env`          | `'API_USER'`           | (auth=='basic') env var holding the username.                         |
 | `pwd_env`           | `'API_PASSWORD'`       | (auth=='basic') env var holding the password.                         |
+| `query_key_param_name` | `'api_key'`         | (auth=='query_key') the URL query-string parameter that carries the key. EIA v2 → `api_key`, some Data.gov endpoints → `apikey`, NREL → `api_key`. |
+
+**`auth: 'query_key'`** — for publishers that authenticate via
+`?<param>=<secret>` on the URL rather than a Bearer header. Set
+`auth: 'query_key'`, `extra.api_key_env: 'EIA_API_KEY'` (or
+whatever env var carries the secret; must be exported into the
+TabPy daemon's environment — see
+`tabpy_setup.md #Restart TabPy after adding a source-credential env var`),
+and optionally `extra.query_key_param_name` if the publisher uses
+a param name other than `api_key`. Worked example:
+`flows/doe_data_center_energy_hourly/v1/spec.json`.
 
 **Strict-API gotcha:** the helper drops `Content-Type: application/json`
 on bodyless GET requests. Some publishers (notably EPA AQS) parse

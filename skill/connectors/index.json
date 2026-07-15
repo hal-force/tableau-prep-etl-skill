@@ -9,8 +9,8 @@
         "auth": "none",
         "format": "csv_index_then_zip"
       },
-      "hit_count": 36,
-      "last_used_at": 1781891304.2288451
+      "hit_count": 45,
+      "last_used_at": 1782224960.22769
     },
     "87373f435ea745fc": {
       "signature": {
@@ -221,6 +221,16 @@
       },
       "hit_count": 30,
       "last_used_at": 1782148841.3623822
+    },
+    "970430b0fd29ede1": {
+      "signature": {
+        "type": "rest_api",
+        "host": "api.eia.gov",
+        "auth": "query_key",
+        "format": "json"
+      },
+      "hit_count": 19,
+      "last_used_at": 1784049584.221056
     }
   }
 }
