@@ -385,8 +385,35 @@ outputs are capped at 50 MB total per archive.
 
 ## v2 roadmap (not yet implemented)
 
-- Conductor schedule wiring for `internal_published_ds` sources whose
-  refresh_cadence implies a recurring backgrounder pull.
-- Cross-flow dependency management (output of flow A as input to B).
-- Connector-defaults registry: per-org overrides for ArcGIS PKI cert
-  paths, ODBC drivers, etc., so specs stay portable.
+- **Conductor extractRefresh wiring for `internal_published_ds`.** The
+  planner attaches to an existing DS today, but `--publish` doesn't
+  create/attach a recurring extractRefresh task when the spec declares
+  a `refresh_cadence` on that source. `tflb_lib.publishing` only reads
+  existing `tasks/extractRefreshes` — no create-and-attach code path.
+- **Cross-flow dependencies** (output of flow A as input to flow B),
+  including topological ordering at publish time and downstream-flow
+  scheduling that fires after the upstream flow completes.
+- **Sub-daily schedule emission in `tflb_lib.publishing`.** The
+  publisher's cadence map only handles `hourly / daily / weekly /
+  monthly`; sub-daily intervals (`every_3_hours`, `every_6_hours`)
+  require the workaround documented in
+  `server_publishing.md #Publisher cadence map`. Extending the emitter
+  to output `<interval hours="N"/>` + preferring an existing matching
+  Cloud schedule closes the gap.
+- **Connector per-org override layer.** The connector cache
+  (`skill/connectors/<sig>/defaults.json`) records what worked for a
+  given (type, host, auth, format) signature, but there's no
+  higher-precedence override for org-specific values like ArcGIS PKI
+  cert paths, ODBC driver names, or org-internal timeout norms.
+  Envisioned shape: `~/.tableau-prep-etl/connector_overrides.json`
+  keyed the same way, merged on top of `defaults.json`.
+
+Already shipped since this section was first drafted (not roadmap
+anymore, listed for cross-reference):
+- Production-hardening layers 1-5 (`spec_validation.py`,
+  `host_trust.py`, `security_lint.py`, `skill/reference/security.md`).
+- `auth: 'query_key'` for `?api_key=…` URL-string auth (EIA v2,
+  NREL, Data.gov).
+- Metadata writer + .tds-roundtrip column-description apply
+  (`metadata_api.md`).
+- 10-flow Prep Agent demo collection under a nested parent project.
