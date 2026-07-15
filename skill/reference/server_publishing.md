@@ -55,6 +55,35 @@ PAT-authenticated, project-pickered, schedule-aware, and Cloud-aware.
    UTC; the skill returns `next_run_utc` so the user knows when to
    expect the next run.
 
+### Publisher cadence map — sub-daily workaround
+
+`tflb_lib.publishing` only maps four Cloud schedule primitives:
+`hourly | daily | weekly | monthly`. `spec_validation` also
+accepts semantic values like `every_3_hours`, `every_6_hours`,
+`every_12_hours` — but if either of those reaches
+`server_publish.cadence`, the publisher raises
+`KeyError: 'every_6_hours'` at schedule wire-up time.
+
+Working pattern for sub-daily flows (embassy_threat_monitor_v2,
+doe_data_center_energy_hourly):
+
+```jsonc
+{
+  "refresh_cadence": "every_3_hours",          // semantic — validated but not publisher-consumed
+  "server_publish": {
+    "project": "…",
+    "parent_project": "…",
+    "cadence": "hourly",                        // publisher-compatible
+    "schedule_name_hint": "… Every 3h Refresh"  // encodes the intended interval for the operator
+  }
+}
+```
+
+The operator can retune the schedule interval in the Cloud UI
+post-publish; the schedule-name hint tells them what to set it to.
+Extending `tflb_lib.publishing` to emit hour-count intervals
+(`<interval hours="3"/>`) is on the v2 backlog.
+
 ## local_iteration mode
 
 `run_loop` flips `local_iteration=True` whenever the spec has any

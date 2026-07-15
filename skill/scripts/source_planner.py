@@ -144,7 +144,14 @@ def _plan_rest_api(src: Source, idx: int, *, graphql: bool = False) -> tuple[lis
     inp = NodePlan(role="input", name=inp_name, description=inp_desc,
                    connector_class="local_xlsx_pointer",
                    connector_attrs={"hint": "skill rewires to a local trigger xlsx"})
-    template = "api_caller.py.j2"
+    # ACLED uses email+key query-string auth (not Bearer), and the
+    # response shape is specific enough that a dedicated template keeps
+    # the generic api_caller from accumulating per-publisher special
+    # cases. The template still hits the same NodePlan contract.
+    if src.format == "acled_json":
+        template = "acled_caller.py.j2"
+    else:
+        template = "api_caller.py.j2"
     api_name = f"{inp_name} Fetcher" if src.name else f"API Caller {idx}"
     api_desc = (
         f"Pulls {proto} data from {short_url}. Format: {src.format or 'json'}. "
@@ -982,14 +989,56 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
                 "lon_col":              args.get("lon_col", "ActionGeo_Long"),
                 "date_col":             args.get("date_col", "SQLDATE"),
                 "event_root_col":       args.get("event_root_col", "EventRootCode"),
+                "event_code_col":       args.get("event_code_col", "EventCode"),
                 "goldstein_col":        args.get("goldstein_col", "GoldsteinScale"),
                 "actor1_country_col":   args.get("actor1_country_col", "Actor1CountryCode"),
                 "actor2_country_col":   args.get("actor2_country_col", "Actor2CountryCode"),
+                "actor1_name_col":      args.get("actor1_name_col", "Actor1Name"),
+                "actor2_name_col":      args.get("actor2_name_col", "Actor2Name"),
+                "action_geo_full_col":  args.get("action_geo_full_col", "ActionGeo_FullName"),
                 "num_mentions_col":     args.get("num_mentions_col", "NumMentions"),
                 "source_url_col":       args.get("source_url_col", "SOURCEURL"),
                 "input_schema":         input_schema,
             },
             function_name="join_threats",
+            branch=branch_idx,
+        ))
+
+    # Embassy ACLED join. Single-input script that consumes the ACLED
+    # API response, filters to events within the lookback window, and
+    # emits one row per (US post, event) pair within haversine radius.
+    # Unlike embassy_threat_join, no severity/risk scoring is applied —
+    # the consumer pattern is LLM-grounded analysis in Tableau using
+    # the analyst-written `notes` field, where pre-aggregation would
+    # conceal the qualitative signal that matters most.
+    for tr in spec.transformations:
+        if tr.kind != "embassy_acled_join":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        join_name = args.get("name", "Embassy ACLED Join")
+        join_desc = args.get("description") or (
+            f"Spatial-joins ACLED events to a curated US diplomatic-post roster. "
+            f"Window: past {args.get('lookback_days', 90)} days; "
+            f"haversine radius {args.get('radius_miles', 100)}mi. "
+            f"Emits one row per (post, event) pair with distance_miles + days_ago. "
+            f"All ACLED fields (event_type, sub_event_type, actors, fatalities, "
+            f"source, notes) pass through verbatim for analyst grounding."
+        )
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=join_name,
+            description=join_desc,
+            template="embassy_acled_join.py.j2",
+            template_vars={
+                "radius_miles":  int(args.get("radius_miles", 100)),
+                "lookback_days": int(args.get("lookback_days", 90)),
+                "lat_col":       args.get("lat_col", "latitude"),
+                "lon_col":       args.get("lon_col", "longitude"),
+                "date_col":      args.get("date_col", "event_date"),
+                "input_schema":  input_schema,
+            },
+            function_name="join_acled_events",
             branch=branch_idx,
         ))
 

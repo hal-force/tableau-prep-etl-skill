@@ -1,0 +1,25 @@
+{
+  "query_key_param_name": "api_key",
+  "api_key_env": "EIA_API_KEY",
+  "timeout_s": 120,
+  "max_retries": 3,
+  "verify_ssl": true,
+  "json_records_path": "response.data",
+  "json_paginate": true,
+  "json_page_param": "offset",
+  "json_page_size_param": "length",
+  "json_page_size": 5000,
+  "json_page_start": 0,
+  "json_page_kind": "offset",
+  "json_max_pages": 20,
+  "json_max_rows": 100000,
+  "json_schema": {
+    "period": "string",
+    "stateid": "string",
+    "stateDescription": "string",
+    "sectorid": "string",
+    "sectorName": "string",
+    "sales": "decimal",
+    "price": "decimal"
+  }
+}

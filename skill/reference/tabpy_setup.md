@@ -109,6 +109,40 @@ sleep 2
     --config=/tmp/tabpy_smoke.conf --disable-auth-warning &
 ```
 
+## Restart TabPy after adding a source-credential env var
+
+The daemon inherits its process environment **at launch time only**.
+Adding a new keychain-mapped variable to `~/.tableau-prep-etl/load_env.sh`
+(e.g. `EIA_API_KEY`, `ACLED_API_KEY`) does not retroactively update
+a long-lived TabPy. run_loop's Popen inherits env from prep-cli,
+which inherits from the daemon — not from your current shell — so
+`os.environ.get('EIA_API_KEY')` inside a script node returns empty
+even though `printenv` in your shell shows the value.
+
+Symptom: rendered script raises `RuntimeError: query_key auth
+requires env var $EIA_API_KEY to be set` (or the equivalent for
+whatever var you added). Verify daemon env before restarting:
+
+```sh
+lsof -i :9099                                          # note PID
+ps eww -p <PID> | tr ' ' '\n' | grep EIA_API_KEY       # (empty = daemon lacks the var)
+```
+
+Fix — kill, source, relaunch (in one command so the env is fresh):
+
+```sh
+pkill -f "tabpy.*tabpy_smoke.conf" ; sleep 2
+bash -c '
+  source ~/.tableau-prep-etl/load_env.sh
+  nohup /Library/Frameworks/Python.framework/Versions/3.13/bin/tabpy \
+      --config=/tmp/tabpy_smoke.conf --disable-auth-warning \
+      > /tmp/tabpy_smoke.log 2>&1 &
+'
+```
+
+Re-confirm with `ps eww -p <new-PID> | tr ' ' '\n' | grep <VAR>`.
+The `RuntimeError: <VAR> not set` disappears on the next run.
+
 ## Builder GUI vs CLI — separate credentials files
 
 Tableau Prep Builder's GUI reads
