@@ -1,0 +1,105 @@
+{
+  "request": "Pull the CISA Known Exploited Vulnerabilities (KEV) catalog and enrich with days-since-added, days-to-due (SLA), and cwe_first columns for federal-agency vulnerability management. Publish to 'Prep Agent / 13 - CISA Known Exploited Vulnerabilities' on Tableau Server.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "CISA KEV Catalog",
+      "description": "CISA-maintained catalog of Known Exploited Vulnerabilities \u2014 the authoritative watchlist that federal agencies must remediate under BOD 22-01. Single JSON envelope {title, catalogVersion, dateReleased, count, vulnerabilities:[{cveID, vendorProject, product, vulnerabilityName, dateAdded, shortDescription, requiredAction, dueDate, knownRansomwareCampaignUse, notes, cwes:[]}]}. Public, no auth, refreshes when CISA adds new items. Row per CVE (~1600+ entries).",
+      "url": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_records_path": "vulnerabilities",
+        "json_derived_columns": [
+          {
+            "name": "cwe_first",
+            "kind": "list_join",
+            "source_col": "cwes",
+            "sep": ", "
+          },
+          {
+            "name": "days_since_added",
+            "kind": "days_since",
+            "source_col": "dateAdded"
+          },
+          {
+            "name": "days_to_due",
+            "kind": "days_between",
+            "start_col": "dateAdded",
+            "end_col": "dueDate"
+          }
+        ],
+        "json_schema": {
+          "cveID": "string",
+          "vendorProject": "string",
+          "product": "string",
+          "vulnerabilityName": "string",
+          "dateAdded": "string",
+          "shortDescription": "string",
+          "requiredAction": "string",
+          "dueDate": "string",
+          "knownRansomwareCampaignUse": "string",
+          "notes": "string",
+          "cwe_first": "string",
+          "days_since_added": "int",
+          "days_to_due": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "KEV Trend",
+        "date_col": "dateAdded",
+        "dimensions": [
+          "vendorProject",
+          "knownRansomwareCampaignUse"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level temporal features parsed from dateAdded (year, month, quarter, day_of_week, iso_week). Row-level CISA KEV detail.",
+        "stats_description": "Long-form KEV catalog statistics (one row per dimension x value x year x month over vendorProject and knownRansomwareCampaignUse). Includes daily_count, 30-day rolling counts, z-score anomalies vs baseline (|z|>=2.0 flagged is_anomaly=True). Use to spot vendor-level exploitation spikes and ransomware-linked catalog activity."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "CISA KEV Detail",
+      "project": "13 - CISA Known Exploited Vulnerabilities",
+      "source": "KEV Trend (Features)",
+      "description": "Row-level CISA Known Exploited Vulnerabilities catalog. One row per CVE with cveID, vendorProject, product, vulnerabilityName, dateAdded, shortDescription, requiredAction, dueDate, knownRansomwareCampaignUse (Known/Unknown/etc.), notes URL, cwe_first (comma-joined CWEs), days_since_added, days_to_due (SLA countdown). Plus calendar features from dateAdded. Source: cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json. Refresh: daily."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "CISA KEV Stats",
+      "project": "13 - CISA Known Exploited Vulnerabilities",
+      "source": "KEV Trend (Stats)",
+      "description": "Long-form KEV trend statistics (one row per dimension x value x year x month over vendorProject and knownRansomwareCampaignUse). Includes 30-day rolling counts, z-score anomalies (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to identify vendors with clusters of newly-cataloged exploited CVEs."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "13 - CISA Known Exploited Vulnerabilities",
+    "parent_project": "Prep Agent",
+    "flow_name": "CISA KEV Catalog",
+    "overwrite": true,
+    "cadence": "daily",
+    "hour_utc": 10,
+    "minute_utc": 30,
+    "schedule_name_hint": "CISA KEV Daily Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

@@ -1,0 +1,137 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 60,
+  "max_retries": 3,
+  "json_records_path": "features",
+  "json_derived_columns": [
+    {
+      "name": "mag",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "mag",
+      "cast": "decimal"
+    },
+    {
+      "name": "place",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "place",
+      "cast": "string"
+    },
+    {
+      "name": "time_ms",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "time",
+      "cast": "int"
+    },
+    {
+      "name": "alert",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "alert",
+      "cast": "string"
+    },
+    {
+      "name": "tsunami",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "tsunami",
+      "cast": "int"
+    },
+    {
+      "name": "sig",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "sig",
+      "cast": "int"
+    },
+    {
+      "name": "felt",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "felt",
+      "cast": "int"
+    },
+    {
+      "name": "cdi",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "cdi",
+      "cast": "decimal"
+    },
+    {
+      "name": "mmi",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "mmi",
+      "cast": "decimal"
+    },
+    {
+      "name": "mag_type",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "magType",
+      "cast": "string"
+    },
+    {
+      "name": "event_type",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "type",
+      "cast": "string"
+    },
+    {
+      "name": "url",
+      "kind": "dotted_path",
+      "source_col": "properties",
+      "path": "url",
+      "cast": "string"
+    },
+    {
+      "name": "lon",
+      "kind": "dotted_path",
+      "source_col": "geometry",
+      "path": "coordinates.0",
+      "cast": "decimal"
+    },
+    {
+      "name": "lat",
+      "kind": "dotted_path",
+      "source_col": "geometry",
+      "path": "coordinates.1",
+      "cast": "decimal"
+    },
+    {
+      "name": "depth_km",
+      "kind": "dotted_path",
+      "source_col": "geometry",
+      "path": "coordinates.2",
+      "cast": "decimal"
+    },
+    {
+      "name": "event_time",
+      "kind": "epoch_ms_iso",
+      "source_col": "time_ms"
+    }
+  ],
+  "json_schema": {
+    "mag": "decimal",
+    "place": "string",
+    "time_ms": "int",
+    "alert": "string",
+    "tsunami": "int",
+    "sig": "int",
+    "felt": "int",
+    "cdi": "decimal",
+    "mmi": "decimal",
+    "mag_type": "string",
+    "event_type": "string",
+    "url": "string",
+    "lon": "decimal",
+    "lat": "decimal",
+    "depth_km": "decimal",
+    "event_time": "string"
+  },
+  "_skip_auto_casts": true
+}

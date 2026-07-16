@@ -1,0 +1,92 @@
+{
+  "request": "Pull TLE elements for active satellites via the tle.ivanstanojevic.me API (Space-Track mirror). Extract satelliteId, name, epoch date, and TLE lines. Enrich with days_since_epoch and derive orbital classification-hint character from TLE line1. Publish to 'Prep Agent / 16 - Active Satellite TLE Catalog' on Tableau Server for space-domain-awareness analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "Active Satellite TLE Catalog",
+      "description": "TLE (two-line element) API mirror of Space-Track: `/api/tle/?page=N&page-size=100`. Envelope: {@context, @id, @type, totalItems, member:[{@id, @type, satelliteId, name, date (ISO), line1, line2}], view:{first, next, last}}. Pagination via `page` param (1-based); ~25.5k active tracked satellites. Public, no auth. line1/line2 contain the standard NORAD TLE format (67 chars each); this flow keeps them as strings so consumers can propagate through SGP4 themselves.",
+      "url": "https://tle.ivanstanojevic.me/api/tle/?page-size=100&page=1",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_records_path": "member",
+        "json_paginate": true,
+        "json_page_kind": "page",
+        "json_page_param": "page",
+        "json_page_size_param": "page-size",
+        "json_page_size": 100,
+        "json_page_start": 1,
+        "json_max_pages": 20,
+        "json_derived_columns": [
+          {
+            "name": "days_since_epoch",
+            "kind": "days_since",
+            "source_col": "date"
+          }
+        ],
+        "json_schema": {
+          "satelliteId": "int",
+          "name": "string",
+          "date": "string",
+          "line1": "string",
+          "line2": "string",
+          "days_since_epoch": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "TLE Trend",
+        "date_col": "date",
+        "dimensions": [
+          "name"
+        ],
+        "rolling_window_days": 7,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level calendar features parsed from `date` (year, month, quarter, day_of_week, iso_week). Row-level TLE catalog entry.",
+        "stats_description": "Long-form TLE-catalog statistics (one row per dimension x value x year x month). Includes daily_count of updated element sets, 7-day rolling counts, z-score anomalies. Use to spot ephemeris-update campaigns and freshness gaps across the tracked population."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "TLE Catalog Detail",
+      "project": "16 - Active Satellite TLE Catalog",
+      "source": "TLE Trend (Features)",
+      "description": "Row-level active-satellite TLEs from the ivanstanojevic mirror (~2k rows first cut, up to 25.5k with more pages). Fields: satelliteId (NORAD Cat ID), name, date (ISO epoch), line1, line2 (standard 69-char NORAD TLE lines \u2014 feed to SGP4 for propagation), days_since_epoch (freshness). Plus calendar features. Source: tle.ivanstanojevic.me API. Refresh: daily."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "TLE Catalog Stats",
+      "project": "16 - Active Satellite TLE Catalog",
+      "source": "TLE Trend (Stats)",
+      "description": "Long-form TLE catalog trend statistics (one row per dimension x value x year x month). Joinable from Tableau on (dimension, value, year, month). Use to identify catalog-freshness distribution and update surges."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "16 - Active Satellite TLE Catalog",
+    "parent_project": "Prep Agent",
+    "flow_name": "Active Satellite TLE Catalog",
+    "overwrite": true,
+    "cadence": "daily",
+    "hour_utc": 12,
+    "minute_utc": 30,
+    "schedule_name_hint": "TLE Catalog Daily Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

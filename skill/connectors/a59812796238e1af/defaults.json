@@ -1,0 +1,76 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 120,
+  "max_retries": 3,
+  "xml_entry_path": "sdnEntry",
+  "xml_strip_ns": true,
+  "json_derived_columns": [
+    {
+      "name": "sdn_uid",
+      "kind": "dotted_path",
+      "source_col": "uid",
+      "path": "",
+      "cast": "string"
+    },
+    {
+      "name": "sdn_type",
+      "kind": "dotted_path",
+      "source_col": "sdnType",
+      "path": "",
+      "cast": "string"
+    },
+    {
+      "name": "first_name",
+      "kind": "dotted_path",
+      "source_col": "firstName",
+      "path": "",
+      "cast": "string"
+    },
+    {
+      "name": "last_name",
+      "kind": "dotted_path",
+      "source_col": "lastName",
+      "path": "",
+      "cast": "string"
+    },
+    {
+      "name": "program",
+      "kind": "dotted_path",
+      "source_col": "programList",
+      "path": "program",
+      "cast": "string"
+    },
+    {
+      "name": "primary_country",
+      "kind": "dotted_path",
+      "source_col": "addressList",
+      "path": "address.country",
+      "cast": "string"
+    },
+    {
+      "name": "first_aka",
+      "kind": "dotted_path",
+      "source_col": "akaList",
+      "path": "aka.lastName",
+      "cast": "string"
+    },
+    {
+      "name": "remarks",
+      "kind": "dotted_path",
+      "source_col": "remarks",
+      "path": "",
+      "cast": "string"
+    }
+  ],
+  "json_schema": {
+    "sdn_uid": "string",
+    "sdn_type": "string",
+    "first_name": "string",
+    "last_name": "string",
+    "program": "string",
+    "primary_country": "string",
+    "first_aka": "string",
+    "remarks": "string"
+  },
+  "_skip_auto_casts": true
+}

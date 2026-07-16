@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "ssd-api.jpl.nasa.gov",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1784152206.676428
+}

@@ -1,0 +1,48 @@
+{
+  "request": "Pull the latest GDELT global events feed, filter to CENTCOM AOR countries (IR, IQ, SY, YE, AF, SA, QA, KW, BH, OM, AE, JO, LB, EG, PK, TJ, TM, UZ, KG, KZ), and enrich with a Goldstein-scale conflict-cooperation band. Publish to 'Prep Agent / 17 - GDELT CENTCOM AOR Events' on Tableau Server for regional-intelligence analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "GDELT CENTCOM AOR Events",
+      "description": "GDELT 1.0 daily events (data.gdeltproject.org). The skill scrapes the events index page for the newest .CSV.zip, downloads + unzips, and emits one row per event with GDELT v1 schema. This variant filters to the U.S. Central Command Area of Responsibility (20 countries spanning the Middle East, Levant, Persian Gulf, Central Asia). Rows per URL are inflated ~10x vs unique events \u2014 calibrate scoring against URL-inflated volume.",
+      "url": "http://data.gdeltproject.org/events/index.html",
+      "format": "csv_index_then_zip",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": false,
+        "timeout_s": 180,
+        "max_retries": 3,
+        "index_link_pattern": "([0-9]{8}\\.export\\.CSV\\.zip)",
+        "country_filter": "IR,IQ,SY,YE,AF,SA,QA,KW,BH,OM,AE,JO,LB,EG,PK,TJ,TM,UZ,KG,KZ",
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "GDELT CENTCOM Events",
+      "project": "17 - GDELT CENTCOM AOR Events",
+      "source": "GDELT CENTCOM AOR Events",
+      "description": "GDELT 1.0 events filtered to the CENTCOM AOR (IR, IQ, SY, YE, AF, SA, QA, KW, BH, OM, AE, JO, LB, EG, PK, TJ, TM, UZ, KG, KZ). Full v1 schema (58 columns): Actor1/2 code+country+type, ActionGeo lat/lon and country, EventCode (CAMEO), EventRootCode, GoldsteinScale (-10..+10 conflict-cooperation), NumMentions, AvgTone, SOURCEURL. Refresh: daily. Note: row count is URL-inflated (~10x unique events)."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "17 - GDELT CENTCOM AOR Events",
+    "parent_project": "Prep Agent",
+    "flow_name": "GDELT CENTCOM AOR Events",
+    "overwrite": true,
+    "cadence": "daily",
+    "hour_utc": 13,
+    "minute_utc": 0,
+    "schedule_name_hint": "GDELT CENTCOM Daily Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

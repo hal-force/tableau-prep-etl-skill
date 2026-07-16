@@ -1,0 +1,168 @@
+{
+  "request": "Pull the last 30 days of CVEs from the NIST NVD REST v2 API (published 2026-06-15 through 2026-07-14). Flatten each vulnerability's id, publication date, description, CVSS v3.1 base score + severity, primary CWE, and enrich with cvss_band (Critical/High/Medium/Low), days_since_published, and trend analysis by cvss_band + severity. Publish to 'Prep Agent / 12 - NIST NVD Vulnerabilities' on Tableau Server for vulnerability management analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "NIST NVD CVE Feed (30 days)",
+      "description": "National Vulnerability Database v2 API, /rest/json/cves/2.0. Public, keyless (rate-limited but usable). One row per CVE published in the trailing 30-day window. Response envelope: {resultsPerPage, startIndex, totalResults, format, version, vulnerabilities: [{cve: {id, published, descriptions[], metrics.cvssMetricV31[0].cvssData.{baseScore, baseSeverity, attackVector}, weaknesses[]}]}. Pagination: offset via startIndex + resultsPerPage cap of 2000; NVD tags the total in totalResults so the walker can terminate cleanly.",
+      "url": "https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate=2026-06-15T00:00:00.000&pubEndDate=2026-07-14T23:59:59.999",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_records_path": "vulnerabilities",
+        "json_paginate": true,
+        "json_page_kind": "offset",
+        "json_page_param": "startIndex",
+        "json_page_size_param": "resultsPerPage",
+        "json_page_size": 2000,
+        "json_page_start": 0,
+        "json_max_pages": 5,
+        "json_derived_columns": [
+          {
+            "name": "cve_id",
+            "kind": "dotted_path",
+            "source_col": "cve",
+            "path": "id",
+            "cast": "string"
+          },
+          {
+            "name": "published",
+            "kind": "dotted_path",
+            "source_col": "cve",
+            "path": "published",
+            "cast": "string"
+          },
+          {
+            "name": "last_modified",
+            "kind": "dotted_path",
+            "source_col": "cve",
+            "path": "lastModified",
+            "cast": "string"
+          },
+          {
+            "name": "vuln_status",
+            "kind": "dotted_path",
+            "source_col": "cve",
+            "path": "vulnStatus",
+            "cast": "string"
+          },
+          {
+            "name": "description",
+            "kind": "dotted_path",
+            "source_col": "cve",
+            "path": "descriptions.0.value",
+            "cast": "string"
+          },
+          {
+            "name": "cvss_v31_base",
+            "kind": "dotted_path",
+            "source_col": "cve",
+            "path": "metrics.cvssMetricV31.0.cvssData.baseScore",
+            "cast": "decimal"
+          },
+          {
+            "name": "cvss_v31_sev",
+            "kind": "dotted_path",
+            "source_col": "cve",
+            "path": "metrics.cvssMetricV31.0.cvssData.baseSeverity",
+            "cast": "string"
+          },
+          {
+            "name": "attack_vector",
+            "kind": "dotted_path",
+            "source_col": "cve",
+            "path": "metrics.cvssMetricV31.0.cvssData.attackVector",
+            "cast": "string"
+          },
+          {
+            "name": "primary_cwe",
+            "kind": "dotted_path",
+            "source_col": "cve",
+            "path": "weaknesses.0.description.0.value",
+            "cast": "string"
+          },
+          {
+            "name": "source_id",
+            "kind": "dotted_path",
+            "source_col": "cve",
+            "path": "sourceIdentifier",
+            "cast": "string"
+          },
+          {
+            "name": "days_since_published",
+            "kind": "days_since",
+            "source_col": "published"
+          }
+        ],
+        "json_schema": {
+          "cve_id": "string",
+          "published": "string",
+          "last_modified": "string",
+          "vuln_status": "string",
+          "description": "string",
+          "cvss_v31_base": "decimal",
+          "cvss_v31_sev": "string",
+          "attack_vector": "string",
+          "primary_cwe": "string",
+          "source_id": "string",
+          "days_since_published": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "NVD Trend",
+        "date_col": "published",
+        "dimensions": [
+          "cvss_v31_sev",
+          "attack_vector"
+        ],
+        "rolling_window_days": 7,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level temporal features parsed from published (year, month, quarter, day_of_week, iso_week). Row-level CVE detail.",
+        "stats_description": "Long-form CVE statistics (one row per dimension x value x year x month over CVSS severity band and attack vector). Includes daily_count, 7-day rolling counts, YoY deltas (limited for a 30-day window), z-score anomalies vs baseline (|z|>=2.0 flagged is_anomaly=True). Use to spot severity-band spikes or exploitation-vector drift over the window."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "NVD Vulnerability Detail",
+      "project": "12 - NIST NVD Vulnerabilities",
+      "source": "NVD Trend (Features)",
+      "description": "Row-level CVEs from the NIST National Vulnerability Database, trailing 30-day window (published 2026-06-15 through 2026-07-14). Includes cve_id, published, last_modified, vuln_status, description (first English description), cvss_v31_base (numeric 0-10), cvss_v31_sev (LOW/MEDIUM/HIGH/CRITICAL), attack_vector (NETWORK/ADJACENT/LOCAL/PHYSICAL), primary_cwe (first weakness description), source_id, days_since_published. Plus calendar features. Source: services.nvd.nist.gov/rest/json/cves/2.0. Refresh: daily."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "NVD Vulnerability Stats",
+      "project": "12 - NIST NVD Vulnerabilities",
+      "source": "NVD Trend (Stats)",
+      "description": "Long-form CVE trend statistics (one row per dimension x value x year x month over CVSS severity band and attack vector). Includes 7-day rolling counts, z-score anomalies (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to identify unusual clusters of CRITICAL-severity CVEs or a sudden shift in attack-vector distribution across the window."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "12 - NIST NVD Vulnerabilities",
+    "parent_project": "Prep Agent",
+    "flow_name": "NIST NVD Vulnerabilities",
+    "overwrite": true,
+    "cadence": "daily",
+    "hour_utc": 10,
+    "minute_utc": 15,
+    "schedule_name_hint": "NVD Daily Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}
