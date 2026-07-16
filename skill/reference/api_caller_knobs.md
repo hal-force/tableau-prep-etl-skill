@@ -60,6 +60,14 @@ unexpected request headers as query parameters and return HTTP 400
 "found unpermitted variable" if the header is set. No knob — handled
 automatically.
 
+**Default User-Agent:** every request goes out as `User-Agent: curl/8.4.0`
+so that public sources that reject the default `Python-urllib/X.Y`
+(USGS earthquake feeds, various government sites) don't 403. Some
+publishers (CelesTrak was the case that made us pivot to
+`tle.ivanstanojevic.me`) TLS-fingerprint Python's stdlib request
+regardless of UA — no header override will save it; a different
+source or a browser-driven pull is required.
+
 ## JSON sources (`format: "json" | "jsonl" | "ndjson"`)
 
 ### Schema + envelope
@@ -100,6 +108,28 @@ rows already collected).
 | `json_page_in_body`     | `false`        | When true (and method=POST and body set), the page param goes IN the body, not the URL. USAspending et al. |
 | `json_has_next_path`    | `''`           | Dotted path to a boolean termination flag (USAspending: `'page_metadata.hasNext'`). When that field is `false`, the walk ends. |
 
+**Pagination URL gotcha:** when `json_paginate: true`, the pagination
+knobs `json_page_param` + `json_page_size_param` are appended to the
+base URL on every request. **Do NOT include those params in the base
+URL** — the walker will append a second copy and most APIs treat the
+duplicate as an error condition (World Bank returned
+`[{"message": "Parameter '<name>' has an invalid value"}]` when
+`per_page=1000` was baked into the URL and also emitted as
+`?per_page=1000&page=1`). Bake in only params that never change
+(`format=json`, `date=2010:2024`).
+
+**`json_records_path` with numeric index into outer list:** if the
+publisher wraps records as `[meta, data]` (World Bank pattern), use
+`json_records_path: "1"` to index into element 1 of the outer list.
+Numeric segments in the dotted path are converted to int and applied
+against lists; string segments walk dicts.
+
+**Publisher-name conventions:** many APIs use bespoke pagination param
+names — do NOT rely on the JSON:API default `page[number]` / `page[size]`.
+World Bank uses `page` + `per_page`; the tle.ivanstanojevic mirror uses
+`page` + `page-size`; NASA NEO uses `page` + `size`. Set
+`json_page_param` and `json_page_size_param` explicitly.
+
 ### Post-fetch column synthesis
 
 `json_derived_columns` is a list of dicts; each one synthesizes a
@@ -115,6 +145,9 @@ trim. Kinds available today:
 | `dict_field`       | `{name, source_col, field}`                                              | Pulls a named field out of a dict-valued column. USAspending `NAICS.code`. |
 | `days_since`       | `{name, source_col}`                                                     | Calendar days from an ISO-date column to today (UTC).               |
 | `days_between`     | `{name, start_col, end_col}`                                             | Calendar days between two ISO-date columns.                         |
+| `dotted_path`      | `{name, source_col, path, cast?, default?}`                              | Walk a dotted path into a dict-or-list-valued cell and extract a scalar. Numeric segments index into lists (e.g. `close_approach_data.0.miss_distance.kilometers`). `path=""` copies source through the caster. `cast` in `('string','int','decimal')`, default `'string'`. |
+| `numeric_bin`      | `{name, source_col, thresholds:[...], labels:[...], default?}`           | Bin a numeric column into categorical labels. `labels` length = `thresholds` length + 1. Ex: `thresholds:[0.03,0.14,1.0]` + `labels:[small,medium,large,very_large]` on a diameter column (km). |
+| `epoch_ms_iso`     | `{name, source_col}`                                                     | Convert Unix milliseconds epoch to ISO 8601 string (UTC). Used by USGS earthquakes `properties.time`. |
 
 Declared derived columns must also appear in `json_schema` (with
 their target type) or they get trimmed out before the dataframe
@@ -148,8 +181,15 @@ reaches Tableau Prep.
 `format: "csv_index_then_zip"` is a specialty mode for publishers
 that ship a small index page listing dated zip files (GDELT). It uses
 `extra.index_link_pattern` (a regex) to pluck zip URLs out of the
-index HTML. See `flows/gdelt_global/v1/spec.json` for the only
-worked example today.
+index HTML.
+
+| Knob                   | Default | Use                                                                  |
+|------------------------|---------|----------------------------------------------------------------------|
+| `index_link_pattern`   | `''`    | Regex over the index HTML that captures the newest zip filename.     |
+| `country_filter`       | `''`    | GDELT-only: filter rows on `ActionGeo_CountryCode`. Comma-separated (`'IR,IQ,SY'`) is treated as an isin() match. Single code accepted for backward-compat. |
+
+Worked examples: `flows/gdelt_global/v1/spec.json` (single country) and
+`flows/gdelt_centcom/v1/spec.json` (comma-list, 20 CENTCOM AOR codes).
 
 ## When to NOT use api_caller
 

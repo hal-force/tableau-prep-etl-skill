@@ -366,7 +366,7 @@ def _declared_schema_for_source(src: Source) -> dict[str, str]:
     elif src.format in ("csv", "csv_zip"):
         for col, decl in (extra.get("csv_schema") or {}).items():
             schema[col] = (decl or "string").lower()
-    elif src.format in ("json", "jsonl", "ndjson"):
+    elif src.format in ("json", "jsonl", "ndjson", "xml"):
         for col, decl in (extra.get("json_schema") or {}).items():
             schema[col] = (decl or "string").lower()
     elif src.format == "csv_index_then_zip":
@@ -600,8 +600,8 @@ def _input_schema_from_sources(spec: Spec) -> dict:
             # carry the same column name).
             for col, decl in (extra.get("csv_schema") or {}).items():
                 schema[col] = decl
-        elif src.format in ("json", "jsonl", "ndjson"):
-            # Plain JSON sources declare schema in extra.json_schema —
+        elif src.format in ("json", "jsonl", "ndjson", "xml"):
+            # Plain JSON/XML sources declare schema in extra.json_schema —
             # symmetric with csv_schema. Required when downstream
             # script nodes need to know upstream column types.
             for col, decl in (extra.get("json_schema") or {}).items():

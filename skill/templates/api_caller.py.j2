@@ -192,7 +192,14 @@ def _ssl_ctx():
 
 
 def _build_headers():
-    headers = {"Content-Type": "application/json"}
+    # CelesTrak, USGS, and other public sources reject the default
+    # `Python-urllib/X.Y` UA with 403. Send a realistic UA on every
+    # request; caller-supplied headers via `extra.headers` win.
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "curl/8.4.0",
+        "Accept": "*/*",
+    }
     {% if auth == 'api_key' %}
     api_key = os.environ.get("{{ extra.get('api_key_env', 'API_KEY') }}", "")
     if api_key:
@@ -438,7 +445,12 @@ def _fetch_csv_index_then_zip() -> pd.DataFrame:
             csv_bytes = fp.read()
     df = _df_from_csv_bytes(csv_bytes, has_header=False)
     if COUNTRY_FILTER and "ActionGeo_CountryCode" in df.columns:
-        df = df[df["ActionGeo_CountryCode"] == COUNTRY_FILTER].reset_index(drop=True)
+        # Accepts either a single country code ('IR') or a comma-separated
+        # list ('IR,IQ,SY,YE,AF,SA,QA,KW,BH,OM,AE,JO,LB,EG'). Trailing
+        # whitespace/blank tokens are ignored.
+        codes = [c.strip() for c in str(COUNTRY_FILTER).split(",") if c.strip()]
+        if codes:
+            df = df[df["ActionGeo_CountryCode"].isin(codes)].reset_index(drop=True)
     return df
 
 
@@ -470,6 +482,75 @@ def _fetch_jsonl() -> pd.DataFrame:
     body = _http_get_bytes(API_URL).decode("utf-8", errors="replace")
     rows = [json.loads(ln) for ln in body.splitlines() if ln.strip()]
     return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------- XML
+# Namespace-agnostic parser for authoritative XML feeds (OFAC SDN,
+# EU sanctions XSD, RSS/Atom, etc.). Each `extra.xml_entry_path`
+# element becomes one row; nested elements are flattened via dotted
+# keys so downstream `dotted_path` derived-column shapes stay uniform
+# with JSON sources. Attributes come through as `@attr` keys.
+XML_ENTRY_PATH = {{ extra.get('xml_entry_path', '') | pyrepr }}
+XML_STRIP_NS = bool({{ extra.get('xml_strip_ns', True) | pyrepr }})
+
+
+def _xml_localname(tag: str) -> str:
+    """Strip namespace prefix; `{ns}Elem` -> `Elem`."""
+    if tag.startswith("{"):
+        return tag.split("}", 1)[1]
+    return tag
+
+
+def _xml_walk(elem, prefix: str = "") -> dict:
+    """Flatten a single XML element into a dotted-key dict.
+
+    Repeated child element names collide into a single list under the
+    same key so downstream `dotted_path` walkers can index by
+    position (`akaList.aka.0.lastName`). Attributes are emitted as
+    `@name` under the element's key namespace. Text content on
+    interior nodes is dropped intentionally — Prep flows read from
+    dotted-path leaves only.
+    """
+    out: dict = {}
+    # Attributes
+    for k, v in (elem.attrib or {}).items():
+        out[prefix + "@" + _xml_localname(k)] = v
+    # Text on the element itself
+    text = (elem.text or "").strip()
+    if text and not list(elem):
+        return {prefix.rstrip("."): text} if prefix else {"_text": text}
+    # Children — collapse repeats into lists of dicts (or scalars)
+    child_map: dict = {}
+    for child in list(elem):
+        name = _xml_localname(child.tag) if XML_STRIP_NS else child.tag
+        gk = child_map.setdefault(name, [])
+        if list(child) or (child.attrib or {}):
+            gk.append(_xml_walk(child, ""))
+        else:
+            gk.append((child.text or "").strip())
+    for name, items in child_map.items():
+        key = prefix + name if prefix else name
+        # Unwrap single-item lists to a scalar for cleaner JSON-like shape
+        out[key] = items[0] if len(items) == 1 else items
+    return out
+
+
+def _fetch_xml() -> pd.DataFrame:
+    import xml.etree.ElementTree as ET
+    body = _http_get_bytes(API_URL)
+    root = ET.fromstring(body)
+    entry_local = XML_ENTRY_PATH or ""
+    if entry_local:
+        # Namespace-agnostic: match by local name across every descendant.
+        entries = [
+            e for e in root.iter()
+            if _xml_localname(e.tag) == entry_local
+        ]
+    else:
+        entries = list(root)
+    rows = [_xml_walk(e) for e in entries]
+    df = pd.DataFrame(rows) if rows else pd.DataFrame()
+    return _apply_json_schema_coercion(df)
 
 
 def _fetch_json() -> pd.DataFrame:
@@ -728,6 +809,76 @@ def _apply_json_schema_coercion(df: pd.DataFrame) -> pd.DataFrame:
                                 return str(head.get(field, "") or "")
                         return ""
                     df[name] = df[src_col].apply(_first)
+            elif kind == "dotted_path":
+                # Walk a dotted path through a dict-or-list value and
+                # extract a scalar. Path segments are keys for dicts
+                # and integer indices for lists (numeric segments
+                # cast to int). Example: NVD metrics live at
+                # `metrics.cvssMetricV31.0.cvssData.baseScore` on
+                # each vulnerability row after the outer `cve`
+                # unwrap. Coerces the result via `cast` if given
+                # ('decimal', 'int', 'string'); default is string.
+                src_col = derived.get("source_col")
+                path = derived.get("path", "")
+                cast_to = derived.get("cast", "string")
+                default = derived.get("default", "")
+                if src_col and src_col in df.columns:
+                    segments = [seg for seg in path.split(".") if seg != ""]
+                    def _walk(v, _segs=segments, _cast=cast_to, _def=default):
+                        cur = v
+                        for seg in _segs:
+                            if cur is None:
+                                return _def
+                            if isinstance(cur, list):
+                                try:
+                                    cur = cur[int(seg)]
+                                except (ValueError, IndexError, TypeError):
+                                    return _def
+                            elif isinstance(cur, dict):
+                                cur = cur.get(seg)
+                            else:
+                                return _def
+                        if cur is None:
+                            return _def
+                        if _cast == "decimal":
+                            try: return float(cur)
+                            except (TypeError, ValueError): return None
+                        if _cast == "int":
+                            try: return int(cur)
+                            except (TypeError, ValueError): return None
+                        return str(cur)
+                    df[name] = df[src_col].apply(_walk)
+            elif kind == "numeric_bin":
+                # Bin a numeric column into categorical labels. Given
+                # `thresholds` (ascending list) and `labels` (len = len
+                # thresholds + 1), returns labels[i] for the first
+                # threshold whose value is >= x, else the last label.
+                # Ex: satellite orbit class from MEAN_MOTION (rev/day)
+                # — thresholds=[1.5, 2.5, 11.25] labels=[GEO, HEO, MEO, LEO].
+                src_col = derived.get("source_col")
+                thresholds = derived.get("thresholds", [])
+                labels = derived.get("labels", [])
+                default = derived.get("default", "")
+                if src_col and src_col in df.columns and thresholds and labels:
+                    def _bin(v, _t=list(thresholds), _l=list(labels), _d=default):
+                        try:
+                            x = float(v)
+                        except (TypeError, ValueError):
+                            return _d
+                        for i, t in enumerate(_t):
+                            if x < float(t):
+                                return _l[i] if i < len(_l) else _d
+                        return _l[-1] if _l else _d
+                    df[name] = df[src_col].apply(_bin)
+            elif kind == "epoch_ms_iso":
+                # Convert a Unix epoch milliseconds column to an ISO
+                # datetime string (UTC). Useful for USGS earthquakes,
+                # NASA NEO close-approach epochs, GDELT event times.
+                src_col = derived.get("source_col")
+                if src_col and src_col in df.columns:
+                    s = pd.to_numeric(df[src_col], errors="coerce")
+                    dt = pd.to_datetime(s, unit="ms", utc=True, errors="coerce")
+                    df[name] = dt.dt.strftime("%Y-%m-%dT%H:%M:%SZ").fillna("")
             elif kind == "days_since":
                 # Calendar days from an ISO-date string column to today
                 # (UTC). Useful for "days_since_filed", "days_open",
@@ -912,6 +1063,7 @@ _DISPATCH = {
     "jsonl": _fetch_jsonl,
     "ndjson": _fetch_jsonl,
     "arcgis_features": _fetch_arcgis_features,
+    "xml": _fetch_xml,
 }
 
 
@@ -1099,7 +1251,7 @@ def get_output_schema():
         return pd.DataFrame(schema)
     if FORMAT == "csv_index_then_zip":
         return pd.DataFrame(_gdelt_v1_schema())
-    if FORMAT in ("json", "jsonl", "ndjson") and JSON_SCHEMA:
+    if FORMAT in ("json", "jsonl", "ndjson", "xml") and JSON_SCHEMA:
         type_map = {
             "string": prep_string(),  # noqa: F821
             "int": prep_int(),  # noqa: F821

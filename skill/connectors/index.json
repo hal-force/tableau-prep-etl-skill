@@ -9,8 +9,8 @@
         "auth": "none",
         "format": "csv_index_then_zip"
       },
-      "hit_count": 45,
-      "last_used_at": 1782224960.22769
+      "hit_count": 47,
+      "last_used_at": 1784150723.001463
     },
     "87373f435ea745fc": {
       "signature": {
@@ -109,8 +109,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 21,
-      "last_used_at": 1781883373.1336782
+      "hit_count": 33,
+      "last_used_at": 1784149271.129597
     },
     "835870af58a7b455": {
       "signature": {
@@ -119,8 +119,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 18,
-      "last_used_at": 1781883373.3059762
+      "hit_count": 24,
+      "last_used_at": 1784149494.905963
     },
     "3fb732d2bb64aef1": {
       "signature": {
@@ -209,8 +209,8 @@
         "auth": "none",
         "format": "json"
       },
-      "hit_count": 18,
-      "last_used_at": 1781883373.435654
+      "hit_count": 30,
+      "last_used_at": 1784146425.945081
     },
     "cdb5a0e78b8b451d": {
       "signature": {
@@ -231,6 +231,96 @@
       },
       "hit_count": 19,
       "last_used_at": 1784049584.221056
+    },
+    "e7f044bf4cda77bf": {
+      "signature": {
+        "type": "rest_api",
+        "host": "services.nvd.nist.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 15,
+      "last_used_at": 1784148181.6896498
+    },
+    "a59812796238e1af": {
+      "signature": {
+        "type": "rest_api",
+        "host": "www.treasury.gov",
+        "auth": "none",
+        "format": "xml"
+      },
+      "hit_count": 3,
+      "last_used_at": 1784148820.705179
+    },
+    "b1122dcdf75f9c7d": {
+      "signature": {
+        "type": "rest_api",
+        "host": "earthquake.usgs.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 9,
+      "last_used_at": 1784149780.6286871
+    },
+    "ac9453a9ca4256b0": {
+      "signature": {
+        "type": "rest_api",
+        "host": "celestrak.org",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 9,
+      "last_used_at": 1784150061.781568
+    },
+    "cf8df52754540553": {
+      "signature": {
+        "type": "rest_api",
+        "host": "tle.ivanstanojevic.me",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 12,
+      "last_used_at": 1784150414.893738
+    },
+    "9abc726ac5cfe1d0": {
+      "signature": {
+        "type": "rest_api",
+        "host": "services.swpc.noaa.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 6,
+      "last_used_at": 1784150927.3642938
+    },
+    "d3d1eae568ab8a98": {
+      "signature": {
+        "type": "rest_api",
+        "host": "api.worldbank.org",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 15,
+      "last_used_at": 1784151780.835868
+    },
+    "6cb050fcc0b9ecde": {
+      "signature": {
+        "type": "rest_api",
+        "host": "api.nasa.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 6,
+      "last_used_at": 1784152091.234731
+    },
+    "810875ac38ff4bb5": {
+      "signature": {
+        "type": "rest_api",
+        "host": "ssd-api.jpl.nasa.gov",
+        "auth": "none",
+        "format": "json"
+      },
+      "hit_count": 9,
+      "last_used_at": 1784152357.805282
     }
   }
 }

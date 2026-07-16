@@ -295,10 +295,22 @@ Hyper output you can run cold:
 | `flows/embassy_threat_monitor_v2/v1/` | GDELT × US diplomatic-post roster | Haversine spatial join + weighted risk-bands + narrative event_summary. Every-3h cadence via publisher-cadence workaround. |
 | `flows/doe_data_center_energy_monthly/v1/` | EIA Open Data v2 (retail-sales + state-profiles) | `auth: query_key` (`?api_key=…`) — first flow to exercise the new query-string auth path. Monthly. |
 | `flows/doe_data_center_energy_hourly/v1/` | EIA Open Data v2 (RTO region-data) | Sub-daily hourly RTO demand pull (PJM/ERCOT/CAISO/MISO); every-6h refresh via publisher-cadence workaround. |
+| `flows/dod_contracts/v1/` | USAspending.gov (DoD only) | Defense/NatSec collection slot 11 — DoD prime-contract awards, POST-body pagination. |
+| `flows/nvd_cves/v1/` | NIST NVD CVE 2.0 | Slot 12 — dotted_path into CVSS metrics, days_since_published enrichment. |
+| `flows/cisa_kev/v2/` | CISA Known Exploited Vulnerabilities | Slot 13 — flat JSON, days_between (dueDate SLA), all-string date schema fix. |
+| `flows/fedreg_dod/v1/` | Federal Register DoD YTD | Slot 14 — list_first_field agency extraction. |
+| `flows/usgs_earthquakes/v1/` | USGS significant_month GeoJSON | Slot 15 — 16 dotted_path extractions incl. geometry.coordinates.{0,1,2}; new `epoch_ms_iso` derived-col for `properties.time`. |
+| `flows/tle_satellites/v1/` | tle.ivanstanojevic mirror | Slot 16 — pivoted from CelesTrak (TLS-fingerprint block); page-size=100 + page kind override. |
+| `flows/gdelt_centcom/v1/` | GDELT 1.0 events (CENTCOM AOR) | Slot 17 — comma-list `country_filter` (20 codes: IR,IQ,SY,YE,AF,SA,QA,KW,BH,OM,AE,JO,LB,EG,PK,TJ,TM,UZ,KG,KZ). |
+| `flows/noaa_swpc/v1/` | NOAA SWPC alerts feed | Slot 18 — 30d space-weather alerts, product_id family enrichment. |
+| `flows/wb_mil_expenditure/v1/` | World Bank indicator API | Slot 19 — `json_records_path: "1"` (numeric index into 2-elem envelope); new `numeric_bin` for spend_band. |
+| `flows/cneos_sentry/v1/` | NASA JPL CNEOS Sentry risk table | Slot 20 — pivoted from NEO browse (DEMO_KEY rate limit); Palermo scale binning + diameter_class. |
 
-The first 14 form a baseline; flows 1-10 of the **Prep Agent demo
-collection** are the ten archived flows below
-`flows/russia_ukraine_attrition/v1/` (the eleventh sits in slot 11).
+The first 14 form a baseline; flows 1-10 and 11-20 of the **Prep Agent demo
+collection** are the twenty archived flows. Slots 1-10 cover the
+federal / open-government baseline; slots 11-20 cover defense and
+national security (DoD contracts, CVEs, KEV, USGS, TLE catalog,
+GDELT CENTCOM, SWPC, World Bank military expenditure, CNEOS Sentry).
 The collection lives under a nested `Prep Agent` parent project on
 Cloud, each in its own `01 - Federal Outlays`, `02 - Federal Workforce`,
 … child project for browseable side-by-side demos.
