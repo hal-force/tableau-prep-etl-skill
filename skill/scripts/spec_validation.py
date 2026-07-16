@@ -352,6 +352,8 @@ _EXTRA_KEYS_BY_TYPE: dict[str, frozenset[str]] = {
         "max_response_bytes", "max_response_rows",
         # query_key auth (EIA v2 / NREL / Data.gov style: `?api_key=…`)
         "query_key_param_name",
+        # XML source knobs (OFAC SDN, EU sanctions, RSS/Atom feeds)
+        "xml_entry_path", "xml_strip_ns",
         # ACLED-specific
         "email_env", "lookback_days", "page_size", "max_pages", "max_rows",
         "acled_query_params",
