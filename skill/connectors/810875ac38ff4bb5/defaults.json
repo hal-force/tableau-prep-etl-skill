@@ -1,0 +1,69 @@
+{
+  "verify_ssl": false,
+  "timeout_s": 60,
+  "max_retries": 3,
+  "json_records_path": "data",
+  "json_derived_columns": [
+    {
+      "name": "days_since_last_obs",
+      "kind": "days_since",
+      "source_col": "last_obs"
+    },
+    {
+      "name": "palermo_band",
+      "kind": "numeric_bin",
+      "source_col": "ps_cum",
+      "thresholds": [
+        -10,
+        -4,
+        -2,
+        0
+      ],
+      "labels": [
+        "negligible",
+        "very_low",
+        "low",
+        "elevated",
+        "high"
+      ],
+      "default": "unknown"
+    },
+    {
+      "name": "diameter_class",
+      "kind": "numeric_bin",
+      "source_col": "diameter",
+      "thresholds": [
+        0.03,
+        0.14,
+        1.0
+      ],
+      "labels": [
+        "small",
+        "medium",
+        "large",
+        "very_large"
+      ],
+      "default": "unknown"
+    }
+  ],
+  "json_schema": {
+    "des": "string",
+    "id": "string",
+    "fullname": "string",
+    "ip": "decimal",
+    "n_imp": "int",
+    "ps_max": "decimal",
+    "ps_cum": "decimal",
+    "ts_max": "decimal",
+    "last_obs": "string",
+    "last_obs_jd": "decimal",
+    "h": "decimal",
+    "v_inf": "decimal",
+    "range": "string",
+    "diameter": "decimal",
+    "diameter_class": "string",
+    "palermo_band": "string",
+    "days_since_last_obs": "int"
+  },
+  "_skip_auto_casts": true
+}

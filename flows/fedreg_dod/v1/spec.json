@@ -1,0 +1,99 @@
+{
+  "request": "Pull YTD 2026 Federal Register documents where the DoD is a listed agency. Flatten to one row per document with title, type, publication date, first agency, doc URL, days_since_published, and calendar features. Publish to 'Prep Agent / 14 - Federal Register DoD Documents' on Tableau Server for defense-policy analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "Federal Register DoD Documents",
+      "description": "Federal Register public v1 API. `/documents.json` with `conditions[agencies][]=defense-department` and a YTD publication_date filter returns Notices, Rules, and Proposed Rules where DoD is a listed agency. Envelope: {count, description, total_pages, next_page_url, results:[{title, type, abstract, document_number, html_url, publication_date, agencies:[{name,slug,...}], excerpts, ...}]}. Pagination via next_page_url; ~500+ docs YTD. No auth.",
+      "url": "https://www.federalregister.gov/api/v1/documents.json?conditions%5Bagencies%5D%5B%5D=defense-department&conditions%5Bpublication_date%5D%5Bgte%5D=2026-01-01&conditions%5Bpublication_date%5D%5Blte%5D=2026-07-14&per_page=100&page=1",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_records_path": "results",
+        "json_paginate": true,
+        "json_page_kind": "page",
+        "json_page_param": "page",
+        "json_page_start": 1,
+        "json_max_pages": 10,
+        "json_derived_columns": [
+          {
+            "name": "primary_agency",
+            "kind": "list_first_field",
+            "source_col": "agencies",
+            "field": "name"
+          },
+          {
+            "name": "days_since_published",
+            "kind": "days_since",
+            "source_col": "publication_date"
+          }
+        ],
+        "json_schema": {
+          "title": "string",
+          "type": "string",
+          "abstract": "string",
+          "document_number": "string",
+          "html_url": "string",
+          "publication_date": "string",
+          "primary_agency": "string",
+          "days_since_published": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "FedReg DoD Trend",
+        "date_col": "publication_date",
+        "dimensions": [
+          "type",
+          "primary_agency"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level calendar features parsed from publication_date (year, month, quarter, day_of_week, iso_week). Row-level FR DoD document detail.",
+        "stats_description": "Long-form FR DoD statistics (one row per dimension x value x year x month over document type and primary agency). Includes daily_count, 30-day rolling counts, z-score anomalies vs baseline (|z|>=2.0 flagged is_anomaly=True). Use to spot spikes in Proposed Rules from any DoD component or agency-level publishing pattern shifts."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "FR DoD Documents",
+      "project": "14 - Federal Register DoD Documents",
+      "source": "FedReg DoD Trend (Features)",
+      "description": "Row-level Federal Register documents where the DoD is a listed agency (YTD 2026). Includes title, type (Notice/Rule/Proposed Rule), abstract, document_number, html_url, publication_date, primary_agency (first listed), days_since_published. Plus calendar features. Source: federalregister.gov/api/v1/documents.json (DoD filter). Refresh: daily."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "FR DoD Stats",
+      "project": "14 - Federal Register DoD Documents",
+      "source": "FedReg DoD Trend (Stats)",
+      "description": "Long-form Federal Register DoD trend statistics (one row per dimension x value x year x month over document type and primary agency). Includes 30-day rolling counts, z-score anomalies, lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to detect policy-publishing surges by DoD sub-component."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "14 - Federal Register DoD Documents",
+    "parent_project": "Prep Agent",
+    "flow_name": "Federal Register DoD Documents",
+    "overwrite": true,
+    "cadence": "daily",
+    "hour_utc": 11,
+    "minute_utc": 30,
+    "schedule_name_hint": "FedReg DoD Daily Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

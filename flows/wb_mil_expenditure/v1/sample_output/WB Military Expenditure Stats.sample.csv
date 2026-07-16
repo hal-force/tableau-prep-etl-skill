@@ -1,0 +1,6 @@
+baseline_mean,baseline_std,dimension,is_anomaly,lifetime_count,lifetime_rank,month,monthly_count,pct_of_total,rolling_count,value,year,yoy_change,yoy_pct,zscore
+1.0,0.0,<redacted>,False,15,1,1,1,0.0037735849056603774,1,<redacted>,2010,1,0.0,0.0
+1.0,0.0,<redacted>,False,15,1,1,1,0.0037735849056603774,1,<redacted>,2011,0,0.0,0.0
+1.0,0.0,<redacted>,False,15,1,1,1,0.0037735849056603774,1,<redacted>,2012,0,0.0,0.0
+1.0,0.0,<redacted>,False,15,1,1,1,0.0037735849056603774,1,<redacted>,2013,0,0.0,0.0
+1.0,0.0,<redacted>,False,15,1,1,1,0.0037735849056603774,1,<redacted>,2014,0,0.0,0.0

@@ -1,0 +1,153 @@
+{
+  "request": "Pull DoD contract awards (agency 'Department of Defense', top-tier) from USAspending.gov for the current fiscal year (2025-10-01 through today, 2026-07-14), enrich with NAICS flattening, days_of_performance, and trend analysis by Awarding Sub Agency + Recipient. Publish to 'Prep Agent / 11 - DoD Contract Awards' on Tableau Server for defense procurement analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "USAspending DoD Awards FY2026",
+      "description": "USAspending.gov spending_by_award API, filtered to Department of Defense as the top-tier awarding agency, FY2026 (2025-10-01 through 2026-07-14). Award type codes A/B/C/D (BPA Calls, Purchase Orders, Delivery Orders, Definitive Contracts). Public, keyless. POST + JSON body; pagination uses 'page' in body with page_metadata.hasNext cursor termination.",
+      "url": "https://api.usaspending.gov/api/v2/search/spending_by_award/",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 2,
+        "json_http_method": "POST",
+        "json_body": {
+          "filters": {
+            "time_period": [
+              {
+                "start_date": "2025-10-01",
+                "end_date": "2026-07-14"
+              }
+            ],
+            "award_type_codes": [
+              "A",
+              "B",
+              "C",
+              "D"
+            ],
+            "agencies": [
+              {
+                "type": "awarding",
+                "tier": "toptier",
+                "name": "Department of Defense"
+              }
+            ]
+          },
+          "fields": [
+            "Award ID",
+            "Recipient Name",
+            "Awarding Agency",
+            "Awarding Sub Agency",
+            "Award Amount",
+            "Start Date",
+            "End Date",
+            "Description",
+            "NAICS",
+            "Place of Performance State Code"
+          ],
+          "limit": 100
+        },
+        "json_paginate": true,
+        "json_page_in_body": true,
+        "json_page_param": "page",
+        "json_page_size_param": "",
+        "json_page_size": 100,
+        "json_page_start": 1,
+        "json_page_kind": "index",
+        "json_max_pages": 30,
+        "json_records_path": "results",
+        "json_has_next_path": "page_metadata.hasNext",
+        "json_derived_columns": [
+          {
+            "name": "naics_code",
+            "kind": "dict_field",
+            "source_col": "NAICS",
+            "field": "code"
+          },
+          {
+            "name": "naics_description",
+            "kind": "dict_field",
+            "source_col": "NAICS",
+            "field": "description"
+          },
+          {
+            "name": "days_of_performance",
+            "kind": "days_between",
+            "start_col": "Start Date",
+            "end_col": "End Date"
+          }
+        ],
+        "json_schema": {
+          "Award ID": "string",
+          "Recipient Name": "string",
+          "Awarding Agency": "string",
+          "Awarding Sub Agency": "string",
+          "Award Amount": "decimal",
+          "Start Date": "string",
+          "End Date": "string",
+          "Description": "string",
+          "Place of Performance State Code": "string",
+          "naics_code": "string",
+          "naics_description": "string",
+          "days_of_performance": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "DoD Award Trend",
+        "date_col": "Start Date",
+        "dimensions": [
+          "Awarding Sub Agency",
+          "Recipient Name"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level temporal features parsed from Start Date (year, month, quarter, day_of_week, iso_week). Pure pass-through of DoD contract award rows.",
+        "stats_description": "Long-form DoD contract award statistics (one row per dimension x value x year x month over Awarding Sub Agency and Recipient Name). Includes monthly_count, 30-day rolling counts, year-over-year deltas + pct change, z-score anomalies vs baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Use to identify sub-agencies with surging award volume or unusual vendor concentration."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "DoD Award Detail",
+      "project": "11 - DoD Contract Awards",
+      "source": "DoD Award Trend (Features)",
+      "description": "Row-level DoD contract awards from USAspending.gov for FY2026 (2025-10-01 through 2026-07-14). Includes Award ID, Recipient Name, Awarding Agency, Awarding Sub Agency (Army/Navy/AF/DLA/etc.), Award Amount (USD), Start/End dates, Description, naics_code + naics_description (flattened from the API's nested NAICS object), days_of_performance (End - Start), Place of Performance State Code. Plus calendar features (year, month, quarter, day_of_week, iso_week). Source: api.usaspending.gov/api/v2/search/spending_by_award with agency filter type=awarding, tier=toptier, name='Department of Defense'. Refresh: monthly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "DoD Award Stats",
+      "project": "11 - DoD Contract Awards",
+      "source": "DoD Award Trend (Stats)",
+      "description": "Long-form DoD contract award statistics (one row per dimension x value x year x month over Awarding Sub Agency and Recipient Name). Includes 30-day rolling counts, YoY deltas + pct change (limited use here since demo window is <12 months), z-score anomalies vs baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to spot sub-agencies surging in award volume, or vendors gaining unusual concentration. Source: USAspending.gov."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "11 - DoD Contract Awards",
+    "parent_project": "Prep Agent",
+    "flow_name": "DoD Contract Awards",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 14,
+    "minute_utc": 30,
+    "weekday": "monday",
+    "day_of_month": 7,
+    "schedule_name_hint": "DoD Contracts Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

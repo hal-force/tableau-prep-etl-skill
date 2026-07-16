@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "earthquake.usgs.gov",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1784149647.9397068
+}

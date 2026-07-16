@@ -1,0 +1,96 @@
+{
+  "verify_ssl": false,
+  "timeout_s": 60,
+  "max_retries": 3,
+  "json_records_path": "near_earth_objects",
+  "json_paginate": true,
+  "json_page_kind": "page",
+  "json_page_param": "page",
+  "json_page_size_param": "size",
+  "json_page_size": 20,
+  "json_page_start": 0,
+  "json_max_pages": 10,
+  "json_derived_columns": [
+    {
+      "name": "diameter_m_max",
+      "kind": "dotted_path",
+      "source_col": "estimated_diameter",
+      "path": "meters.estimated_diameter_max",
+      "cast": "decimal"
+    },
+    {
+      "name": "diameter_m_min",
+      "kind": "dotted_path",
+      "source_col": "estimated_diameter",
+      "path": "meters.estimated_diameter_min",
+      "cast": "decimal"
+    },
+    {
+      "name": "next_approach_date",
+      "kind": "dotted_path",
+      "source_col": "close_approach_data",
+      "path": "0.close_approach_date"
+    },
+    {
+      "name": "next_approach_km",
+      "kind": "dotted_path",
+      "source_col": "close_approach_data",
+      "path": "0.miss_distance.kilometers",
+      "cast": "decimal"
+    },
+    {
+      "name": "next_approach_v_kps",
+      "kind": "dotted_path",
+      "source_col": "close_approach_data",
+      "path": "0.relative_velocity.kilometers_per_second",
+      "cast": "decimal"
+    },
+    {
+      "name": "next_approach_body",
+      "kind": "dotted_path",
+      "source_col": "close_approach_data",
+      "path": "0.orbiting_body"
+    },
+    {
+      "name": "size_class",
+      "kind": "numeric_bin",
+      "source_col": "diameter_m_max",
+      "thresholds": [
+        30,
+        140,
+        1000
+      ],
+      "labels": [
+        "small",
+        "medium",
+        "large",
+        "very_large"
+      ],
+      "default": "unknown"
+    },
+    {
+      "name": "days_since_approach",
+      "kind": "days_since",
+      "source_col": "next_approach_date"
+    }
+  ],
+  "json_schema": {
+    "id": "string",
+    "neo_reference_id": "string",
+    "name": "string",
+    "name_limited": "string",
+    "designation": "string",
+    "nasa_jpl_url": "string",
+    "absolute_magnitude_h": "decimal",
+    "is_potentially_hazardous_asteroid": "bool",
+    "diameter_m_min": "decimal",
+    "diameter_m_max": "decimal",
+    "next_approach_date": "string",
+    "next_approach_km": "decimal",
+    "next_approach_v_kps": "decimal",
+    "next_approach_body": "string",
+    "size_class": "string",
+    "days_since_approach": "int"
+  },
+  "_skip_auto_casts": true
+}

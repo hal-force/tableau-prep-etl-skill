@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "api.worldbank.org",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1784151428.094275
+}

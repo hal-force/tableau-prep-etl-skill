@@ -1,0 +1,83 @@
+{
+  "request": "Pull the last 30 days of NOAA Space Weather Prediction Center alerts (K-index warnings, solar flare notifications, geomagnetic storm alerts, radio blackout warnings). Include product_id, issue_datetime, and message. Enrich with alert_class (Warning/Watch/Alert/Summary), space_weather_scale (G/S/R prefix from product_id), and days_since_issued. Publish to 'Prep Agent / 18 - NOAA Space Weather Alerts' on Tableau Server for space-domain-awareness + SATCOM continuity analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "NOAA SWPC Alerts",
+      "description": "NOAA Space Weather Prediction Center alerts feed. `/products/alerts.json` returns a flat list of the last ~30 days of space-weather notifications. Each item: {product_id (e.g. K04W, ALTK07, WARK05, SUMS06 \u2014 4-letter code where prefix indicates alert family: WAR=Warning, ALT=Alert, WAT=Watch, SUM=Summary; K=K-index geomagnetic, S=solar radiation, R=radio blackout, G=geomagnetic storm), issue_datetime (ISO), message (multi-line human-readable body with the actual data)}. Public, no auth, refreshes on-issue.",
+      "url": "https://services.swpc.noaa.gov/products/alerts.json",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_records_path": "",
+        "json_derived_columns": [
+          {
+            "name": "days_since_issued",
+            "kind": "days_since",
+            "source_col": "issue_datetime"
+          }
+        ],
+        "json_schema": {
+          "product_id": "string",
+          "issue_datetime": "string",
+          "message": "string",
+          "days_since_issued": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "SWPC Trend",
+        "date_col": "issue_datetime",
+        "dimensions": [
+          "product_id"
+        ],
+        "rolling_window_days": 7,
+        "anomaly_z": 2.0,
+        "features_description": "Adds row-level calendar features parsed from issue_datetime (year, month, quarter, day_of_week, iso_week). Row-level space-weather alert.",
+        "stats_description": "Long-form space-weather statistics (one row per dimension x value x year x month over alert product family). Includes daily_count, 7-day rolling counts, z-score anomalies vs baseline (|z|>=2.0 flagged is_anomaly=True). Use to spot solar-flare or geomagnetic-storm alert clusters."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "SWPC Alerts Detail",
+      "project": "18 - NOAA Space Weather Alerts",
+      "source": "SWPC Trend (Features)",
+      "description": "Row-level NOAA SWPC alerts (trailing 30 days). Includes product_id (4-letter code: WAR=Warning, ALT=Alert, WAT=Watch, SUM=Summary + K/S/R/G family), issue_datetime, message (multi-line body), days_since_issued. Plus calendar features. Source: services.swpc.noaa.gov/products/alerts.json. Refresh: hourly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "SWPC Alerts Stats",
+      "project": "18 - NOAA Space Weather Alerts",
+      "source": "SWPC Trend (Stats)",
+      "description": "Long-form space-weather trend statistics (one row per dimension x value x year x month over alert product family). Includes 7-day rolling counts, z-score anomalies, lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to identify space-weather event clusters affecting SATCOM/GPS/HF-radio continuity."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "hourly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "18 - NOAA Space Weather Alerts",
+    "parent_project": "Prep Agent",
+    "flow_name": "NOAA Space Weather Alerts",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 0,
+    "minute_utc": 15,
+    "schedule_name_hint": "SWPC Alerts Hourly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

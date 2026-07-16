@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "www.treasury.gov",
+    "auth": "none",
+    "format": "xml"
+  },
+  "stored_at": 1784148642.689425
+}

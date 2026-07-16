@@ -1,0 +1,136 @@
+{
+  "request": "Pull World Bank military expenditure (% of GDP) indicator MS.MIL.XPND.GD.ZS for all countries, 2010-2024. Enrich each row with a spend_band (very_low / low / moderate / elevated / high) and years_since_observation for recency. Publish to 'Prep Agent / 19 - World Bank Military Expenditure' on Tableau Server for defense-economics + arms-industry analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "World Bank Military Expenditure",
+      "description": "World Bank Open Data indicator MS.MIL.XPND.GD.ZS (military expenditure as % of GDP). Response is a 2-element JSON envelope: [ {page, pages, per_page, total, lastupdated}, [ {indicator:{id,value}, country:{id,value}, countryiso3code, date, value, unit, obs_status, decimal}, ... ] ]. Use json_records_path='1' to index into the second element (the data array). Page-paginated (~4k rows for 2010:2024 global).",
+      "url": "https://api.worldbank.org/v2/country/all/indicator/MS.MIL.XPND.GD.ZS?format=json&date=2010:2024",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": false,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_records_path": "1",
+        "json_paginate": true,
+        "json_page_kind": "page",
+        "json_page_param": "page",
+        "json_page_size_param": "per_page",
+        "json_page_size": 1000,
+        "json_page_start": 1,
+        "json_max_pages": 10,
+        "json_derived_columns": [
+          {
+            "name": "country_name",
+            "kind": "dotted_path",
+            "source_col": "country",
+            "path": "value"
+          },
+          {
+            "name": "country_id",
+            "kind": "dotted_path",
+            "source_col": "country",
+            "path": "id"
+          },
+          {
+            "name": "indicator_name",
+            "kind": "dotted_path",
+            "source_col": "indicator",
+            "path": "value"
+          },
+          {
+            "name": "indicator_id",
+            "kind": "dotted_path",
+            "source_col": "indicator",
+            "path": "id"
+          },
+          {
+            "name": "spend_band",
+            "kind": "numeric_bin",
+            "source_col": "value",
+            "thresholds": [
+              1.0,
+              2.0,
+              3.5,
+              5.0
+            ],
+            "labels": [
+              "very_low",
+              "low",
+              "moderate",
+              "elevated",
+              "high"
+            ],
+            "default": "unknown"
+          }
+        ],
+        "json_schema": {
+          "countryiso3code": "string",
+          "country_id": "string",
+          "country_name": "string",
+          "indicator_id": "string",
+          "indicator_name": "string",
+          "date": "string",
+          "value": "decimal",
+          "unit": "string",
+          "obs_status": "string",
+          "decimal": "int",
+          "spend_band": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "MilExp Trend",
+        "date_col": "date",
+        "dimensions": [
+          "country_name",
+          "spend_band"
+        ],
+        "rolling_window_days": 365,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level World Bank observation with calendar features derived from `date` (year, month, quarter, day_of_week, iso_week). Note: `date` is a year-only string cast to ISO year for feature purposes.",
+        "stats_description": "Long-form military-spend statistics (one row per dimension x value x year x month). Includes 365-day rolling counts, z-score anomalies. Use to identify countries with sudden spend-band transitions."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "WB Military Expenditure Detail",
+      "project": "19 - World Bank Military Expenditure",
+      "source": "MilExp Trend (Features)",
+      "description": "Row-level World Bank military-expenditure observations (MS.MIL.XPND.GD.ZS, % of GDP), 2010-2024, all countries + aggregates. Fields: countryiso3code, country_name, country_id, indicator_id/name, date (year), value (% of GDP), unit, obs_status, decimal, spend_band (very_low<1% / low<2% / moderate<3.5% / elevated<5% / high>=5%). Plus calendar features. Source: api.worldbank.org indicator API. Refresh: daily."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "WB Military Expenditure Stats",
+      "project": "19 - World Bank Military Expenditure",
+      "source": "MilExp Trend (Stats)",
+      "description": "Long-form military-expenditure trend statistics (one row per dimension x value x year x month over country_name and spend_band). Includes 365-day rolling counts, z-score anomalies, lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to identify countries transitioning across spend bands."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "19 - World Bank Military Expenditure",
+    "parent_project": "Prep Agent",
+    "flow_name": "World Bank Military Expenditure",
+    "overwrite": true,
+    "cadence": "daily",
+    "hour_utc": 13,
+    "minute_utc": 30,
+    "schedule_name_hint": "WB MilExp Daily Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

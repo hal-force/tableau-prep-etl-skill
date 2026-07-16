@@ -1,0 +1,6 @@
+day_of_week_name,day_of_week_num,days_since_last_obs,des,diameter,diameter_class,fullname,h,hour_bucket,hour_of_day,id,ip,is_weekend,iso_week,last_obs,last_obs_jd,month,n_imp,palermo_band,ps_cum,ps_max,quarter,range,ts_max,v_inf,year,year_month
+<redacted>,5,17014,<redacted>,0.66,<redacted>,<redacted>,18.54,<redacted>,-1,<redacted>,8.515158e-07,True,50,<redacted>,2444222.5,12,4,<redacted>,-2.69,-2.99,4,<redacted>,0.0,23.7606234552547,1979,<redacted>
+<redacted>,0,1514,<redacted>,0.0069,<redacted>,<redacted>,28.45,<redacted>,-1,<redacted>,0.0001203297828,False,21,<redacted>,2459722.5,5,33,<redacted>,-5.58,-5.78,2,<redacted>,0.0,15.5694051293592,2022,<redacted>
+<redacted>,1,9416,<redacted>,0.037,<redacted>,<redacted>,24.79,<redacted>,-1,<redacted>,0.002743395186,False,40,<redacted>,2451820.5,10,300,<redacted>,-2.77,-3.11,4,<redacted>,0.0,1.35802744453748,2000,<redacted>
+<redacted>,4,4989,<redacted>,0.014,<redacted>,<redacted>,26.95,<redacted>,-1,<redacted>,1.9442009e-05,False,46,<redacted>,2456247.5,11,15,<redacted>,-5.74,-6.05,4,<redacted>,0.0,11.4626328606267,2012,<redacted>
+<redacted>,0,3019,<redacted>,0.02,<redacted>,<redacted>,26.19,<redacted>,-1,<redacted>,3.772e-09,False,15,<redacted>,2458217.5,4,1,<redacted>,-8.95,-8.95,2,<redacted>,0.0,20.2,2018,<redacted>

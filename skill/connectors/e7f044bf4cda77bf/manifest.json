@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "services.nvd.nist.gov",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1784146839.932459
+}

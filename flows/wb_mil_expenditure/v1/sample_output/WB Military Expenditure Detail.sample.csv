@@ -1,0 +1,6 @@
+country_id,country_name,countryiso3code,date,day_of_week_name,day_of_week_num,decimal,hour_bucket,hour_of_day,indicator_id,indicator_name,is_weekend,iso_week,month,obs_status,quarter,spend_band,unit,value,year,year_month
+<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,0,1,<redacted>,-1,<redacted>,<redacted>,False,1,1,<redacted>,1,<redacted>,<redacted>,0.97747002936209,2024,<redacted>
+<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,6,1,<redacted>,-1,<redacted>,<redacted>,True,52,1,<redacted>,1,<redacted>,<redacted>,1.04401581183837,2023,<redacted>
+<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,5,1,<redacted>,-1,<redacted>,<redacted>,True,52,1,<redacted>,1,<redacted>,<redacted>,1.11784161432876,2022,<redacted>
+<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,4,1,<redacted>,-1,<redacted>,<redacted>,False,53,1,<redacted>,1,<redacted>,<redacted>,1.14573626973176,2021,<redacted>
+<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,2,1,<redacted>,-1,<redacted>,<redacted>,False,1,1,<redacted>,1,<redacted>,<redacted>,1.15798924880059,2020,<redacted>

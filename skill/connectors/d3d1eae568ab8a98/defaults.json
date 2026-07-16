@@ -1,0 +1,85 @@
+{
+  "verify_ssl": false,
+  "timeout_s": 60,
+  "max_retries": 3,
+  "json_records_path": "1",
+  "json_paginate": true,
+  "json_page_kind": "page",
+  "json_page_param": "page",
+  "json_page_size_param": "per_page",
+  "json_page_size": 1000,
+  "json_page_start": 1,
+  "json_max_pages": 10,
+  "json_derived_columns": [
+    {
+      "name": "country_name",
+      "kind": "dotted_path",
+      "source_col": "country",
+      "path": "value"
+    },
+    {
+      "name": "country_id",
+      "kind": "dotted_path",
+      "source_col": "country",
+      "path": "id"
+    },
+    {
+      "name": "indicator_name",
+      "kind": "dotted_path",
+      "source_col": "indicator",
+      "path": "value"
+    },
+    {
+      "name": "indicator_id",
+      "kind": "dotted_path",
+      "source_col": "indicator",
+      "path": "id"
+    },
+    {
+      "name": "spend_band",
+      "kind": "numeric_bin",
+      "source_col": "value",
+      "thresholds": [
+        1.0,
+        2.0,
+        3.5,
+        5.0
+      ],
+      "labels": [
+        "very_low",
+        "low",
+        "moderate",
+        "elevated",
+        "high"
+      ],
+      "default": "unknown"
+    }
+  ],
+  "json_schema": {
+    "countryiso3code": "string",
+    "country_id": "string",
+    "country_name": "string",
+    "indicator_id": "string",
+    "indicator_name": "string",
+    "date": "string",
+    "value": "decimal",
+    "unit": "string",
+    "obs_status": "string",
+    "decimal": "int",
+    "spend_band": "string"
+  },
+  "json_keep_columns": [
+    "countryiso3code",
+    "country_id",
+    "country_name",
+    "indicator_id",
+    "indicator_name",
+    "date",
+    "value",
+    "unit",
+    "obs_status",
+    "decimal",
+    "spend_band"
+  ],
+  "_skip_auto_casts": true
+}
