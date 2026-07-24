@@ -1,0 +1,175 @@
+{
+  "request": "Pull federal grants awarded to state, local, and education recipients from USASpending.gov (POST /api/v2/search/spending_by_award/), filtered to award_type_codes 02/03/04/05 (Block Grant, Formula Grant, Project Grant, Cooperative Agreement) and recipient_type_names in [State Government, County Government, City or Township Government, Special District Government, Independent School District, State Controlled Institution of Higher Education, Public/State Controlled Institution of Higher Education]. Fiscal year 2025-2026 (start 2024-10-01). Paginate via body 'page' with 100 per page, cap at 30 pages / 3000 rows. Enrich with amount_band (small<$100K / mid<$1M / large<$10M / mega>=$10M), award_kind (grant vs coop_agreement). Publish to 'Prep Agent / 22 - Federal Grants to SLED' on Tableau Server for state and local budget analysts tracking incoming federal funds.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "USASpending SLED Grants",
+      "description": "USASpending.gov POST /api/v2/search/spending_by_award/. Federal financial assistance (grants + cooperative agreements) to state, local, and educational institutions. award_type_codes: 02=Block Grant, 03=Formula Grant, 04=Project Grant, 05=Cooperative Agreement. Time window: FY2025-2026 (2024-10-01 to 2026-09-30). Body-mode pagination via 'page' param, page_size in 'limit', cap at 30 pages of 100 = 3000 rows. Sorted by Award Amount desc so the largest awards come first (Medicaid state Medical Assistance Program shows as ~$110B for CA \u2014 expected, this is the CMS Medicaid block-grant match to states).",
+      "url": "https://api.usaspending.gov/api/v2/search/spending_by_award/",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 120,
+        "max_retries": 3,
+        "json_http_method": "POST",
+        "json_body": {
+          "subawards": false,
+          "sort": "Award Amount",
+          "order": "desc",
+          "filters": {
+            "time_period": [
+              {
+                "start_date": "2024-10-01",
+                "end_date": "2026-09-30"
+              }
+            ],
+            "award_type_codes": [
+              "02",
+              "03",
+              "04",
+              "05"
+            ],
+            "recipient_type_names": [
+              "State Government",
+              "County Government",
+              "City or Township Government",
+              "Special District Government",
+              "Independent School District",
+              "State Controlled Institution of Higher Education",
+              "Public/State Controlled Institution of Higher Education"
+            ]
+          },
+          "fields": [
+            "Award ID",
+            "Recipient Name",
+            "Award Amount",
+            "Total Outlays",
+            "Awarding Agency",
+            "Awarding Sub Agency",
+            "Award Type",
+            "recipient_location_state_code",
+            "recipient_location_county_name",
+            "recipient_location_city_name",
+            "Start Date",
+            "End Date",
+            "prime_award_recipient_id"
+          ]
+        },
+        "json_records_path": "results",
+        "json_paginate": true,
+        "json_page_in_body": true,
+        "json_page_kind": "index",
+        "json_page_param": "page",
+        "json_page_size_param": "limit",
+        "json_page_size": 100,
+        "json_page_start": 1,
+        "json_max_pages": 30,
+        "json_max_rows": 3000,
+        "json_has_next_path": "page_metadata.hasNext",
+        "json_derived_columns": [
+          {
+            "name": "amount_band",
+            "kind": "numeric_bin",
+            "source_col": "Award Amount",
+            "thresholds": [
+              100000,
+              1000000,
+              10000000
+            ],
+            "labels": [
+              "small",
+              "mid",
+              "large",
+              "mega"
+            ],
+            "default": "unknown"
+          },
+          {
+            "name": "award_kind",
+            "kind": "map_values",
+            "source_col": "Award Type",
+            "mapping": {
+              "BLOCK GRANT (A)": "block_grant",
+              "FORMULA GRANT (B)": "formula_grant",
+              "PROJECT GRANT (C)": "project_grant",
+              "COOPERATIVE AGREEMENT (D)": "cooperative_agreement"
+            },
+            "default": "other"
+          }
+        ],
+        "json_schema": {
+          "Award ID": "string",
+          "Recipient Name": "string",
+          "Award Amount": "decimal",
+          "Total Outlays": "decimal",
+          "Awarding Agency": "string",
+          "Awarding Sub Agency": "string",
+          "Award Type": "string",
+          "award_kind": "string",
+          "amount_band": "string",
+          "recipient_location_state_code": "string",
+          "recipient_location_county_name": "string",
+          "recipient_location_city_name": "string",
+          "Start Date": "string",
+          "End Date": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "SLED Grants Trend",
+        "date_col": "Start Date",
+        "dimensions": [
+          "recipient_location_state_code",
+          "Awarding Sub Agency",
+          "award_kind",
+          "amount_band"
+        ],
+        "rolling_window_days": 180,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level federal financial-assistance awards to state, local, and education recipients (FY2025-2026, capped at 3000 largest by amount). Fields include Award ID, Recipient Name, Award Amount, Total Outlays, Awarding Agency + Sub Agency, Award Type, award_kind (block_grant / formula_grant / project_grant / cooperative_agreement / other), amount_band (small<$100K / mid<$1M / large<$10M / mega), state/county/city, period_of_performance. Calendar features parsed from Start Date.",
+        "stats_description": "Long-form SLED grants statistics (one row per dimension x value x year x month over state, Awarding Sub Agency, award_kind, amount_band). Includes 180-day rolling counts, z-score anomalies, lifetime rank/pct_of_total. Use to spot state-level spikes in incoming federal funds or shifts in the agency-mix funding a state."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "SLED Grants Detail",
+      "project": "22 - Federal Grants to SLED",
+      "source": "SLED Grants Trend (Features)",
+      "description": "Row-level federal financial-assistance awards to state, local, and education recipients (FY2025 through FY2026, 3000 largest by Award Amount). Award types: Block Grant, Formula Grant, Project Grant, Cooperative Agreement. Recipient types: State/County/City/Township/Special District Government, Independent School District, State Controlled Institution of Higher Education. Fields: Award ID, Recipient Name, Award Amount, Total Outlays, Awarding Agency, Awarding Sub Agency, Award Type, award_kind, amount_band (small<$100K / mid<$1M / large<$10M / mega), recipient_location_state_code/county_name/city_name, Start Date, End Date. Plus calendar features. Source: USASpending.gov API. Refresh: monthly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "SLED Grants Stats",
+      "project": "22 - Federal Grants to SLED",
+      "source": "SLED Grants Trend (Stats)",
+      "description": "Long-form SLED grants statistics (one row per dimension x value x year x month over recipient_location_state_code, Awarding Sub Agency, award_kind, amount_band). Includes 180-day rolling counts, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to spot state-level spikes in incoming federal funds or shifts in the agency-mix funding a state."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "22 - Federal Grants to SLED",
+    "parent_project": "Prep Agent",
+    "flow_name": "Federal Grants to SLED",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 13,
+    "minute_utc": 0,
+    "weekday": "friday",
+    "schedule_name_hint": "SLED Grants Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

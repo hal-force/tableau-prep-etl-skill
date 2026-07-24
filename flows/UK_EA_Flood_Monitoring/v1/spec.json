@@ -1,0 +1,175 @@
+{
+  "request": "Pull the UK Environment Agency (Defra) real-time flood-monitoring 'measures' catalogue from environment.data.gov.uk \u2014 one row per (station x parameter x qualifier), ~5.6k rows nationwide across England. Each measure carries a nested latestReading with the most recent observed value + timestamp. We flatten latestReading.value / latestReading.dateTime via dotted_path and enrich with level_band (numeric_bin on reading value: <0 dry / 0-0.5 low / 0.5-1.5 normal / 1.5-3 elevated / 3+ high), parameter_class (map_values parameter: level=water_level, flow=river_flow, wind=wind, temperature=temperature, rainfall=rainfall, others=other), reading_freshness_days (days_since latestReading.dateTime), and stage_qualifier_group (map_values qualifier: Stage/Downstream Stage/Upstream Stage=stage, Tidal Level=tidal, Groundwater=groundwater, Rainfall=rainfall). Publish to 'Prep Agent / 33 - UK Environment Agency Flood Monitoring' on Tableau Server for Defra / EA / local resilience forum analysts. Keyless, Open Government Licence.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "UK EA Flood Monitoring Measures",
+      "description": "environment.data.gov.uk /flood-monitoring/id/measures \u2014 full catalogue of all measurement channels from ~4200 active EA telemetry stations across England, one row per (station x parameter x qualifier). Each row includes station reference, label (usually 'RIVER X AT Y'), parameter (level/flow/rainfall/wind/temperature), qualifier (Stage/Downstream Stage/Tidal Level/etc.), period (seconds between observations), unit, and the nested latestReading (value + ISO dateTime). Keyless, OGL v3.",
+      "url": "https://environment.data.gov.uk/flood-monitoring/id/measures?_limit=10000",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 120,
+        "max_retries": 3,
+        "json_paginate": false,
+        "json_records_path": "items",
+        "json_derived_columns": [
+          {
+            "name": "latest_value",
+            "kind": "dotted_path",
+            "source_col": "latestReading",
+            "path": "value",
+            "cast": "decimal"
+          },
+          {
+            "name": "latest_dateTime",
+            "kind": "dotted_path",
+            "source_col": "latestReading",
+            "path": "dateTime",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "latest_date",
+            "kind": "dotted_path",
+            "source_col": "latestReading",
+            "path": "date",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "level_band",
+            "kind": "numeric_bin",
+            "source_col": "latest_value",
+            "thresholds": [
+              0,
+              0.5,
+              1.5,
+              3.0
+            ],
+            "labels": [
+              "dry",
+              "low",
+              "normal",
+              "elevated",
+              "high"
+            ],
+            "default": "unknown"
+          },
+          {
+            "name": "parameter_class",
+            "kind": "map_values",
+            "source_col": "parameter",
+            "mapping": {
+              "level": "water_level",
+              "flow": "river_flow",
+              "rainfall": "rainfall",
+              "wind": "wind",
+              "temperature": "temperature"
+            },
+            "default": "other"
+          },
+          {
+            "name": "stage_qualifier_group",
+            "kind": "map_values",
+            "source_col": "qualifier",
+            "mapping": {
+              "Stage": "stage",
+              "Downstream Stage": "stage",
+              "Upstream Stage": "stage",
+              "Tidal Level": "tidal",
+              "Groundwater": "groundwater",
+              "Rainfall": "rainfall",
+              "Flow": "flow",
+              "Logged": "logged",
+              "Wind Direction": "wind_direction",
+              "Wind Speed": "wind_speed",
+              "Wind Gust": "wind_gust",
+              "Dry Bulb": "temperature"
+            },
+            "default": "other"
+          },
+          {
+            "name": "reading_freshness_days",
+            "kind": "days_since",
+            "source_col": "latest_dateTime"
+          }
+        ],
+        "json_schema": {
+          "notation": "string",
+          "stationReference": "string",
+          "label": "string",
+          "parameter": "string",
+          "parameter_class": "string",
+          "parameterName": "string",
+          "qualifier": "string",
+          "stage_qualifier_group": "string",
+          "unitName": "string",
+          "valueType": "string",
+          "period": "int",
+          "latest_value": "decimal",
+          "latest_dateTime": "string",
+          "latest_date": "string",
+          "level_band": "string",
+          "reading_freshness_days": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "EA Flood Measures Trend",
+        "date_col": "latest_date",
+        "dimensions": [
+          "parameter_class",
+          "stage_qualifier_group",
+          "level_band"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level UK Environment Agency flood-monitoring measures \u2014 one row per (station x parameter x qualifier). Fields: notation (measure id, unique), stationReference (EA station code), label (RIVER X AT Y \u2014 telemetry site), parameter (level/flow/rainfall/wind/temperature), parameter_class (water_level/river_flow/rainfall/wind/temperature/other), parameterName (verbose), qualifier (Stage/Downstream Stage/Tidal Level/Groundwater/etc.), stage_qualifier_group (stage/tidal/groundwater/rainfall/flow/etc.), unitName (mASD/m3s-1/mm/etc.), valueType (instantaneous/mean), period (seconds), latest_value (last observation, decimal), latest_dateTime (ISO 8601 UTC), latest_date (YYYY-MM-DD), level_band (dry/low/normal/elevated/high), reading_freshness_days (days since last observation).",
+        "stats_description": "Long-form EA flood-monitoring statistics (dimension x value x year x month) over parameter_class, stage_qualifier_group, level_band. Rolling 30-day counts, z-anomalies vs baseline. Use to spot regional/parameter-level shifts in level distribution or telemetry-station reporting gaps."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "UK EA Flood Measures Detail",
+      "project": "33 - UK Environment Agency Flood Monitoring",
+      "source": "EA Flood Measures Trend (Features)",
+      "description": "Row-level UK Environment Agency real-time flood-monitoring measures \u2014 one row per (station x parameter x qualifier), ~5.6k rows across all EA telemetry stations in England. Fields: notation (measure id, unique), stationReference (EA station code), label (RIVER X AT Y), parameter (level/flow/rainfall/wind/temperature), parameter_class (water_level/river_flow/rainfall/wind/temperature/other), parameterName, qualifier (Stage/Downstream Stage/Tidal Level/etc.), stage_qualifier_group (stage/tidal/groundwater/rainfall/flow/etc.), unitName, valueType, period, latest_value (last observation), latest_dateTime (ISO 8601), latest_date, level_band (dry/low/normal/elevated/high on water-level), reading_freshness_days. Source: environment.data.gov.uk/flood-monitoring, OGL v3. Refresh: hourly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "UK EA Flood Measures Stats",
+      "project": "33 - UK Environment Agency Flood Monitoring",
+      "source": "EA Flood Measures Trend (Stats)",
+      "description": "Long-form UK EA flood-monitoring measure statistics (dimension x value x year x month) over parameter_class, stage_qualifier_group, level_band. Rolling 30-day counts, z-anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True). Joinable from Tableau on (dimension, value, year, month)."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "hourly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "33 - UK Environment Agency Flood Monitoring",
+    "parent_project": "Prep Agent",
+    "flow_name": "UK Environment Agency Flood Monitoring",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 6,
+    "minute_utc": 45,
+    "weekday": "wednesday",
+    "day_of_month": 5,
+    "schedule_name_hint": "UK EA Flood Hourly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

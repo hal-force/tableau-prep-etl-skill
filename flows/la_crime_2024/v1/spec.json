@@ -1,0 +1,143 @@
+{
+  "request": "Pull LAPD crime incidents from City of Los Angeles Open Data (data.lacity.org resource 2nrs-mtv8). Filter to 2024-onward for a manageable ~200k-row slice. One row per reported crime. Enrich with victim_age_band (numeric_bin on vict_age: unknown <1 / child <18 / young_adult <30 / adult <50 / senior >=50) and crime_class (map_values on part_1_2: 1=part_1_violent_property, 2=part_2_other). Publish to 'Prep Agent / 28 - LA Crime Incidents' on Tableau Server for LAPD public-safety analytics teams, city-council policy staff, and academic criminologists. data.lacity.org is Socrata-hosted, reliable.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "path": "",
+      "url": "https://data.lacity.org/resource/2nrs-mtv8.json?$where=date_occ%3E=%272024-01-01T00:00:00%27&$order=date_occ",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 90,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_kind": "offset",
+        "json_page_param": "$offset",
+        "json_page_size_param": "$limit",
+        "json_page_size": 5000,
+        "json_page_start": 0,
+        "json_max_pages": 60,
+        "json_max_rows": 300000,
+        "json_derived_columns": [
+          {
+            "name": "victim_age_band",
+            "kind": "numeric_bin",
+            "source_col": "vict_age",
+            "thresholds": [
+              1,
+              18,
+              30,
+              50
+            ],
+            "labels": [
+              "unknown",
+              "child",
+              "young_adult",
+              "adult",
+              "senior"
+            ],
+            "default": "unknown"
+          },
+          {
+            "name": "crime_class",
+            "kind": "map_values",
+            "source_col": "part_1_2",
+            "mapping": {
+              "1": "part_1_violent_property",
+              "2": "part_2_other"
+            },
+            "default": "unknown"
+          }
+        ],
+        "json_schema": {
+          "dr_no": "string",
+          "date_rptd": "string",
+          "date_occ": "string",
+          "time_occ": "string",
+          "area": "string",
+          "area_name": "string",
+          "rpt_dist_no": "string",
+          "part_1_2": "string",
+          "crime_class": "string",
+          "crm_cd": "string",
+          "crm_cd_desc": "string",
+          "mocodes": "string",
+          "vict_age": "int",
+          "victim_age_band": "string",
+          "vict_sex": "string",
+          "vict_descent": "string",
+          "premis_cd": "string",
+          "premis_desc": "string",
+          "status": "string",
+          "status_desc": "string",
+          "crm_cd_1": "string",
+          "location": "string",
+          "lat": "decimal",
+          "lon": "decimal"
+        },
+        "_skip_auto_casts": true
+      },
+      "name": "LA Crime Incidents (2024+)",
+      "description": "LAPD-reported crime incidents from data.lacity.org Socrata resource 2nrs-mtv8, filtered to date_occ >= 2024-01-01. Fields: dr_no (unique record #), date_rptd, date_occ, time_occ (military time HHMM), area (LAPD area code 1-21), area_name, rpt_dist_no, part_1_2 (1=Part I violent/property crimes, 2=Part II other), crm_cd, crm_cd_desc, mocodes (comma-sep modus operandi), vict_age, victim_age_band (child <18 / young_adult <30 / adult <50 / senior >=50), vict_sex (M/F/X), vict_descent (LAPD race/ethnicity single-char code), premis_cd, premis_desc, status (crime status code), status_desc, crm_cd_1, location (street address), lat, lon. Pulled via SoQL offset pagination (5000 per page)."
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "LA Crime Trend",
+        "dimensions": [
+          "area_name",
+          "crime_class",
+          "victim_age_band",
+          "vict_sex"
+        ],
+        "date_col": "date_occ",
+        "rolling_window_days": 90,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level LAPD crime incidents (2024-onward, ~200k rows). Fields: dr_no, date_rptd, date_occ, time_occ, area, area_name, rpt_dist_no, part_1_2, crime_class, crm_cd, crm_cd_desc, mocodes, vict_age, victim_age_band, vict_sex, vict_descent, premis_cd, premis_desc, status, status_desc, crm_cd_1, location, lat, lon.",
+        "stats_description": "Long-form LA crime statistics (one row per dimension x value over area_name, crime_class, victim_age_band, vict_sex). Includes 90-day rolling counts, z-score anomalies (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Use to identify LAPD-area spikes in specific crime classes."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "LA Crime Incidents",
+      "path": "",
+      "description": "Row-level LAPD crime incidents from 2024 onward (~200k rows). Fields: dr_no, date_rptd, date_occ, time_occ, area, area_name (Central/Rampart/Southwest/etc, 21 LAPD areas), rpt_dist_no, part_1_2, crime_class (part_1_violent_property/part_2_other), crm_cd, crm_cd_desc, mocodes (LAPD modus-operandi codes), vict_age, victim_age_band (child <18 / young_adult <30 / adult <50 / senior >=50), vict_sex (M/F/X/H), vict_descent (single-char race code), premis_cd, premis_desc, status, status_desc, crm_cd_1, location, lat, lon. Source: data.lacity.org resource 2nrs-mtv8. Refresh: daily.",
+      "source": "LA Crime Trend (Features)",
+      "project": "28 - LA Crime Incidents"
+    },
+    {
+      "kind": "published_data_source",
+      "name": "LA Crime Stats",
+      "path": "",
+      "description": "Long-form LA crime statistics (one row per dimension x value over area_name, crime_class, victim_age_band, vict_sex). Includes 90-day rolling counts, z-score anomalies (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value). Use to identify LAPD-area spikes in specific crime classes.",
+      "source": "LA Crime Trend (Stats)",
+      "project": "28 - LA Crime Incidents"
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "28 - LA Crime Incidents",
+    "parent_project": "Prep Agent",
+    "flow_name": "LA Crime Incidents",
+    "overwrite": true,
+    "cadence": "daily",
+    "hour_utc": 12,
+    "minute_utc": 45,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "LA Crime Daily Refresh",
+    "balance_tolerance_hours": 2
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

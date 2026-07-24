@@ -1,0 +1,283 @@
+{
+  "request": "Pull UK Parliament written questions from the questions-statements-api.parliament.uk /api/writtenquestions/questions endpoint for the last 90 days across all answering bodies. Each question row includes the tabled/answer dates, department (answeringBodyName), asking member (askingMemberId), topic heading, question text, and answer text. Flatten the nested `results[].value` shape with dotted_path derived columns. Enrich with answer_latency_days (days_between dateTabled and dateAnswered \u2014 signals departmental responsiveness), department_group (map_values on answeringBodyName: Defence/Home Office/Health/Education/Treasury/etc.), and answer_status (map_values on isWithdrawn/dateAnswered presence). Publish to 'Prep Agent / 34 - UK Parliament Written Questions' on Tableau Server for Cabinet Office / Parliament analysts. OGL v3, no API key required.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "UK Parliament Written Questions",
+      "description": "questions-statements-api.parliament.uk /api/writtenquestions/questions \u2014 Commons and Lords written parliamentary questions tabled from 2026-05-01 onwards, take=1000. Each record is wrapped in {value, links}; we walk json_records_path=results and flatten via dotted_path on the wrapper. Fields: dateTabled, dateAnswered, dateForAnswer, uin, questionText, answerText, heading, answeringBodyName, askingMemberId, house, isWithdrawn, isNamedDay, attachmentCount. Keyless, OGL v3.",
+      "url": "https://questions-statements-api.parliament.uk/api/writtenquestions/questions?take=1000&tabledWhenFrom=2026-05-01",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 120,
+        "max_retries": 3,
+        "json_paginate": false,
+        "json_records_path": "results",
+        "json_derived_columns": [
+          {
+            "name": "question_id",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "id",
+            "cast": "string"
+          },
+          {
+            "name": "uin",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "uin",
+            "cast": "string"
+          },
+          {
+            "name": "house",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "house",
+            "cast": "string"
+          },
+          {
+            "name": "date_tabled",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "dateTabled",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "date_for_answer",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "dateForAnswer",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "date_answered",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "dateAnswered",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "asking_member_id",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "askingMemberId",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "answering_body_id",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "answeringBodyId",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "answering_body_name",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "answeringBodyName",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "answering_member_id",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "answeringMemberId",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "heading",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "heading",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "question_text",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "questionText",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "answer_text",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "answerText",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "is_withdrawn",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "isWithdrawn",
+            "cast": "string",
+            "default": "false"
+          },
+          {
+            "name": "is_named_day",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "isNamedDay",
+            "cast": "string",
+            "default": "false"
+          },
+          {
+            "name": "answer_is_holding",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "answerIsHolding",
+            "cast": "string",
+            "default": "false"
+          },
+          {
+            "name": "attachment_count",
+            "kind": "dotted_path",
+            "source_col": "value",
+            "path": "attachmentCount",
+            "cast": "int",
+            "default": 0
+          },
+          {
+            "name": "answer_latency_days",
+            "kind": "days_between",
+            "start_col": "date_tabled",
+            "end_col": "date_answered"
+          },
+          {
+            "name": "department_group",
+            "kind": "map_values",
+            "source_col": "answering_body_name",
+            "mapping": {
+              "Ministry of Defence": "Defence",
+              "Home Office": "Home Office",
+              "Department of Health and Social Care": "Health",
+              "Department for Education": "Education",
+              "HM Treasury": "Treasury",
+              "Foreign, Commonwealth and Development Office": "Foreign Affairs",
+              "Ministry of Justice": "Justice",
+              "Department for Work and Pensions": "Work & Pensions",
+              "Department for Transport": "Transport",
+              "Department for Business and Trade": "Business",
+              "Department for Environment, Food and Rural Affairs": "Environment",
+              "Department for Energy Security and Net Zero": "Energy",
+              "Department for Science, Innovation and Technology": "Science & Tech",
+              "Department for Culture, Media and Sport": "Culture",
+              "Department for Levelling Up, Housing and Communities": "Housing",
+              "Ministry of Housing, Communities and Local Government": "Housing",
+              "Cabinet Office": "Cabinet Office",
+              "Northern Ireland Office": "Territorial",
+              "Scotland Office": "Territorial",
+              "Wales Office": "Territorial",
+              "Attorney General": "Law Officers",
+              "Prime Minister": "No 10",
+              "Leader of the House": "Parliament",
+              "Church Commissioners": "Church",
+              "Speaker's Committee on the Electoral Commission": "Parliament",
+              "House of Commons Commission": "Parliament",
+              "Public Accounts Commission": "Parliament"
+            },
+            "default": "Other"
+          },
+          {
+            "name": "answer_status",
+            "kind": "map_values",
+            "source_col": "is_withdrawn",
+            "mapping": {
+              "True": "withdrawn",
+              "true": "withdrawn"
+            },
+            "default": "answered_or_pending"
+          }
+        ],
+        "json_schema": {
+          "question_id": "string",
+          "uin": "string",
+          "house": "string",
+          "date_tabled": "string",
+          "date_for_answer": "string",
+          "date_answered": "string",
+          "asking_member_id": "string",
+          "answering_body_id": "string",
+          "answering_body_name": "string",
+          "department_group": "string",
+          "answering_member_id": "string",
+          "heading": "string",
+          "question_text": "string",
+          "answer_text": "string",
+          "is_withdrawn": "string",
+          "is_named_day": "string",
+          "answer_is_holding": "string",
+          "attachment_count": "int",
+          "answer_latency_days": "int",
+          "answer_status": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Parliament Written Questions Trend",
+        "date_col": "date_tabled",
+        "dimensions": [
+          "department_group",
+          "house",
+          "answer_status"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level UK Parliament written questions. Fields: question_id (unique), uin (parliamentary reference), house (Commons/Lords), date_tabled, date_for_answer, date_answered, asking_member_id, answering_body_id, answering_body_name (department verbatim), department_group (Defence/Home Office/Health/Education/Treasury/etc.), answering_member_id, heading (topic), question_text, answer_text, is_withdrawn, is_named_day, answer_is_holding, attachment_count, answer_latency_days (dateTabled to dateAnswered), answer_status (answered_or_pending / withdrawn).",
+        "stats_description": "Long-form UK Parliament written-question statistics (dimension x value x year x month) over department_group, house, answer_status. Rolling 30-day counts, z-anomalies vs baseline. Use to spot surges in scrutiny of a particular department or shifts in the answered-vs-withdrawn mix."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "UK Parliament Written Questions Detail",
+      "project": "34 - UK Parliament Written Questions",
+      "source": "Parliament Written Questions Trend (Features)",
+      "description": "Row-level UK Parliament written questions tabled since 2026-05-01 across Commons and Lords. Fields: question_id, uin, house, date_tabled, date_for_answer, date_answered, asking_member_id, answering_body_id, answering_body_name, department_group (Defence/Home Office/Health/etc.), answering_member_id, heading (topic), question_text, answer_text, is_withdrawn, is_named_day, answer_is_holding, attachment_count, answer_latency_days, answer_status. Source: questions-statements-api.parliament.uk, OGL v3. Refresh: daily."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "UK Parliament Written Questions Stats",
+      "project": "34 - UK Parliament Written Questions",
+      "source": "Parliament Written Questions Trend (Stats)",
+      "description": "Long-form UK Parliament written-question statistics (dimension x value x year x month) over department_group, house, answer_status. Rolling 30-day counts, z-anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True). Joinable from Tableau on (dimension, value, year, month)."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "34 - UK Parliament Written Questions",
+    "parent_project": "Prep Agent",
+    "flow_name": "UK Parliament Written Questions",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 7,
+    "minute_utc": 0,
+    "weekday": "wednesday",
+    "day_of_month": 5,
+    "schedule_name_hint": "UK Parliament WQ Daily Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

@@ -1,0 +1,129 @@
+{
+  "request": "Pull CDC PLACES county-level health metrics from chronicdata.cdc.gov (Socrata resource swc5-untb) for the most recent complete year (2023). ~198k rows: one row per (US county x health measure). PLACES provides ~40 chronic disease + prevention indicators for all 3,143 US counties, sourced from BRFSS. Enrich with measure_class (map_values on categoryid: HLTHOUT=health_outcomes, PREVENT=prevention, HLTHSTAT=health_status, RISKBEH=risk_behaviors, DISABILT=disability, SOCLNEEDS=social_needs), value_band (numeric_bin on data_value: <10 low / 10-20 moderate / 20-30 elevated / 30+ high) and pop_band (numeric_bin on totalpopulation: <25k tiny / 25-100k small / 100-500k mid / 500k+ large). Publish to 'Prep Agent / 29 - CDC PLACES County Health' on Tableau Server for state/local public-health analysts benchmarking their counties against peers. chronicdata.cdc.gov is Socrata-hosted (same FedRAMP tenant as data.cdc.gov).",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "CDC PLACES County 2023",
+      "description": "CDC PLACES county-level health metrics (2023) from chronicdata.cdc.gov Socrata resource swc5-untb. Fields: year, stateabbr, statedesc, locationname (county), datasource, category, measure, data_value_unit, data_value_type, data_value, low_confidence_limit, high_confidence_limit, totalpopulation, totalpop18plus, locationid (5-digit FIPS), categoryid, measureid, datavaluetypeid, short_question_text. Filtered year='2023' via SoQL; pulled via SoQL offset pagination (5000 per page).",
+      "url": "https://chronicdata.cdc.gov/resource/swc5-untb.json?$where=year=%272023%27&$order=locationid&$select=year,stateabbr,statedesc,locationname,datasource,category,measure,data_value_unit,data_value_type,data_value,low_confidence_limit,high_confidence_limit,totalpopulation,totalpop18plus,locationid,categoryid,measureid,datavaluetypeid,short_question_text",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 90,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_kind": "offset",
+        "json_page_param": "$offset",
+        "json_page_size_param": "$limit",
+        "json_page_size": 5000,
+        "json_page_start": 0,
+        "json_max_pages": 60,
+        "json_max_rows": 220000,
+        "json_derived_columns": [
+          {
+            "name": "measure_class",
+            "kind": "map_values",
+            "source_col": "categoryid",
+            "mapping": {
+              "HLTHOUT": "health_outcomes",
+              "PREVENT": "prevention",
+              "HLTHSTAT": "health_status",
+              "RISKBEH": "risk_behaviors",
+              "DISABILT": "disability",
+              "SOCLNEEDS": "social_needs"
+            },
+            "default": "other"
+          },
+          {
+            "name": "value_band",
+            "kind": "numeric_bin",
+            "source_col": "data_value",
+            "thresholds": [
+              10,
+              20,
+              30
+            ],
+            "labels": [
+              "low",
+              "moderate",
+              "elevated",
+              "high"
+            ],
+            "default": "unknown"
+          },
+          {
+            "name": "pop_band",
+            "kind": "numeric_bin",
+            "source_col": "totalpopulation",
+            "thresholds": [
+              25000,
+              100000,
+              500000
+            ],
+            "labels": [
+              "tiny",
+              "small",
+              "mid",
+              "large"
+            ],
+            "default": "unknown"
+          }
+        ],
+        "json_schema": {
+          "year": "string",
+          "stateabbr": "string",
+          "statedesc": "string",
+          "locationname": "string",
+          "datasource": "string",
+          "category": "string",
+          "measure": "string",
+          "data_value_unit": "string",
+          "data_value_type": "string",
+          "data_value": "decimal",
+          "low_confidence_limit": "decimal",
+          "high_confidence_limit": "decimal",
+          "totalpopulation": "integer",
+          "totalpop18plus": "integer",
+          "locationid": "string",
+          "categoryid": "string",
+          "measureid": "string",
+          "datavaluetypeid": "string",
+          "short_question_text": "string",
+          "measure_class": "string",
+          "value_band": "string",
+          "pop_band": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "CDC PLACES County Health 2023",
+      "project": "29 - CDC PLACES County Health",
+      "source": "CDC PLACES County 2023",
+      "description": "CDC PLACES county-level chronic disease + prevention health metrics for 2023 (Behavioral Risk Factor Surveillance System / BRFSS). ~198k rows: one row per (US county x measure). Fields: year, stateabbr, statedesc, locationname (county name), datasource, category, measure, data_value_unit, data_value_type (Crude prevalence or Age-adjusted), data_value, low_confidence_limit, high_confidence_limit, totalpopulation, totalpop18plus, locationid (5-digit county FIPS), categoryid, measureid, datavaluetypeid, short_question_text, measure_class (health_outcomes/prevention/health_status/risk_behaviors/disability/social_needs), value_band (low/moderate/elevated/high thresholds on data_value %), pop_band (tiny/small/mid/large by totalpopulation). Source: chronicdata.cdc.gov resource swc5-untb. Refresh: annual (dataset publishes yearly)."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "29 - CDC PLACES County Health",
+    "parent_project": "Prep Agent",
+    "flow_name": "CDC PLACES County Health 2023",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 13,
+    "minute_utc": 0,
+    "day_of_month": 5,
+    "schedule_name_hint": "CDC PLACES Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

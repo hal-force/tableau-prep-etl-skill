@@ -1,0 +1,152 @@
+{
+  "request": "Pull monthly state-level unemployment rates (BLS Local Area Unemployment Statistics, series LASST<FIPS>0000000000003) for the 25 most populous states + DC from 2022-2026. Enrich with a rate_band (very_low/low/moderate/elevated/high thresholds on the seasonally-adjusted unemployment rate) plus a state FIPS -> state code lookup. Publish to 'Prep Agent / 21 - BLS LAUS State Unemployment' on Tableau Server for SLED workforce and economic-development analysts.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "BLS LAUS State Unemployment",
+      "description": "U.S. Bureau of Labor Statistics Public Data API v2 - Local Area Unemployment Statistics (LAUS) at the state level. Series ID pattern: LASST<2-digit-state-FIPS>0000000000003 (measure 03 = unemployment rate, seasonally adjusted). Unauth POST caps at 25 series/request and 25 requests/day \u2014 this spec fetches the 25 most populous states in a single call. Envelope: {status, Results:{series:[{seriesID, data:[{year, period (M01-M12), periodName, value (string, '-' if missing), footnotes:[{code, text}]}]}]}}.",
+      "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 120,
+        "max_retries": 3,
+        "json_http_method": "POST",
+        "json_body": {
+          "seriesid": [
+            "LASST060000000000003",
+            "LASST480000000000003",
+            "LASST120000000000003",
+            "LASST360000000000003",
+            "LASST420000000000003",
+            "LASST170000000000003",
+            "LASST390000000000003",
+            "LASST130000000000003",
+            "LASST370000000000003",
+            "LASST260000000000003",
+            "LASST340000000000003",
+            "LASST510000000000003",
+            "LASST530000000000003",
+            "LASST040000000000003",
+            "LASST250000000000003",
+            "LASST470000000000003",
+            "LASST180000000000003",
+            "LASST290000000000003",
+            "LASST240000000000003",
+            "LASST550000000000003",
+            "LASST080000000000003",
+            "LASST270000000000003",
+            "LASST450000000000003",
+            "LASST010000000000003",
+            "LASST220000000000003"
+          ],
+          "startyear": "2022",
+          "endyear": "2026"
+        },
+        "json_records_path": "Results.series",
+        "json_flatten_inner_key": "data",
+        "json_flatten_parent_keys": [
+          "seriesID"
+        ],
+        "json_derived_columns": [
+          {
+            "name": "obs_date",
+            "kind": "year_month_iso",
+            "year_col": "year",
+            "period_col": "period"
+          },
+          {
+            "name": "state_fips",
+            "kind": "substring",
+            "source_col": "seriesID",
+            "start": 5,
+            "length": 2
+          },
+          {
+            "name": "rate_band",
+            "kind": "numeric_bin",
+            "source_col": "value",
+            "thresholds": [
+              3.0,
+              4.0,
+              5.0,
+              6.5
+            ],
+            "labels": [
+              "very_low",
+              "low",
+              "moderate",
+              "elevated",
+              "high"
+            ],
+            "default": "unknown"
+          }
+        ],
+        "json_schema": {
+          "seriesID": "string",
+          "state_fips": "string",
+          "year": "int",
+          "period": "string",
+          "periodName": "string",
+          "value": "decimal",
+          "obs_date": "string",
+          "rate_band": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Unemployment Trend",
+        "date_col": "obs_date",
+        "dimensions": [
+          "state_fips",
+          "rate_band"
+        ],
+        "rolling_window_days": 365,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level state-monthly unemployment observations with calendar features (year, month, quarter, fiscal_year, day_of_week, iso_week) parsed from obs_date.",
+        "stats_description": "Long-form state-unemployment statistics (one row per dimension x value x year x month over state_fips and rate_band). Includes 12-month rolling counts, z-score anomalies vs baseline, lifetime rank/pct_of_total. Use to spot rate-band shifts or state-level anomalies vs peers."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "LAUS State Detail",
+      "project": "21 - BLS LAUS State Unemployment",
+      "source": "Unemployment Trend (Features)",
+      "description": "Row-level monthly state unemployment observations (25 most populous US states, 2022-2026). Fields: seriesID (LASST<FIPS>0000000000003), state_fips (2-digit), year, period (M01-M12), periodName, value (rate %, decimal), obs_date, rate_band (very_low<3.0 / low<4.0 / moderate<5.0 / elevated<6.5 / high). Plus calendar features. Source: BLS Public Data API v2 LAUS. Refresh: monthly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "LAUS State Stats",
+      "project": "21 - BLS LAUS State Unemployment",
+      "source": "Unemployment Trend (Stats)",
+      "description": "Long-form state-unemployment statistics (one row per dimension x value x year x month over state_fips and rate_band). Includes 12-month rolling counts, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to spot rate-band shifts or state-level anomalies vs peers."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "21 - BLS LAUS State Unemployment",
+    "parent_project": "Prep Agent",
+    "flow_name": "BLS LAUS State Unemployment",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 12,
+    "minute_utc": 15,
+    "weekday": "friday",
+    "schedule_name_hint": "BLS LAUS Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

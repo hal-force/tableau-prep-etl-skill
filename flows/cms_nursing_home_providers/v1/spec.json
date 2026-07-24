@@ -1,0 +1,161 @@
+{
+  "request": "Pull CMS Nursing Home Provider Information from data.cms.gov (Provider Data API dataset 4pq5-n9py) \u2014 full national roster (~15k providers). One row per nursing home. Enrich with size_band (bed-count binning: micro <25 / small <50 / mid <150 / large <300 / mega >=300) and ownership_group (map_values on ownership_type -> for_profit / non_profit / government / other). Publish to 'Prep Agent / 24 - CMS Nursing Home Providers' on Tableau Server for state health-agency + LTC-quality analysts. Note: pivoted from NY Nursing Home bed census (data.cityofnewyork.us) after repeated DNS resolution failures against the Socrata FedRAMP cluster from within TabPy \u2014 CMS Provider Data API is Akamai-fronted and stable (mirrors the working Flow 06 pattern).",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "CMS Nursing Home Provider Information",
+      "description": "CMS Nursing Home Provider Information (Provider Data API dataset 4pq5-n9py) \u2014 one row per Medicare/Medicaid-certified nursing home. Total ~14,700 rows. Fields include cms_certification_number_ccn (CCN, unique key), provider_name, legal_business_name, provider_address, citytown, state, zip_code, telephone_number, countyparish, urban (Y/N), ownership_type (For profit - Corporation / Non profit - Corporation / Government - City/State/County / For profit - Individual / Non profit - Church related / For profit - Partnership / etc.), number_of_certified_beds, average_number_of_residents_per_day, provider_type (Medicare and Medicaid / Medicare / Medicaid), provider_resides_in_hospital, date_first_approved_to_provide_medicare_and_medicaid_services, chain_name, chain_id, continuing_care_retirement_community, special_focus_status, abuse_icon (Y/N), most_recent_health_inspection_more_than_2_years_ago (Y/N), automatic_sprinkler_systems_in_all_required_areas (Yes/No/Partial), overall_rating (1-5 stars), health_inspection_rating, qm_rating, longstay_qm_rating, shortstay_qm_rating, staffing_rating, reported_nurse_aide_staffing_hours_per_resident_per_day, reported_lpn_staffing_hours_per_resident_per_day, reported_rn_staffing_hours_per_resident_per_day, reported_total_nurse_staffing_hours_per_resident_per_day, total_nursing_staff_turnover, registered_nurse_turnover, nursing_casemix_index. Pulled via CMS Provider Data offset pagination (limit=1000, cap 20 pages / 20k rows \u2014 comfortably above real row count).",
+      "url": "https://data.cms.gov/provider-data/api/1/datastore/query/4pq5-n9py/0",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 120,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_kind": "offset",
+        "json_page_param": "offset",
+        "json_page_size_param": "limit",
+        "json_page_size": 1000,
+        "json_page_start": 0,
+        "json_max_pages": 20,
+        "json_max_rows": 20000,
+        "json_records_path": "results",
+        "json_derived_columns": [
+          {
+            "name": "size_band",
+            "kind": "numeric_bin",
+            "source_col": "number_of_certified_beds",
+            "thresholds": [
+              25,
+              50,
+              150,
+              300
+            ],
+            "labels": [
+              "micro",
+              "small",
+              "mid",
+              "large",
+              "mega"
+            ],
+            "default": "unknown"
+          },
+          {
+            "name": "ownership_group",
+            "kind": "map_values",
+            "source_col": "ownership_type",
+            "mapping": {
+              "For profit - Corporation": "for_profit",
+              "For profit - Individual": "for_profit",
+              "For profit - Partnership": "for_profit",
+              "For profit - Limited Liability company": "for_profit",
+              "Non profit - Corporation": "non_profit",
+              "Non profit - Church related": "non_profit",
+              "Non profit - Other": "non_profit",
+              "Government - City": "government",
+              "Government - City/county": "government",
+              "Government - County": "government",
+              "Government - Federal": "government",
+              "Government - Hospital district": "government",
+              "Government - State": "government"
+            },
+            "default": "other"
+          }
+        ],
+        "json_schema": {
+          "cms_certification_number_ccn": "<redacted>",
+          "provider_name": "string",
+          "legal_business_name": "string",
+          "provider_address": "string",
+          "citytown": "string",
+          "state": "string",
+          "zip_code": "string",
+          "countyparish": "string",
+          "urban": "string",
+          "ownership_type": "string",
+          "ownership_group": "string",
+          "number_of_certified_beds": "<redacted>",
+          "size_band": "string",
+          "average_number_of_residents_per_day": "decimal",
+          "provider_type": "string",
+          "provider_resides_in_hospital": "string",
+          "date_first_approved_to_provide_medicare_and_medicaid_services": "string",
+          "chain_name": "string",
+          "continuing_care_retirement_community": "string",
+          "special_focus_status": "string",
+          "abuse_icon": "string",
+          "most_recent_health_inspection_more_than_2_years_ago": "string",
+          "automatic_sprinkler_systems_in_all_required_areas": "string",
+          "overall_rating": "string",
+          "health_inspection_rating": "string",
+          "qm_rating": "string",
+          "longstay_qm_rating": "string",
+          "shortstay_qm_rating": "string",
+          "staffing_rating": "string",
+          "reported_nurse_aide_staffing_hours_per_resident_per_day": "decimal",
+          "reported_rn_staffing_hours_per_resident_per_day": "decimal",
+          "reported_total_nurse_staffing_hours_per_resident_per_day": "decimal",
+          "total_nursing_staff_turnover": "decimal",
+          "registered_nurse_turnover": "decimal",
+          "nursing_casemix_index": "decimal"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "CMS Provider Trend",
+        "date_col": "date_first_approved_to_provide_medicare_and_medicaid_services",
+        "dimensions": [
+          "state",
+          "ownership_group",
+          "size_band"
+        ],
+        "rolling_window_days": 365,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level CMS Nursing Home Provider roster (national ~15k providers). Fields: cms_certification_number_ccn (CCN), provider_name, legal_business_name, provider_address, citytown, state, zip_code, countyparish, urban (Y/N), ownership_type (raw), ownership_group (for_profit / non_profit / government / other), number_of_certified_beds, size_band (micro <25 / small <50 / mid <150 / large <300 / mega >=300), average_number_of_residents_per_day, provider_type, provider_resides_in_hospital, chain_name, continuing_care_retirement_community, special_focus_status, abuse_icon, most_recent_health_inspection_more_than_2_years_ago, automatic_sprinkler_systems_in_all_required_areas, overall_rating + component ratings (health_inspection / qm / longstay_qm / shortstay_qm / staffing), reported staffing hours per resident per day (nurse_aide / rn / total_nurse), total_nursing_staff_turnover, registered_nurse_turnover, nursing_casemix_index. Plus calendar features parsed from certification approval date.",
+        "stats_description": "Long-form CMS provider statistics (one row per dimension x value x year x month over state, ownership_group, size_band, keyed on approval-date year/month). Includes rolling counts, z-score anomalies vs baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total per dimension. Use to see approval-cohort mix by ownership + size across states over time."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "CMS Nursing Home Provider Detail",
+      "project": "24 - CMS Nursing Home Providers",
+      "source": "CMS Provider Trend (Features)",
+      "description": "Row-level CMS Nursing Home Provider Information (one row per certified nursing home, national ~15k rows). Fields: cms_certification_number_ccn (CCN), provider_name, legal_business_name, provider_address, citytown, state, zip_code, countyparish, urban (Y/N), ownership_type (raw), ownership_group (for_profit / non_profit / government / other), number_of_certified_beds, size_band (micro <25 / small <50 / mid <150 / large <300 / mega >=300), average_number_of_residents_per_day, provider_type (Medicare and Medicaid / Medicare / Medicaid), provider_resides_in_hospital, date_first_approved_to_provide_medicare_and_medicaid_services, chain_name, continuing_care_retirement_community, special_focus_status, abuse_icon (Y/N), most_recent_health_inspection_more_than_2_years_ago (Y/N), automatic_sprinkler_systems_in_all_required_areas, overall_rating (1-5 stars), health_inspection_rating, qm_rating, longstay_qm_rating, shortstay_qm_rating, staffing_rating, reported_nurse_aide_staffing_hours_per_resident_per_day, reported_rn_staffing_hours_per_resident_per_day, reported_total_nurse_staffing_hours_per_resident_per_day, total_nursing_staff_turnover, registered_nurse_turnover, nursing_casemix_index. Plus calendar features. Source: CMS Provider Data API 4pq5-n9py. Refresh: monthly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "CMS Nursing Home Provider Stats",
+      "project": "24 - CMS Nursing Home Providers",
+      "source": "CMS Provider Trend (Stats)",
+      "description": "Long-form CMS provider statistics (one row per dimension x value x year x month over state, ownership_group, size_band; keyed on approval date). Includes rolling counts, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to see approval-cohort mix by ownership + facility size across states over time. Source: CMS Provider Data API 4pq5-n9py."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "24 - CMS Nursing Home Providers",
+    "parent_project": "Prep Agent",
+    "flow_name": "CMS Nursing Home Providers",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 13,
+    "minute_utc": 30,
+    "weekday": "monday",
+    "day_of_month": 6,
+    "schedule_name_hint": "CMS Nursing Home Providers Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}
