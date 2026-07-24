@@ -47,6 +47,9 @@ Requires:
 - Tableau Prep Builder 2025.3 or newer for local `.tfl` execution
 - Tableau Server 2022.3+ or Tableau Cloud for `--publish`
 
+Prefer Docker for TabPy + Python deps? See **[`docker/README.md`](docker/README.md)**.
+The Tableau Prep CLI itself is macOS-only and stays on the host either way.
+
 ## First-run setup
 
 ### 1. Clone and link

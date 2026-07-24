@@ -7,6 +7,11 @@ starting from the initial `v0.9.0-preview` release.
 ## [Unreleased]
 
 ### Added
+- `docker/` — optional docker-compose stack: unauth loopback-only
+  TabPy sidecar + a Python 3.11 skill runner with `requirements.txt`
+  pre-installed. Bind-mounts the repo at `/workspace`; connector
+  cache persists in a named volume. Prep CLI itself stays on host
+  (macOS-only). Publishes TabPy to `127.0.0.1:9099` only.
 - `docs/authoring_a_spec.md` and `docs/worked_examples.md` — split
   out of the top-level README. README trimmed from 456 → 363 lines;
   the 37-row worked-examples table now lives in `docs/`.
@@ -14,10 +19,29 @@ starting from the initial `v0.9.0-preview` release.
   round-trip via a fake TSC server) and for `run_loop` pure helpers
   (`_new_run_id` / `_safe_tfl_basename` / `_spec_from_dict`) —
   `skill/tests/test_metadata_writer.py`, `test_run_loop.py`. Total
-  suite is now 116 tests; runs in <0.3 s with no live TabPy /
+  suite is now 139 tests; runs in <0.3 s with no live TabPy /
   Tableau / LLM dependency.
+- Synthetic-sample generation in `archive_flow._synthesize_sample`:
+  string values in the 5-row archived sample for non-open-source
+  flows are now Faker-generated based on column-name heuristics
+  (`email` → `Faker.email()`, `phone` → `Faker.phone_number()`,
+  `_name`/`first_name`/`last_name`, `address`/`city`/`state`/`zip`,
+  `uuid`/`guid`, `url`/`website`, `company`/`organization`/`agency`).
+  Faker is seeded per-hyper-path so rebuilds don't churn. Falls back
+  to the historic `<redacted>` placeholder when Faker isn't installed
+  — archive shape is identical either way. Added
+  `skill/tests/test_archive_sample.py` (13 tests).
+- `Faker>=20.0` added to `requirements.txt` as an optional dep.
 
 ### Changed
+- `server_creds.py` trimmed from 610 → 441 LOC (28% reduction). The
+  three platform-specific `StorageOption` help-text blocks
+  (`_macos_suggestions` / `_linux_suggestions` / `_windows_suggestions`)
+  moved to `skill/scripts/_creds_suggestions.py`; `server_creds.py`
+  now imports and delegates. Public surface unchanged — `StorageOption`
+  and `suggestions()` still importable from `server_creds` for
+  backwards compat. Added `skill/tests/test_creds_suggestions.py`
+  (8 tests) locking down per-platform contract and dataclass shape.
 - `spec_validation` now validates `server_publish.cadence` against
   the publisher-compatible set (`hourly | daily | weekly | monthly`)
   at spec-validation time. Sub-daily aliases like `every_3_hours`
