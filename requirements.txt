@@ -25,3 +25,8 @@ Pillow>=10.0
 
 # Web crawl (only needed for web_crawl source type)
 # crawl4ai>=0.4   # uncomment when wiring the crawler template
+
+# Synthetic sample generation (archive_flow: non-open-source flows get
+# a 5-row synthetic sample; falls back to <redacted> if Faker missing).
+# Optional — omit if you don't archive PII/internal flows.
+Faker>=20.0

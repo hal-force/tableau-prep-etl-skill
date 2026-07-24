@@ -1,0 +1,70 @@
+# tableau-prep-etl-skill dev / demo stack.
+#
+# Two services:
+#   tabpy  - unauth :9099 loopback-only TabPy for local script-node dev
+#            (never point at prod Tableau; ships no auth config).
+#   skill  - Python 3.11 with the skill's deps installed; the repo is
+#            bind-mounted at /workspace so host-edits are live.
+#
+# Usage from the repo root:
+#     docker compose -f docker/docker-compose.yml up -d tabpy
+#     curl http://localhost:9099/info                     # TabPy sanity
+#     docker compose -f docker/docker-compose.yml run --rm skill \
+#         python3 -m pytest -q skill/tests
+#
+# The TabPy port is bound to 127.0.0.1 on the host so it's NOT
+# reachable from other machines on the LAN. Same defence-in-depth
+# posture as the native recipe in skill/reference/tabpy_setup.md.
+
+services:
+  tabpy:
+    build:
+      context: ..
+      dockerfile: docker/tabpy.Dockerfile
+    container_name: tpe-tabpy
+    ports:
+      # host:container - loopback only. Rebind to 0.0.0.0 ONLY if the
+      # host is a single-user dev VM you personally own.
+      - "127.0.0.1:9099:9099"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9099/info').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  skill:
+    build:
+      context: ..
+      dockerfile: docker/skill.Dockerfile
+    container_name: tpe-skill
+    working_dir: /workspace
+    volumes:
+      # Bind-mount the repo so edits on the host are visible immediately.
+      - ..:/workspace
+      # Persist the connector cache between runs.
+      - skill-cache:/home/skill/.tableau-prep-etl
+    environment:
+      # Point the skill's runtime at the sibling TabPy container. Uses
+      # the docker compose service name — inside the docker network,
+      # `tabpy` resolves to the sidecar. From the host, use localhost:9099.
+      TABPY_HOST: tabpy
+      TABPY_PORT: "9099"
+      # LLM gateway comes from the host env (or a docker-compose .env
+      # file). Never bake creds into the image.
+      LLM_GATEWAY_URL: "${LLM_GATEWAY_URL:-}"
+      LLM_GATEWAY_KEY: "${LLM_GATEWAY_KEY:-}"
+      LLM_GATEWAY_MODEL: "${LLM_GATEWAY_MODEL:-claude-sonnet-4-6}"
+    depends_on:
+      tabpy:
+        condition: service_healthy
+    # Interactive shell by default so `docker compose run --rm skill bash`
+    # drops the user straight into the workspace.
+    command: ["bash"]
+    tty: true
+    stdin_open: true
+
+volumes:
+  skill-cache:

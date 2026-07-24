@@ -272,15 +272,84 @@ def _collect_sample_outputs(run_dir: Path, dest_dir: Path,
     return saved
 
 
+# === Sample synthesis (Faker) =======================================
+
+# Column-name -> Faker method map. Keys are lowercase substring
+# heuristics. Order matters: first match wins. `Faker` is optional; when
+# it's missing every string column falls back to the `<redacted>`
+# placeholder we've historically emitted, so nothing else has to change.
+_FAKER_COL_MAP = (
+    ("email", "email"),
+    ("phone", "phone_number"),
+    ("first_name", "first_name"),
+    ("last_name", "last_name"),
+    ("full_name", "name"),
+    ("_name", "name"),
+    ("address", "street_address"),
+    ("street", "street_address"),
+    ("city", "city"),
+    ("state", "state_abbr"),
+    ("province", "administrative_unit"),
+    ("country", "country"),
+    ("zip", "postcode"),
+    ("postal", "postcode"),
+    ("postcode", "postcode"),
+    ("url", "url"),
+    ("website", "url"),
+    ("company", "company"),
+    ("organization", "company"),
+    ("agency", "company"),
+    ("uuid", "uuid4"),
+    ("guid", "uuid4"),
+)
+
+
+def _synthetic_string(faker, col_name: str, seed_hint: str) -> str:
+    """Pick a Faker method by column-name heuristic. `seed_hint` lets
+    callers keep repeated runs stable (Faker seeded once in
+    `_synthesize_sample`, so multiple rows still get varied values but
+    the archive is reproducible across builds)."""
+    if faker is None:
+        return "<redacted>"
+    low = (col_name or "").lower()
+    for needle, method in _FAKER_COL_MAP:
+        if needle in low:
+            try:
+                return str(getattr(faker, method)())
+            except Exception:
+                return "<redacted>"
+    # No heuristic hit — a generic short lorem string that's clearly
+    # synthetic but still readable in a preview.
+    try:
+        return faker.word()
+    except Exception:
+        return "<redacted>"
+
+
 def _synthesize_sample(hyper_path: Path, dest_csv: Path,
                        max_rows: int = 5) -> Optional[Path]:
-    """Read a Hyper, take 5 rows, replace string values with synthetic
-    versions (for non-open-source flows)."""
+    """Read a Hyper, take up to `max_rows`, replace string values with
+    Faker-generated synthetic versions (for non-open-source flows).
+
+    Falls back to the historic `<redacted>` placeholder if Faker is not
+    installed — callers get identical archive shape either way. Numeric
+    values pass through unchanged (they're aggregates / counts in most
+    schemas)."""
     try:
         from tableauhyperapi import HyperProcess, Connection, Telemetry
     except ImportError:
         return None
     import csv as _csv
+
+    try:
+        from faker import Faker  # type: ignore
+        faker = Faker()
+        # Deterministic per-flow so the same archive doesn't churn a
+        # new sample on every rebuild. The hyper path is stable within
+        # a flow archive.
+        Faker.seed(hash(str(hyper_path)) & 0xFFFFFFFF)
+    except ImportError:
+        faker = None
 
     with HyperProcess(telemetry=Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU) as hp:
         with Connection(endpoint=hp.endpoint, database=str(hyper_path)) as conn:
@@ -295,23 +364,22 @@ def _synthesize_sample(hyper_path: Path, dest_csv: Path,
             with conn.execute_query(f"SELECT * FROM {tbl} LIMIT {max_rows}") as rows:
                 rows_data = list(rows)
 
-    # Synthesize: preserve types, but use placeholders. We don't know
-    # which columns are sensitive without column-level metadata, so
-    # the safe default is to redact ALL string columns. Numerics keep
-    # their values (they're aggregates / counts in most schemas).
     dest_csv.parent.mkdir(parents=True, exist_ok=True)
     with dest_csv.open("w", newline="", encoding="utf-8") as f:
         writer = _csv.writer(f)
         writer.writerow(cols)
-        for r in rows_data:
+        for row_idx, r in enumerate(rows_data):
             row_out = []
-            for v in r:
+            for col_idx, v in enumerate(r):
                 if isinstance(v, (int, float)):
                     row_out.append(str(v))
                 elif v is None:
                     row_out.append("")
                 else:
-                    row_out.append("<redacted>")
+                    row_out.append(_synthetic_string(
+                        faker, cols[col_idx],
+                        seed_hint=f"{hyper_path.stem}:{row_idx}:{col_idx}",
+                    ))
             writer.writerow(row_out)
     return dest_csv
 
