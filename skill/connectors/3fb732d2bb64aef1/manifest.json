@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "data.cityofnewyork.us",
-    "auth": "none",
-    "format": "json"
-  },
-  "stored_at": 1781837925.8287559
-}

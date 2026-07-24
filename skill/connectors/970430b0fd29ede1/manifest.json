@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "api.eia.gov",
-    "auth": "query_key",
-    "format": "json"
-  },
-  "stored_at": 1783956076.9009862
-}

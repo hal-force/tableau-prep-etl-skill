@@ -72,8 +72,8 @@ page is the "I want to drive it" guide.
    ```
    On Tableau **Server** (on-prem), use the Server URL and leave the
    `site` entry empty (`-w ''`) for the default site. On Tableau
-   **Cloud**, use your pod URL (e.g. `prod-useast-a.online.tableau.com`,
-   `10ax.online.tableau.com`, etc.) and your site contentUrl.
+   **Cloud**, use your pod URL (e.g. `10ax.online.tableau.com`,
+   `us-east-1a.online.tableau.com`, etc.) and your site contentUrl.
    Then load them into the shell:
    ```sh
    source ~/.tableau-prep-etl/load_env.sh

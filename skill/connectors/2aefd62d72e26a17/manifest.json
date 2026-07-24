@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "data.cdc.gov",
-    "auth": "none",
-    "format": "json"
-  },
-  "stored_at": 1781838676.7458282
-}

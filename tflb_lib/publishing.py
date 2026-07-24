@@ -24,8 +24,8 @@ Public surface:
                                       task id you can monitor.
 
 Cloud vs. Server: Cloud has no shared schedules — each scheduled task
-carries its own frequency. We branch on `_is_cloud(server)`. Tableau
-Cloud Federal pods (prod-useast-a etc.) live under *.online.tableau.com.
+carries its own frequency. We branch on `_is_cloud(server)`. All Tableau
+Cloud pods live under `*.online.tableau.com`.
 
 Auth secret handling: the PAT secret is read once from env, passed to
 TSC's auth helper, and never persisted. We only persist URL/site.
@@ -140,8 +140,7 @@ def config_from_env(env: Optional[dict] = None) -> ServerConfig:
 
 def _is_cloud(server: TSC.Server) -> bool:
     """TSC 0.38 has no is_tableau_cloud(); detect via URL pattern.
-    Tableau Cloud pods all live under *.online.tableau.com (incl. the
-    Federal pods like prod-useast-a)."""
+    Tableau Cloud pods all live under *.online.tableau.com."""
     return ".online.tableau.com" in (server.server_address or "").lower()
 
 
@@ -624,7 +623,7 @@ def _hhmm_str(want: ScheduleSpec) -> str:
 
 def _cloud_intervals_xml(want: ScheduleSpec) -> str:
     """Cloud's <intervals> child XML varies by cadence (per REST docs +
-    empirical 0x5CE10192 errors from prod-useast-a):
+    empirical 0x5CE10192 errors observed in production):
       hourly  → <interval hours="1"/> + all 7 weekDay siblings
       daily   → <interval hours="24"/> + all 7 weekDay siblings
                 (Cloud rejects daily without weekDay coverage even when

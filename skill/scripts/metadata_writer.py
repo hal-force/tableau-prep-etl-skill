@@ -7,8 +7,8 @@ generate (and optionally apply) catalog-style descriptions:
   - DS-level description via REST PUT /api/{ver}/sites/{site}/datasources/{luid}
     (TSC handles this via `server.datasources.update(item)`).
   - Per-column descriptions via .tds XML injection + Overwrite re-publish.
-    Tableau Cloud's Metadata API is read-only (verified 2026-06-18
-    against usfederaldemos: the GraphQL Mutation root is empty,
+    Tableau Cloud's Metadata API is read-only (verified in production
+    against a live pod: the GraphQL Mutation root is empty,
     `updateField` / `updateColumn` always return generic "Internal
     Server Error(s) while executing query"). The only supported write
     surface for column descriptions on Cloud is round-tripping the

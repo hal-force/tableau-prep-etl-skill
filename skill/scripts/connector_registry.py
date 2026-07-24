@@ -6,9 +6,15 @@ Public API:
     lookup(source) -> CachedConnector | None
     store(source, rendered_path, defaults) -> CachedConnector
 
-The registry lives at skill/connectors/. Each entry holds the rendered
-Python step + a defaults.json. Subsequent runs whose source signature
-matches reuse the cached connector instead of re-rendering.
+The registry lives at `~/.tableau-prep-etl/connectors/` by default so
+per-user connector caches never end up in the repo. Set the
+`TABLEAU_PREP_ETL_CONNECTOR_CACHE` env var to override (useful for
+CI or ephemeral runs). A shipped seed index at `skill/connectors/index.json`
+is copied into the user directory the first time it's created.
+
+Each entry holds the rendered Python step + a defaults.json. Subsequent
+runs whose source signature matches reuse the cached connector instead
+of re-rendering.
 
 Credentials are NEVER stored. Rendered scripts read os.environ at
 runtime; only structural defaults (timeout_s, retry counts, headers,
@@ -18,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import time
 from dataclasses import dataclass
@@ -28,8 +35,35 @@ from urllib.parse import urlparse
 from skill.scripts.intake import Source
 
 
-CONNECTORS_DIR = Path(__file__).resolve().parents[1] / "connectors"
+# Repo-shipped seed (read-only; used to bootstrap the per-user cache).
+_SEED_INDEX = Path(__file__).resolve().parents[1] / "connectors" / "index.json"
+
+
+def _resolve_connectors_dir() -> Path:
+    override = os.environ.get("TABLEAU_PREP_ETL_CONNECTOR_CACHE")
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path.home() / ".tableau-prep-etl" / "connectors"
+
+
+CONNECTORS_DIR = _resolve_connectors_dir()
 INDEX_FILE = CONNECTORS_DIR / "index.json"
+
+
+def _ensure_bootstrapped() -> None:
+    """Create the per-user cache dir on first use, seeding it with the
+    repo-shipped index.json (a read-only registry of publicly-derived
+    connector signatures). Existing user data is never overwritten."""
+    if INDEX_FILE.exists():
+        return
+    CONNECTORS_DIR.mkdir(parents=True, exist_ok=True)
+    if _SEED_INDEX.exists():
+        try:
+            shutil.copyfile(_SEED_INDEX, INDEX_FILE)
+        except Exception:
+            INDEX_FILE.write_text(json.dumps({"version": 1, "entries": {}}, indent=2))
+    else:
+        INDEX_FILE.write_text(json.dumps({"version": 1, "entries": {}}, indent=2))
 
 
 @dataclass
@@ -69,6 +103,7 @@ def key_for(source: Source) -> str:
 
 
 def _load_index() -> dict:
+    _ensure_bootstrapped()
     if not INDEX_FILE.exists():
         return {"version": 1, "entries": {}}
     try:

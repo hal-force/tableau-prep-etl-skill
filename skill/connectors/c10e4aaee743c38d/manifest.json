@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "ed-public-download.scorecard.network",
-    "auth": "none",
-    "format": "csv_zip"
-  },
-  "stored_at": 1781840906.371836
-}

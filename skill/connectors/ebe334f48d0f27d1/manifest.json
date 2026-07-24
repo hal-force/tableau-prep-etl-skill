@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "api.fiscaldata.treasury.gov",
-    "auth": "none",
-    "format": "json"
-  },
-  "stored_at": 1781835284.3902311
-}

@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "data.boston.gov",
-    "auth": "none",
-    "format": "json"
-  },
-  "stored_at": 1784221229.293278
-}

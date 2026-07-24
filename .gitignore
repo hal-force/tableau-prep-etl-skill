@@ -50,5 +50,15 @@ data/
 **/metrics_db/active.json
 **/proposer/briefs/
 
-# Hyper engine runtime log
+# Log files (hyperd, TabPy, ad-hoc)
 hyperd.log
+*.log
+**/*.log
+
+# Local dev config + Tableau Prep pythonSupport
+pythonSupport.json
+**/pythonSupport.json
+
+# Connector cache — moved to ~/.tableau-prep-etl/connectors/
+skill/connectors/*/
+!skill/connectors/index.json

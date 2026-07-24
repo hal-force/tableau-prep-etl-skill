@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "data.wa.gov",
-    "auth": "none",
-    "format": "json"
-  },
-  "stored_at": 1784666767.129308
-}

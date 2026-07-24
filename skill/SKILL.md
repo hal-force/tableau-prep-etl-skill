@@ -1,28 +1,32 @@
 ---
 name: tableau-prep-etl
 description: >-
-  Build, test, and refine a Tableau Prep flow (.tfl) from a natural-language
-  ETL request. Handles local-folder ingestion, REST/GraphQL APIs, native
-  Tableau connectors, web-crawl pipelines (Crawl4AI), and PKI-authenticated
-  endpoints. Includes a closed-loop refinement framework: ground-truth
-  extraction, scoring, holdout splits, propose-and-promote agent versions,
-  per-document QA review, and statistical anomaly detection. Output: a
-  working .tfl ready to open in Tableau Prep Builder.
+  Build a Tableau Prep flow (.tfl) from a natural-language ETL request.
+  Handles local-folder ingestion, REST/GraphQL APIs, native Tableau
+  connectors, web-crawl pipelines (Crawl4AI), and PKI-authenticated
+  endpoints. Runs the built flow via `tableau-prep-cli`, verifies the
+  produced Hyper against a deterministic QA gate, and optionally
+  publishes the flow + a Hyper-backed published data source to Tableau
+  Server / Cloud. Output: a working .tfl ready to open in Tableau Prep
+  Builder.
   Use when the user asks to: "build a Prep flow that…", "create a Tableau
-  ETL pipeline for…", "ingest <data source> into Tableau", "refine my
-  existing .tfl", "set up an ongoing crawl into Prep", or "test my Prep
-  flow against expected results".
+  ETL pipeline for…", "ingest <data source> into Tableau", "set up an
+  ongoing crawl into Prep", or "publish my flow to Tableau Server /
+  Cloud".
 ---
 
 # Tableau Prep ETL Skill
 
-This skill takes a natural-language ETL request and produces a tested,
-refined Tableau Prep `.tfl` file. The skill plans the source acquisition
-strategy from the user's request, generates the flow programmatically,
-runs it via `tableau-prep-cli`, scores the output against ground truth
-(extracted, sampled, or synthesized depending on the source), proposes
-refinements when scores are below threshold, and emits a final report
-plus the working `.tfl`.
+This skill takes a natural-language ETL request and produces a tested
+Tableau Prep `.tfl` file. It plans the source acquisition strategy
+from the user's request, generates the flow programmatically, runs it
+via `tableau-prep-cli`, verifies the produced Hyper against a
+deterministic QA gate (schema, null counts, distinct-value bounds),
+and emits a final report plus the working `.tfl`.
+
+Optional `--publish` uploads the .tfl and a Hyper-backed published
+data source to Tableau Server / Cloud, then round-trips column-level
+descriptions through the .tds writer. See `reference/server_publishing.md`.
 
 ## When to invoke
 
@@ -32,7 +36,7 @@ The skill is the right tool when a user says things like:
 - "Pull GDELT data daily and load into Tableau."
 - "Crawl this topic and surface trending entities."
 - "Use my ArcGIS server as a data source."
-- "Refine my existing Prep flow against this expected output."
+- "Publish this flow + its extract to Tableau Server / Cloud."
 
 It is **not** the right tool for:
 
@@ -247,15 +251,19 @@ Branch by `eval_strategy`:
 
 ### Phase 7: Test Loop (`scripts/run_loop.py`)
 
-Bounded refinement loop (default 3 iterations). Per iteration:
+Bounded verification loop (default 3 iterations). Per iteration:
 
 1. Run `tableau-prep-cli -t flow.tfl`.
-2. Score the output against ground truth.
-3. If overall mean < threshold (default 0.85), ask the LLM to propose
-   a `v+1` variant of the worst-performing agent.
-4. Register the variant; re-run; promote if it beats baseline on
-   holdout AND no field regresses by > 0.10.
-5. Repeat until threshold met or iteration cap hit.
+2. Verify the produced Hyper against the deterministic QA gate
+   (schema conformance, null counts, distinct-value bounds, and any
+   spec-declared post-conditions).
+3. If verification fails, log the failure detail and re-run (Prep's
+   TabPy path is occasionally flaky on cold DNS / large paginated
+   fetches — a bounded retry masks that transient noise).
+4. Stop as soon as verification passes, or when the iteration cap
+   is hit. Closed-loop LLM-proposed refinements are v2 roadmap
+   material — this phase does not currently mutate the flow between
+   iterations.
 
 ### Phase 8: Final Report
 
@@ -333,7 +341,7 @@ All four are required for any operation that talks to the site
 (scan, publish, metadata writer). When unset, those phases are
 silently skipped and the skill behaves as a local-only build tool.
 
-- `TABLEAU_SERVER_URL` — e.g. `https://prod-useast-a.online.tableau.com`
+- `TABLEAU_SERVER_URL` — e.g. `https://<your-pod>.online.tableau.com`
 - `TABLEAU_SERVER_PAT_NAME`
 - `TABLEAU_SERVER_PAT_SECRET`
 - `TABLEAU_SERVER_SITE` — site contentUrl (use `""` for the default

@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "data.sfgov.org",
-    "auth": "none",
-    "format": "json"
-  },
-  "stored_at": 1784644208.7528708
-}

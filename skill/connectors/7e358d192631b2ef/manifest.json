@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "healthdata.gov",
-    "auth": "none",
-    "format": "json"
-  },
-  "stored_at": 1784223110.848495
-}

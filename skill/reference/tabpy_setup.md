@@ -13,7 +13,19 @@ true for the skill's flows to execute:
 This page is the unblock-recipe. For background on the GUI-vs-CLI
 auth file split, see the gotchas memory.
 
-## The recipe — unauth TabPy on :9099
+## Security notice — read before deploying
+
+TabPy is a Python-eval server. **Anything that can reach the
+TabPy port can execute arbitrary code as the user running TabPy.**
+The recipes below default to `localhost`-only bind so the port is
+not reachable from the network. Do NOT expose TabPy on `0.0.0.0`
+or a shared interface without adding authentication, TLS, and (at
+minimum) a firewall rule. For any multi-user or production setup,
+follow the official TabPy security guidance
+(<https://tableau.github.io/TabPy/docs/server-config.html>) —
+enable basic auth over TLS, or restrict access to a trusted proxy.
+
+## The recipe — local-only TabPy on :9099
 
 prep-cli v2025.3 / 2026.1 cannot reliably pass basic-auth credentials
 to TabPy on macOS. Even with a valid `pythonSupport.json` at the
@@ -21,22 +33,28 @@ CLI's `Command Line Repository/Credentials/`, the JAR's REST-mode
 config fails to populate `BasicAuthConfiguration.password` and every
 script node errors with "BasicAuthConfiguration.getPassword() is null".
 
-The working pattern: launch a SECOND TabPy on `:9099` with auth
-disabled, point Prep at it.
+The working pattern: launch a **loopback-only** TabPy on `:9099`
+with auth disabled, and point Prep at it. Loopback binding means
+the port is not reachable from other machines on your network — it
+answers only to `localhost` on the same host.
 
 ```sh
 cat > /tmp/tabpy_smoke.conf <<'EOF'
 [TabPy]
 TABPY_PORT = 9099
+TABPY_BIND_IP = 127.0.0.1
 TABPY_EVALUATE_ENABLE = true
 TABPY_EVALUATE_TIMEOUT = 600
 EOF
 
-/Library/Frameworks/Python.framework/Versions/3.13/bin/tabpy \
+# Use whichever tabpy is on PATH — no hard-coded interpreter path.
+"$(which tabpy)" \
     --config=/tmp/tabpy_smoke.conf --disable-auth-warning &
 
-# Verify
+# Verify it responds on loopback but NOT on the LAN interface.
 curl -s http://localhost:9099/info | python3 -m json.tool | head
+# Should FAIL (connection refused) — confirms external-facing bind is off:
+# curl -s http://$(ipconfig getifaddr en0):9099/info
 ```
 
 Then update `Command Line Repository/Credentials/pythonSupport.json` to:
@@ -50,6 +68,12 @@ Then update `Command Line Repository/Credentials/pythonSupport.json` to:
 After this swap, prep-cli runs script-node flows end-to-end. Any
 previous auth-required TabPy on a different port can keep running
 for Builder GUI work — they're independent.
+
+> **Why `TABPY_BIND_IP = 127.0.0.1`?** TabPy's default binds to
+> `0.0.0.0`, which listens on every network interface. On a laptop
+> connected to a public Wi-Fi network, that means anyone on the
+> same network can send code to `/evaluate` and it will execute
+> as your user. Loopback binding closes that hole cheaply.
 
 ## TABPY_EVALUATE_TIMEOUT = 600 is load-bearing
 
@@ -77,10 +101,11 @@ If a script imports a library and falls back silently when missing,
 the CLI run will silently produce different numbers than the
 standalone harness.
 
-Install with TabPy's pip, not `.venv`'s pip:
+Install with TabPy's pip, not `.venv`'s pip. Use whichever pip
+matches the `tabpy` you launched:
 
 ```sh
-/Library/Frameworks/Python.framework/Versions/3.13/bin/pip install \
+"$(dirname "$(which tabpy)")/pip" install \
   pandas networkx rapidfuzz \
   PyPDF2 pdfplumber pdf2image pytesseract \
   python-dateutil openai certifi tableauserverclient tableauhyperapi
@@ -89,13 +114,16 @@ Install with TabPy's pip, not `.venv`'s pip:
 Audit:
 
 ```sh
-/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -c "
+python3 -c "
 for m in ('rapidfuzz','dateutil','pdfplumber','pdf2image','pytesseract',
           'pandas','PyPDF2','openai','networkx','certifi',
           'tableauserverclient','tableauhyperapi'):
     try: __import__(m); print(f'{m}: ok')
     except ImportError as e: print(f'{m}: MISSING ({e})')"
 ```
+
+(Run this against the same interpreter that TabPy uses — `ps eww`
+on the TabPy PID will show its executable.)
 
 ## Restart TabPy after any install
 
@@ -105,7 +133,7 @@ effect until the daemon restarts.
 ```sh
 pkill -f "tabpy.*tabpy_smoke.conf"
 sleep 2
-/Library/Frameworks/Python.framework/Versions/3.13/bin/tabpy \
+"$(which tabpy)" \
     --config=/tmp/tabpy_smoke.conf --disable-auth-warning &
 ```
 
@@ -134,7 +162,7 @@ Fix — kill, source, relaunch (in one command so the env is fresh):
 pkill -f "tabpy.*tabpy_smoke.conf" ; sleep 2
 bash -c '
   source ~/.tableau-prep-etl/load_env.sh
-  nohup /Library/Frameworks/Python.framework/Versions/3.13/bin/tabpy \
+  nohup "$(which tabpy)" \
       --config=/tmp/tabpy_smoke.conf --disable-auth-warning \
       > /tmp/tabpy_smoke.log 2>&1 &
 '
@@ -188,7 +216,7 @@ the GUI side via *Help → Settings and Performance → Manage
 Analytics Extension Connection* — don't hand-edit the JSON; the
 GUI re-saves it cleanly on connection-test success.
 
-For the CLI side, hand-edit the JSON above to point at the unauth
+For the CLI side, hand-edit the JSON above to point at the loopback
 :9099 instance.
 
 ## Template render conventions

@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "api.open.fec.gov",
-    "auth": "query_key",
-    "format": "json"
-  },
-  "stored_at": 1784643321.3620741
-}

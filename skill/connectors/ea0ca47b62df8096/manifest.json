@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "api.bls.gov",
-    "auth": "none",
-    "format": "json"
-  },
-  "stored_at": 1781836620.471522
-}

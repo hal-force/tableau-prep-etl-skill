@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "",
-    "auth": "none",
-    "format": "csv"
-  },
-  "stored_at": 1781723086.12313
-}
