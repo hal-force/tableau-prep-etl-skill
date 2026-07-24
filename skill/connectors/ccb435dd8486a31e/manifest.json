@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "directory.spineservices.nhs.uk",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1784729547.27897
+}

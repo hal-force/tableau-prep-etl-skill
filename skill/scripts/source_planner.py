@@ -892,6 +892,50 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
             branch=branch_idx,
         ))
 
+    # EW Fusion — fuses ADS-B rows with a synthetic EOB library keyed
+    # on airframe class. Adds RF parametrics (band, centre freq, PRI, PW,
+    # ERP), computes bearing/range from an own-ship reference, notional
+    # received power (Friis), and a categorical threat_band. Illustrative
+    # only; the EOB library is synthetic.
+    for tr in spec.transformations:
+        if tr.kind != "ew_fusion":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        ew_name = args.get("name", "EW Fusion")
+        ew_desc = args.get("description") or (
+            "Fuses live ADS-B state vectors with a synthetic Electronic "
+            "Order of Battle library keyed on airframe class. Adds RF "
+            "band, centre frequency, PRI, PW, ERP, notional mode, "
+            "own-ship range/bearing/aspect, Friis-model received power "
+            "(dBm), and a categorical threat_band (Non-hostile / Search "
+            "/ Track / Engage / Critical). Emitter parametrics are "
+            "notional and illustrative, not drawn from any classified "
+            "source."
+        )
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=ew_name,
+            description=ew_desc,
+            template="ew_fusion.py.j2",
+            template_vars={
+                "lat_col":         args.get("lat_col", "latitude"),
+                "lon_col":         args.get("lon_col", "longitude"),
+                "alt_col":         args.get("alt_col", "baro_altitude"),
+                "velocity_col":    args.get("velocity_col", "velocity"),
+                "heading_col":     args.get("heading_col", "true_track"),
+                "callsign_col":    args.get("callsign_col", "callsign"),
+                "category_col":    args.get("category_col", "category"),
+                "icao_col":        args.get("icao_col", "icao24"),
+                "own_ship_lat":    float(args.get("own_ship_lat", 51.3762)),
+                "own_ship_lon":    float(args.get("own_ship_lon", -1.3086)),
+                "own_ship_label":  args.get("own_ship_label", "OWN-SHIP RAF Odiham"),
+                "input_schema":    input_schema,
+            },
+            function_name="fuse",
+            branch=branch_idx,
+        ))
+
     # PII / PAI redaction transformations. Like trend_analysis, this
     # forks into two siblings consuming the same upstream:
     #   pii_redactor → row-preserving clean output (one row in, one row out

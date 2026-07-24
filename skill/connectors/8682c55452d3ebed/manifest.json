@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "environment.data.gov.uk",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1784728757.950049
+}

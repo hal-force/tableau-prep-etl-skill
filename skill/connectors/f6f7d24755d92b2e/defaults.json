@@ -1,0 +1,65 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 120,
+  "max_retries": 3,
+  "json_paginate": true,
+  "json_page_kind": "offset",
+  "json_page_param": "$offset",
+  "json_page_size_param": "$limit",
+  "json_page_size": 5000,
+  "json_page_start": 0,
+  "json_max_pages": 4,
+  "json_max_rows": 20000,
+  "json_derived_columns": [
+    {
+      "name": "status_band",
+      "kind": "map_values",
+      "source_col": "status",
+      "mapping": {
+        "Open": "open",
+        "In Progress": "in_progress",
+        "Completed": "completed",
+        "Completed - Dup": "completed",
+        "Canceled": "canceled"
+      },
+      "default": "other"
+    },
+    {
+      "name": "department_group",
+      "kind": "map_values",
+      "source_col": "owner_department",
+      "mapping": {
+        "CDOT - Department of Transportation": "CDOT",
+        "DSS - Department of Streets and Sanitation": "Streets_Sanitation",
+        "BACP - Business Affairs and Consumer Protection": "BACP",
+        "DOB - Department of Buildings": "Buildings",
+        "CDPH - Department of Public Health": "Public_Health",
+        "DPD - Department of Planning and Development": "Planning",
+        "DWM - Department of Water Management": "Water",
+        "OEMC - Office of Emergency Management and Communications": "OEMC"
+      },
+      "default": "other"
+    }
+  ],
+  "json_schema": {
+    "sr_number": "string",
+    "sr_type": "string",
+    "sr_short_code": "string",
+    "created_department": "string",
+    "owner_department": "string",
+    "department_group": "string",
+    "status": "string",
+    "status_band": "string",
+    "origin": "string",
+    "created_date": "string",
+    "last_modified_date": "string",
+    "street_address": "string",
+    "zip_code": "string",
+    "ward": "string",
+    "community_area": "string",
+    "police_sector": "string",
+    "latitude": "decimal",
+    "longitude": "decimal"
+  },
+  "_skip_auto_casts": true
+}

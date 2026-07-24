@@ -1,0 +1,68 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 90,
+  "max_retries": 3,
+  "json_paginate": true,
+  "json_page_kind": "offset",
+  "json_page_param": "$offset",
+  "json_page_size_param": "$limit",
+  "json_page_size": 5000,
+  "json_page_start": 0,
+  "json_max_pages": 100,
+  "json_max_rows": 500000,
+  "json_derived_columns": [
+    {
+      "name": "resolution_status",
+      "kind": "map_values",
+      "source_col": "status_description",
+      "mapping": {
+        "Closed": "closed",
+        "Open": "open"
+      },
+      "default": "other"
+    },
+    {
+      "name": "district_class",
+      "kind": "map_values",
+      "source_col": "supervisor_district",
+      "mapping": {
+        "1.00000": "district_1_richmond",
+        "2.00000": "district_2_marina",
+        "3.00000": "district_3_north_beach",
+        "4.00000": "district_4_sunset",
+        "5.00000": "district_5_haight",
+        "6.00000": "district_6_soma",
+        "7.00000": "district_7_west_portal",
+        "8.00000": "district_8_castro",
+        "9.00000": "district_9_mission",
+        "10.00000": "district_10_bayview",
+        "11.00000": "district_11_excelsior"
+      },
+      "default": "unassigned"
+    }
+  ],
+  "json_schema": {
+    "service_request_id": "string",
+    "requested_datetime": "string",
+    "closed_date": "string",
+    "updated_datetime": "string",
+    "status_description": "string",
+    "resolution_status": "string",
+    "status_notes": "string",
+    "agency_responsible": "string",
+    "service_name": "string",
+    "service_subtype": "string",
+    "service_details": "string",
+    "address": "string",
+    "street": "string",
+    "supervisor_district": "string",
+    "district_class": "string",
+    "analysis_neighborhood": "string",
+    "police_district": "string",
+    "neighborhoods_sffind_boundaries": "string",
+    "source": "string",
+    "lat": "decimal",
+    "long": "decimal"
+  },
+  "_skip_auto_casts": true
+}

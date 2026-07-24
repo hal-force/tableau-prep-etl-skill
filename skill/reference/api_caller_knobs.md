@@ -130,6 +130,12 @@ World Bank uses `page` + `per_page`; the tle.ivanstanojevic mirror uses
 `page` + `page-size`; NASA NEO uses `page` + `size`. Set
 `json_page_param` and `json_page_size_param` explicitly.
 
+**Fixed-per-page publishers:** some APIs ignore or reject a size
+param (BLS series/data returns full series regardless; some ArcGIS
+feature-service pages have a server-side cap). Set
+`json_page_size_param: ""` — the walker skips emitting the size on
+every request but still advances the page/offset param.
+
 ### Post-fetch column synthesis
 
 `json_derived_columns` is a list of dicts; each one synthesizes a
@@ -148,6 +154,9 @@ trim. Kinds available today:
 | `dotted_path`      | `{name, source_col, path, cast?, default?}`                              | Walk a dotted path into a dict-or-list-valued cell and extract a scalar. Numeric segments index into lists (e.g. `close_approach_data.0.miss_distance.kilometers`). `path=""` copies source through the caster. `cast` in `('string','int','decimal')`, default `'string'`. |
 | `numeric_bin`      | `{name, source_col, thresholds:[...], labels:[...], default?}`           | Bin a numeric column into categorical labels. `labels` length = `thresholds` length + 1. Ex: `thresholds:[0.03,0.14,1.0]` + `labels:[small,medium,large,very_large]` on a diameter column (km). |
 | `epoch_ms_iso`     | `{name, source_col}`                                                     | Convert Unix milliseconds epoch to ISO 8601 string (UTC). Used by USGS earthquakes `properties.time`. |
+| `list_length`      | `{name, source_col}`                                                     | Count elements in a list-valued column. TfL AccidentStats `casualties`/`vehicles` counts; USAspending recipients lists. Non-list values -> `0`. |
+| `substring`        | `{name, source_col, start, length?, end?}`                               | Fixed-position slice of a string column. `start=0` acts as an alias (useful to duplicate a raw column into the schema under a new name — dodges the trend_features month/year/quarter collision when source columns share those names). |
+| `map_values`       | `{name, source_col, mapping, default?}`                                  | Dictionary lookup — coarsen high-cardinality codes / normalize status vocabularies (Home Office outcome text -> `outcome_stage`, NHS postcode-area -> England region, TfL `severity` -> `severity_band`). Unmapped values fall through to `default`. |
 
 Declared derived columns must also appear in `json_schema` (with
 their target type) or they get trimmed out before the dataframe

@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "api.tfl.gov.uk",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1784729788.671602
+}
