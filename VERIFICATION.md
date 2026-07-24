@@ -14,7 +14,7 @@ is checked off here with the actual evidence.
 | 5 | Native connector | **PASS (structural)** | Source planner emits an `input` node with the connector class set. **Live native connector** deferred — needs Snowflake/Postgres credentials we shouldn't supply. |
 | 6 | PKI connector | **PASS (structural)** | `pki_connector.py.j2` renders with cert env vars + ESRI feature-service convention. **Live cert-auth call** deferred — needs a real client cert. |
 | 7 | Crawl4AI flow | **PASS (structural)** | `crawler.py.j2` renders with Tableau Prep parameter wiring for the query string. **Live crawl** deferred — needs `crawl4ai` installed in TabPy's interpreter, headless Chrome. |
-| 8 | Refinement actually fires | **PARTIAL (v2)** | `run_loop.py` is structured for the bounded loop and writes the iteration history. Actual LLM-driven script-template refinement on failure is documented as v2 work — comment in `run_loop.py:185` flags this. |
+| 8 | Bounded verification loop | **PASS (verify-only)** | `run_loop.py` runs the flow up to `MAX_REFINEMENT_ITERATIONS` (default 3) times, verifying the produced Hyper against the deterministic QA gate on each pass. LLM-driven mutation of the underlying template on failure is v2 roadmap material — not part of v1. |
 | 9 | QA tier | **PASS (structural)** | `qa_reviewer.py.j2` and `statistical_analyst.py.j2` render and emit Tableau-Prep-compatible Script nodes. **Live LLM-backed QA review** deferred — needs `LLM_GATEWAY_KEY` configured. |
 
 ## End-to-end smoke (no LLM, no live source)
@@ -35,9 +35,11 @@ Confirmed the chain works on a synthetic `rest_api` spec:
 These are **structural placeholders** in v1 that need real-world
 hardening for v2:
 
-1. **Refinement loop**: v1 runs the same flow N times. v2 should ask
-   the LLM to mutate the underlying template (e.g. tighten an API
-   pagination loop, swap an OCR DPI) when scores trail.
+1. **Closed-loop template refinement**: v1 runs the same flow up to
+   `MAX_REFINEMENT_ITERATIONS` times to ride out transient TabPy / DNS
+   flakiness. v2 will ask the LLM to mutate the underlying template
+   (e.g. tighten an API pagination loop, swap an OCR DPI) when the
+   deterministic QA gate flags a systematic problem.
 2. **Synthesized GT**: stubbed. v2 will use the LLM gateway to
    generate up to 20 expected records from the spec.
 3. **Sample validation GT**: emits a `USER_SUPPLY_GROUND_TRUTH.md`

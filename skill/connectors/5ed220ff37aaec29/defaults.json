@@ -1,7 +1,0 @@
-{
-  "verify_ssl": true,
-  "timeout_s": 120,
-  "max_retries": 3,
-  "country_filter": "US",
-  "index_link_pattern": "href=\"([^\"]+\\.CSV\\.zip)\""
-}

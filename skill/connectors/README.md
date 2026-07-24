@@ -21,16 +21,22 @@ runs and merges them in.
 
 ## On-disk shape
 
+The **live** cache is per-user, outside the repo:
+
 ```
-skill/connectors/
-├── index.json                          # the registry
-├── README.md                           # this file
+~/.tableau-prep-etl/connectors/
+├── index.json                          # the per-user registry
 └── <key>/
     ├── manifest.json                   # source signature, last_used_at, hit count
     ├── connector.py                    # rendered Python step (cached)
     └── defaults.json                   # spec.sources[*].extra defaults
                                         # (timeout_s, retries, headers, etc.)
 ```
+
+Override with `TABLEAU_PREP_ETL_CONNECTOR_CACHE=/path` (useful for CI
+or ephemeral runs). The `skill/connectors/index.json` shipped in this
+repo is a **seed registry** — copied into the per-user directory on
+first use, then never touched again.
 
 ## Lifecycle
 

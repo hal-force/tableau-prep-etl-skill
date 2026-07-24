@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "opensky-network.org",
-    "auth": "none",
-    "format": "json"
-  },
-  "stored_at": 1781841281.8115342
-}

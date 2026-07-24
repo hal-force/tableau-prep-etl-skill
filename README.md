@@ -1,8 +1,9 @@
 # tableau-prep-etl-skill
 
 A Claude Code skill that takes a natural-language ETL request and
-produces a tested, refined Tableau Prep `.tfl` flow. Publishes flows
-+ data sources + column metadata to Tableau Server / Cloud.
+produces a working, verified Tableau Prep `.tfl` flow. Optionally
+publishes the flow + a Hyper-backed published data source + column
+metadata to Tableau Server / Cloud.
 
 ## What's in the box
 
@@ -30,6 +31,21 @@ tableau-prep-etl-skill/
     ├── us_grid_network/v1/
     └── gdelt_global/v1/
 ```
+
+## Platform support
+
+| Platform | Status | Notes |
+|---|---|---|
+| **macOS** (Apple silicon + Intel) | ✅ Primary | Every flow in this repo was built and verified on macOS 14/15. `run_loop.py` defaults to the Apple-silicon Prep Builder path; override with `TABLEAU_PREP_CLI=/path/to/tableau-prep-cli`. |
+| **Linux** | ⚠️ Beta | Core skill code is pure-python and CI runs on Ubuntu across Python 3.11 / 3.12 / 3.13 (see `.github/workflows/ci.yml`). Tableau Prep Builder itself is not available on Linux — a Linux host can build + validate specs and .tfl artifacts, and publish them to Tableau Server / Cloud, but cannot run flows locally via prep-cli. |
+| **Windows** | ⚠️ Beta | Tableau Prep Builder for Windows exists and prep-cli is available. Set `TABLEAU_PREP_CLI` to the Windows path and use `%USERPROFILE%\Documents\My Tableau Prep Repository\...` for the `pythonSupport.json` path. Loopback TabPy setup is the same recipe minus the macOS-specific `dscacheutil` DNS pre-warm. Not yet exercised end-to-end by the maintainers — reports welcome. |
+
+Requires:
+
+- Python 3.11 or newer (skill code)
+- Python 3.10+ inside TabPy's interpreter (see `skill/reference/tabpy_setup.md`)
+- Tableau Prep Builder 2025.3 or newer for local `.tfl` execution
+- Tableau Server 2022.3+ or Tableau Cloud for `--publish`
 
 ## First-run setup
 
@@ -109,7 +125,7 @@ source ~/.tableau-prep-etl/load_env.sh   # exports TABLEAU_SERVER_*
 Required env vars (any one of these paths sets them):
 
 ```
-TABLEAU_SERVER_URL          # e.g. https://prod-useast-a.online.tableau.com
+TABLEAU_SERVER_URL          # e.g. https://<your-pod>.online.tableau.com
 TABLEAU_SERVER_PAT_NAME
 TABLEAU_SERVER_PAT_SECRET
 TABLEAU_SERVER_SITE         # site contentUrl ("" for default site on Server)
@@ -401,7 +417,7 @@ outputs are capped at 50 MB total per archive.
 | `Project 'Foo' not found on this site under parent 'Bar'` | Either the parent project doesn't exist (create it first manually), or `parent_project` doesn't match exactly (case-sensitive). |
 | `Currently not signed in to any Tableau server` during prep-cli verify | Spec has a `published_data_source` output but `local_iteration` didn't kick in. Confirm `run_loop.py` is current — the trigger covers any PDS output. |
 | `LLM gateway not configured` during metadata-write phase | Set `LLM_GATEWAY_URL/KEY/MODEL` env vars (or run `python3 -m skill.scripts.llm_config`). The flow + DS publish succeed without it; only column metadata generation needs it. |
-| `name 'null' is not defined` runtime error inside an api_caller script | Stale rendered script from before the `JSON_BODY` Jinja fix. Delete `skill/connectors/<sig>/` and `runtime/<flow>/` to force a re-render. |
+| `name 'null' is not defined` runtime error inside an api_caller script | Stale rendered script from before the `JSON_BODY` Jinja fix. Delete `~/.tableau-prep-etl/connectors/<sig>/` and `runtime/<flow>/` to force a re-render. |
 | Metadata API `Internal Server Error(s) while executing query` on `updateField` / `updateColumn` | Cloud's Metadata API is read-only. Use the .tds-roundtrip writer (`apply_descriptions`). |
 
 ## v2 roadmap (not yet implemented)
@@ -422,8 +438,8 @@ outputs are capped at 50 MB total per archive.
   to output `<interval hours="N"/>` + preferring an existing matching
   Cloud schedule closes the gap.
 - **Connector per-org override layer.** The connector cache
-  (`skill/connectors/<sig>/defaults.json`) records what worked for a
-  given (type, host, auth, format) signature, but there's no
+  (`~/.tableau-prep-etl/connectors/<sig>/defaults.json`) records what
+  worked for a given (type, host, auth, format) signature, but there's no
   higher-precedence override for org-specific values like ArcGIS PKI
   cert paths, ODBC driver names, or org-internal timeout norms.
   Envisioned shape: `~/.tableau-prep-etl/connector_overrides.json`

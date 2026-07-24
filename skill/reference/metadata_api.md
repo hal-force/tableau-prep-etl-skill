@@ -20,7 +20,8 @@ plumbing are handled by TSC.
 PAT only, via env vars (read at call time, never persisted):
 
 ```
-TABLEAU_SERVER_URL          # e.g. https://prod-useast-a.online.tableau.com
+TABLEAU_SERVER_URL          # e.g. https://<your-pod>.online.tableau.com  (Cloud)
+                            #   or https://<your-server>                   (Server)
 TABLEAU_SERVER_PAT_NAME
 TABLEAU_SERVER_PAT_SECRET
 TABLEAU_SERVER_SITE         # site contentUrl ("" for default site on Server)
@@ -102,9 +103,8 @@ historical mutations (`updateField`, `updateColumn`,
 `updateFieldDescription`, etc.) all return a generic
 `Internal Server Error(s) while executing query` regardless of
 auth scope or Data Management licensing. This is the canonical
-Tableau-side behavior for Cloud — verified against
-`prod-useast-a.online.tableau.com / usfederaldemos`. On older
-Tableau Server builds (≤ 2022.x) the GraphQL mutations existed; on
+Tableau-side behavior for Cloud — verified against a live Cloud pod.
+On older Tableau Server builds (≤ 2022.x) the GraphQL mutations existed; on
 modern Server they have been deprecated in favor of REST.
 
 The skill therefore uses two **non-GraphQL** paths to apply

@@ -115,7 +115,7 @@ python3 -m skill.scripts.archive_flow embassy_threat_monitor
 
 ## Active deployment
 
-- **Site:** prod-useast-a.online.tableau.com / usfederaldemos
+- **Site:** &lt;pod&gt;.online.tableau.com / &lt;site&gt; (sanitized)
 - **Project:** Prep Agent (parent) → Embassy Threat Monitor (child)
 - Two DSes: "Embassy Threat Events" + "Embassy Risk Summary"
 - Refresh: every 3 hours

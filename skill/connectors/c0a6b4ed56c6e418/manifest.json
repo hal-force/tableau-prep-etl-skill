@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "projects.propublica.org",
-    "auth": "none",
-    "format": "json"
-  },
-  "stored_at": 1784642375.7345989
-}

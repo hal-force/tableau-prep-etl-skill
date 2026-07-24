@@ -1,6 +1,6 @@
 # Prep Agent — 10-Test Demo Collection Report
 
-**Site:** `prod-useast-a.online.tableau.com / usfederaldemos`
+**Site:** `<pod>.online.tableau.com / <site>` (sanitized)
 **Parent project:** `Prep Agent` (luid `8f69f297-91df-4e0a-bb57-98417e70a375`)
 **Date completed:** 2026-06-19
 **Repo range:** `9556015..7e5929e` (11 commits)
@@ -75,8 +75,8 @@ skill during this run.
 
 ## Server-side collateral (LUIDs are clickable in Tableau)
 
-All entities live under the `Prep Agent` parent project on
-`prod-useast-a.online.tableau.com / usfederaldemos`.
+All entities live under the `Prep Agent` parent project on the
+active Tableau Cloud site (site details sanitized in this repo).
 
 ### 01 - Federal Outlays  (project `d11fc726-106f-4213-86d1-184ee4d29839`)
 - Flow: `Federal Outlays Trend` — `97b40277-4399-4162-9c49-23aed26ccb76`
@@ -238,8 +238,8 @@ SKILL.md transformation-kinds table.
 
 ## Reproducibility
 
-Anyone with PAT access to `prod-useast-a.online.tableau.com /
-usfederaldemos` can reproduce any flow:
+Anyone with PAT access to a Tableau Cloud (or Server) site can
+reproduce any flow:
 
 ```sh
 git clone https://github.com/hal-force/tableau-prep-etl-skill

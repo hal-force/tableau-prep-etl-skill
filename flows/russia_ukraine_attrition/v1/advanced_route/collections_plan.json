@@ -1,7 +1,7 @@
 {
   "question": "How have Russian military losses in Ukraine evolved over the past 24 months — by category (personnel, equipment by class, territory) — and what does the trajectory of those losses suggest about the tempo and intensity of the conflict?",
   "internal_scan": {
-    "site": "prod-useast-a.online.tableau.com / usfederaldemos",
+    "site": "<sanitized>",
     "ran_at_utc": "2026-06-22T00:00:00Z",
     "matches": [],
     "verdict": "Zero internal candidates. Phase 0 returned 0 hits with score > 0; remaining results were filler. Proceeding to external."

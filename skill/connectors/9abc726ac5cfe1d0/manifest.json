@@ -1,9 +1,0 @@
-{
-  "signature": {
-    "type": "rest_api",
-    "host": "services.swpc.noaa.gov",
-    "auth": "none",
-    "format": "json"
-  },
-  "stored_at": 1784150864.063953
-}

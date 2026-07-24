@@ -10,7 +10,7 @@ PAT-authenticated, project-pickered, schedule-aware, and Cloud-aware.
    using a Personal Access Token. Required env vars:
 
    ```
-   TABLEAU_SERVER_URL          # e.g. https://prod-useast-a.online.tableau.com
+   TABLEAU_SERVER_URL          # e.g. https://<your-pod>.online.tableau.com
    TABLEAU_SERVER_PAT_NAME
    TABLEAU_SERVER_PAT_SECRET
    TABLEAU_SERVER_SITE         # site contentUrl ("" for default site on Server)

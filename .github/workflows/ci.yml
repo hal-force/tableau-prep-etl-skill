@@ -1,0 +1,88 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# The skill's core paths (validation, host_trust, connector_registry,
+# spec parsing) are pure-python. The CI matrix exercises those; runtime
+# paths that require a live Tableau site or TabPy daemon are covered by
+# manual end-to-end runs.
+#
+# Security note: this workflow reads only checked-in files. It does NOT
+# interpolate PR titles, issue bodies, or any other untrusted user
+# input into shell commands.
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pinned test deps
+        run: |
+          python -m pip install --upgrade pip
+          # Test-run only needs the modules the tests actually import.
+          # tableauhyperapi + tableauserverclient carry native deps and
+          # are skipped here; those code paths are exercised via
+          # integration runs, not unit tests.
+          pip install \
+            "jinja2>=3.0" \
+            "pandas>=2.0" \
+            "rapidfuzz>=3.0" \
+            "python-dateutil>=2.8" \
+            "certifi>=2023.0" \
+            "networkx>=3.0" \
+            pytest
+
+      - name: py_compile smoke — every .py in the repo parses
+        run: |
+          python -m compileall -q skill tflb_lib
+
+      - name: pytest — unit + validation suite
+        run: |
+          pytest -q skill/tests
+
+      - name: Spec validation sweep — every archived spec.json parses
+        run: |
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          from skill.scripts.spec_validation import validate_spec
+
+          root = Path("flows")
+          specs = sorted(root.glob("*/v*/spec.json"))
+          if not specs:
+              print("No archived specs found — nothing to sweep.")
+              sys.exit(0)
+
+          fail = 0
+          for p in specs:
+              try:
+                  data = json.loads(p.read_text())
+              except Exception as e:
+                  print(f"FAIL {p}: JSON parse error: {e}")
+                  fail += 1
+                  continue
+              errs = validate_spec(data)
+              if errs:
+                  fail += 1
+                  print(f"FAIL {p}:")
+                  for e in errs:
+                      print(f"  - {e}")
+              else:
+                  print(f"ok   {p}")
+          print(f"\n{len(specs) - fail} / {len(specs)} specs pass")
+          sys.exit(1 if fail else 0)
+          PY

@@ -1,0 +1,90 @@
+{
+  "inputs": [
+    {
+      "branch": 0,
+      "connector_attrs": {
+        "format": "pdf_portfolio",
+        "path": "/tmp/filings"
+      },
+      "connector_class": "local_folder",
+      "description": "Local folder source: /tmp/filings (pdf_portfolio)",
+      "function_name": "",
+      "join_left": -1,
+      "join_on": "",
+      "join_right": -1,
+      "join_type": "inner",
+      "name": "Input 1",
+      "parent": "",
+      "role": "input",
+      "template": "",
+      "template_vars": {}
+    }
+  ],
+  "joins": [],
+  "outputs": [
+    {
+      "branch": 0,
+      "connector_attrs": {
+        "hyper_path": "outputs/filings",
+        "kind": "hyper",
+        "project": "",
+        "source": ""
+      },
+      "connector_class": "",
+      "description": "Writes the final dataframe to filings.hyper for Tableau extracts.",
+      "function_name": "",
+      "join_left": -1,
+      "join_on": "",
+      "join_right": -1,
+      "join_type": "inner",
+      "name": "filings",
+      "parent": "",
+      "role": "output",
+      "template": "",
+      "template_vars": {}
+    }
+  ],
+  "parameters": {},
+  "qa_nodes": [
+    {
+      "branch": 0,
+      "connector_attrs": {},
+      "connector_class": "",
+      "description": "Deterministic per-row validator. Adds validation_score, n_rules_passed/failed, validation_issues, needs_review. Passes input columns through.",
+      "function_name": "validate",
+      "join_left": -1,
+      "join_on": "",
+      "join_right": -1,
+      "join_type": "inner",
+      "name": "Validator",
+      "parent": "",
+      "role": "script",
+      "template": "validator.py.j2",
+      "template_vars": {
+        "input_schema": {},
+        "transformations": []
+      }
+    }
+  ],
+  "transforms": [
+    {
+      "branch": 0,
+      "connector_attrs": {},
+      "connector_class": "",
+      "description": "Walks /tmp/filings extracting fields from each PDF; emits one row per document.",
+      "function_name": "walk_folder",
+      "join_left": -1,
+      "join_on": "",
+      "join_right": -1,
+      "join_type": "inner",
+      "name": "Input 1 Walker",
+      "parent": "",
+      "role": "script",
+      "template": "connectors/pdf_walker.py.j2",
+      "template_vars": {
+        "folder_path": "/tmp/filings",
+        "format": "pdf_portfolio"
+      }
+    }
+  ]
+}

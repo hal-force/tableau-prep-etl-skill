@@ -1,0 +1,97 @@
+{
+  "inputs": [
+    {
+      "branch": 0,
+      "connector_attrs": {
+        "hint": "skill rewires to a local trigger xlsx"
+      },
+      "connector_class": "local_xlsx_pointer",
+      "description": "BLS LAUS state unemployment.",
+      "function_name": "",
+      "join_left": -1,
+      "join_on": "",
+      "join_right": -1,
+      "join_type": "inner",
+      "name": "bls_laus",
+      "parent": "",
+      "role": "input",
+      "template": "",
+      "template_vars": {}
+    }
+  ],
+  "joins": [],
+  "outputs": [
+    {
+      "branch": 0,
+      "connector_attrs": {
+        "hyper_path": "outputs/unemployment_by_state",
+        "kind": "hyper",
+        "project": "",
+        "source": ""
+      },
+      "connector_class": "",
+      "description": "Writes the final dataframe to unemployment_by_state.hyper for Tableau extracts.",
+      "function_name": "",
+      "join_left": -1,
+      "join_on": "",
+      "join_right": -1,
+      "join_type": "inner",
+      "name": "unemployment_by_state",
+      "parent": "",
+      "role": "output",
+      "template": "",
+      "template_vars": {}
+    }
+  ],
+  "parameters": {},
+  "qa_nodes": [
+    {
+      "branch": 0,
+      "connector_attrs": {},
+      "connector_class": "",
+      "description": "Deterministic per-row validator. Adds validation_score, n_rules_passed/failed, validation_issues, needs_review. Passes input columns through.",
+      "function_name": "validate",
+      "join_left": -1,
+      "join_on": "",
+      "join_right": -1,
+      "join_type": "inner",
+      "name": "Validator",
+      "parent": "",
+      "role": "script",
+      "template": "validator.py.j2",
+      "template_vars": {
+        "input_schema": {},
+        "transformations": []
+      }
+    }
+  ],
+  "transforms": [
+    {
+      "branch": 0,
+      "connector_attrs": {},
+      "connector_class": "",
+      "description": "Pulls REST data from https://api.bls.gov/publicAPI/v2/timeseries/data/. Format: json. Walks pagination, flattens attributes/geometry, returns a dataframe with json schema.",
+      "function_name": "call_api",
+      "join_left": -1,
+      "join_on": "",
+      "join_right": -1,
+      "join_type": "inner",
+      "name": "bls_laus Fetcher",
+      "parent": "",
+      "role": "script",
+      "template": "api_caller.py.j2",
+      "template_vars": {
+        "auth": "none",
+        "extra": {
+          "json_http_method": "GET",
+          "json_records_path": "Results.series",
+          "timeout_s": 60,
+          "verify_ssl": true
+        },
+        "format": "json",
+        "graphql": false,
+        "url": "https://api.bls.gov/publicAPI/v2/timeseries/data/"
+      }
+    }
+  ]
+}
