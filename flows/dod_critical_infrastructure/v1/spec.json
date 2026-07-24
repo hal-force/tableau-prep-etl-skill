@@ -1,0 +1,62 @@
+{
+  "request": "Pull the HIFLD Military_Installation FeatureServer (public geoplatform.gov copy of the DoD Base Structure Report footprint \u2014 744 US + overseas sites with polygon footprints, COMPONENT, JOINT_BASE, STATE_TERR/COUNTRY, and reported AREA in acres). Enrich each site with a replacement_likelihood_score computed from its acreage, joint-basing status, service component, and overseas/SOFA exposure. Output a local Hyper extract for analyst use; not published to Server (local-only demo run).",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "HIFLD Military Installations",
+      "description": "HIFLD (Homeland Infrastructure Foundation-Level Data) Military_Installation FeatureServer hosted at geoplatform.gov. Polygon layer, one row per installation. Attributes: SITE_NAME, COMPONENT (Army/Air Force/Marine Corps/Navy/Coast Guard/etc), JOINT_BASE (name of joint base or 'N/A'), STATE_TERR, COUNTRY, OPER_STAT (open/closed), AREA (acres), IS_FIRRMA. 744 records as of query time.",
+      "url": "https://services.arcgis.com/xOi1kZaI0eWDREZv/arcgis/rest/services/Military_Installation/FeatureServer/0/query",
+      "format": "arcgis_features",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 180,
+        "max_retries": 3,
+        "arcgis_where": "1=1",
+        "arcgis_out_fields": "OBJECTID,SITE_NAME,COMPONENT,JOINT_BASE,STATE_TERR,COUNTRY,OPER_STAT,AREA,IS_FIRRMA",
+        "arcgis_field_types": {
+          "OBJECTID": "int",
+          "SITE_NAME": "string",
+          "COMPONENT": "string",
+          "JOINT_BASE": "string",
+          "STATE_TERR": "string",
+          "COUNTRY": "string",
+          "OPER_STAT": "string",
+          "AREA": "decimal",
+          "IS_FIRRMA": "string"
+        },
+        "arcgis_return_geometry": false,
+        "arcgis_page_size": 2000,
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "DoD Critical Infrastructure (Replacement Likelihood)",
+      "description": "One row per DoD installation from HIFLD Military_Installation, enriched with criticality_score and replacement_likelihood_score. Scoring weights: AREA (log-scaled) 40, JOINT_BASE flag 25, COMPONENT strategic weight 20, overseas flag 15. Columns: SITE_NAME, COMPONENT, JOINT_BASE, STATE_TERR, COUNTRY, OPER_STAT, AREA (km^2), IS_FIRRMA, criticality_score, replacement_likelihood_score.",
+      "project": "32 - DoD Critical Infrastructure"
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "32 - DoD Critical Infrastructure",
+    "parent_project": "Prep Agent",
+    "flow_name": "dod_critical_infrastructure",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 6,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "DoD Infra Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}
