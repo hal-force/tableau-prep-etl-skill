@@ -56,17 +56,7 @@ def _assert_url_safe(u: str) -> None:
         raise ValueError(f"refusing to fetch hard-blocked host {h!r}")
 
 
-def _ssl_ctx():
-    try:
-        if not VERIFY_SSL:
-            return ssl._create_unverified_context()
-        try:
-            import certifi
-            return ssl.create_default_context(cafile=certifi.where())
-        except ImportError:
-            return ssl.create_default_context()
-    except Exception:
-        return None
+{% include 'lib/_ssl_ctx.py.j2' %}
 
 
 def _read_bounded(resp) -> bytes:

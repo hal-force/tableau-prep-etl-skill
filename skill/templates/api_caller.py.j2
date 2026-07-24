@@ -190,21 +190,7 @@ JSON_PAGE_IN_BODY = {{ extra.get('json_page_in_body', False) }}
 JSON_HAS_NEXT_PATH = {{ extra.get('json_has_next_path', '') | pyrepr }}
 
 
-def _ssl_ctx():
-    try:
-        if not VERIFY_SSL:
-            return ssl._create_unverified_context()
-        # macOS Python.org distros often lack a system CA bundle; prefer
-        # certifi's bundle when available so HTTPS to public APIs works
-        # out-of-the-box under TabPy without requiring the user to run
-        # /Applications/Python*/Install\ Certificates.command first.
-        try:
-            import certifi
-            return ssl.create_default_context(cafile=certifi.where())
-        except ImportError:
-            return ssl.create_default_context()
-    except Exception:
-        return None
+{% include 'lib/_ssl_ctx.py.j2' %}
 
 
 def _build_headers():
