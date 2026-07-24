@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "data.lacity.org",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1784643615.414858
+}

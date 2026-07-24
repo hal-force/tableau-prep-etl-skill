@@ -1,0 +1,64 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 90,
+  "max_retries": 3,
+  "json_paginate": true,
+  "json_page_kind": "offset",
+  "json_page_param": "$offset",
+  "json_page_size_param": "$limit",
+  "json_page_size": 5000,
+  "json_page_start": 0,
+  "json_max_pages": 65,
+  "json_max_rows": 320000,
+  "json_derived_columns": [
+    {
+      "name": "range_band",
+      "kind": "numeric_bin",
+      "source_col": "electric_range",
+      "thresholds": [
+        1,
+        100,
+        200,
+        300
+      ],
+      "labels": [
+        "unknown",
+        "short",
+        "medium",
+        "long",
+        "ultra_long"
+      ],
+      "default": "unknown"
+    },
+    {
+      "name": "ev_class",
+      "kind": "map_values",
+      "source_col": "ev_type",
+      "mapping": {
+        "Battery Electric Vehicle (BEV)": "bev",
+        "Plug-in Hybrid Electric Vehicle (PHEV)": "phev"
+      },
+      "default": "other"
+    }
+  ],
+  "json_schema": {
+    "vin_1_10": "string",
+    "county": "string",
+    "city": "string",
+    "state": "string",
+    "zip_code": "string",
+    "model_year": "int",
+    "make": "string",
+    "model": "string",
+    "ev_type": "string",
+    "ev_class": "string",
+    "cafv_type": "string",
+    "electric_range": "int",
+    "range_band": "string",
+    "legislative_district": "string",
+    "dol_vehicle_id": "string",
+    "electric_utility": "string",
+    "_2020_census_tract": "string"
+  },
+  "_skip_auto_casts": true
+}

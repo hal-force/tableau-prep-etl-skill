@@ -535,6 +535,14 @@ def _maybe_write_metadata(spec: Spec, publish_result: dict, run_dir: Path,
         "protest_count": "int", "coerce_count": "int",
         "weighted_threat_score": "decimal", "risk_band": "string",
         "top_event_type": "string", "last_event_date": "string",
+        # ew_fusion
+        "emitter_class": "string", "primary_emitter": "string",
+        "rf_band": "string", "centre_freq_ghz": "decimal",
+        "pri_us": "decimal", "pw_us": "decimal", "erp_dbw": "decimal",
+        "mode": "string", "range_nm": "decimal",
+        "bearing_deg": "decimal", "aspect_deg": "decimal",
+        "rx_dbm": "decimal", "threat_band": "string",
+        "fusion_confidence": "decimal", "own_ship_label": "string",
     }
     column_types.update(_TRANSFORM_COLUMN_TYPES)
 
@@ -787,7 +795,7 @@ def run(request: str, run_dir: Optional[Path] = None,
             has_script_nodes = any(
                 t.kind in ("trend_analysis", "graph_analysis", "pii_redaction",
                           "qa_review", "stats_review", "validate",
-                          "eoc_fire_metrics",
+                          "eoc_fire_metrics", "ew_fusion",
                           "embassy_threat_join", "embassy_risk_summary")
                 or "script" in (t.kind or "").lower()
                 for t in spec.transformations

@@ -143,6 +143,36 @@ bash -c '
 Re-confirm with `ps eww -p <new-PID> | tr ' ' '\n' | grep <VAR>`.
 The `RuntimeError: <VAR> not set` disappears on the next run.
 
+## Pre-warm TabPy's DNS resolver before Socrata/AWS pulls
+
+macOS 15's `getaddrinfo` intermittently returns "nodename nor servname
+provided" for Socrata FedRAMP hosts (`data.cdc.gov`, `chronicdata.cdc.gov`,
+`data.sfgov.org`, `data.wa.gov`, etc.) — even with `--force-ipv4` and
+the `_dns_warmup()` monkey-patch in `api_caller.py.j2`. The shell's
+Python resolver may succeed at the same moment TabPy's daemon Python
+still fails, because they carry independent DNS state.
+
+Symptom: `curl https://data.wa.gov/...` works; the flow's api_caller
+script raises `socket.gaierror: [Errno 8] nodename nor servname
+provided`. Rerunning the same TFL immediately without changing
+anything eventually succeeds — that's TabPy's resolver being cold.
+
+Fix — POST to TabPy's `/evaluate` endpoint with a script that shells
+out to `dscacheutil` in the daemon's own process context:
+
+```sh
+curl -s -X POST http://localhost:9099/evaluate \
+    -H "Content-Type: application/json" \
+    -d '{"data":{"_arg1":"data.wa.gov"},"script":"
+import subprocess, socket
+subprocess.run([\"/usr/bin/dscacheutil\",\"-q\",\"host\",\"-a\",\"name\",_arg1], check=False)
+return socket.getaddrinfo(_arg1, 443, socket.AF_INET)[0][4][0]"}'
+```
+
+Do this once after launching TabPy and once before each large pull
+against a new host. The daemon's `sys.modules['socket']` caches
+successful lookups per-host.
+
 ## Builder GUI vs CLI — separate credentials files
 
 Tableau Prep Builder's GUI reads

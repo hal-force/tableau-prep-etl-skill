@@ -1,0 +1,108 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 120,
+  "max_retries": 3,
+  "json_paginate": false,
+  "json_records_path": "items",
+  "json_derived_columns": [
+    {
+      "name": "latest_value",
+      "kind": "dotted_path",
+      "source_col": "latestReading",
+      "path": "value",
+      "cast": "decimal"
+    },
+    {
+      "name": "latest_dateTime",
+      "kind": "dotted_path",
+      "source_col": "latestReading",
+      "path": "dateTime",
+      "cast": "string",
+      "default": ""
+    },
+    {
+      "name": "latest_date",
+      "kind": "dotted_path",
+      "source_col": "latestReading",
+      "path": "date",
+      "cast": "string",
+      "default": ""
+    },
+    {
+      "name": "level_band",
+      "kind": "numeric_bin",
+      "source_col": "latest_value",
+      "thresholds": [
+        0,
+        0.5,
+        1.5,
+        3.0
+      ],
+      "labels": [
+        "dry",
+        "low",
+        "normal",
+        "elevated",
+        "high"
+      ],
+      "default": "unknown"
+    },
+    {
+      "name": "parameter_class",
+      "kind": "map_values",
+      "source_col": "parameter",
+      "mapping": {
+        "level": "water_level",
+        "flow": "river_flow",
+        "rainfall": "rainfall",
+        "wind": "wind",
+        "temperature": "temperature"
+      },
+      "default": "other"
+    },
+    {
+      "name": "stage_qualifier_group",
+      "kind": "map_values",
+      "source_col": "qualifier",
+      "mapping": {
+        "Stage": "stage",
+        "Downstream Stage": "stage",
+        "Upstream Stage": "stage",
+        "Tidal Level": "tidal",
+        "Groundwater": "groundwater",
+        "Rainfall": "rainfall",
+        "Flow": "flow",
+        "Logged": "logged",
+        "Wind Direction": "wind_direction",
+        "Wind Speed": "wind_speed",
+        "Wind Gust": "wind_gust",
+        "Dry Bulb": "temperature"
+      },
+      "default": "other"
+    },
+    {
+      "name": "reading_freshness_days",
+      "kind": "days_since",
+      "source_col": "latest_dateTime"
+    }
+  ],
+  "json_schema": {
+    "notation": "string",
+    "stationReference": "string",
+    "label": "string",
+    "parameter": "string",
+    "parameter_class": "string",
+    "parameterName": "string",
+    "qualifier": "string",
+    "stage_qualifier_group": "string",
+    "unitName": "string",
+    "valueType": "string",
+    "period": "int",
+    "latest_value": "decimal",
+    "latest_dateTime": "string",
+    "latest_date": "string",
+    "level_band": "string",
+    "reading_freshness_days": "int"
+  },
+  "_skip_auto_casts": true
+}

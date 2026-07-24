@@ -1,0 +1,131 @@
+{
+  "verify_ssl": true,
+  "timeout_s": 180,
+  "max_retries": 3,
+  "json_paginate": false,
+  "json_derived_columns": [
+    {
+      "name": "accident_id",
+      "kind": "substring",
+      "source_col": "id",
+      "start": 0
+    },
+    {
+      "name": "accident_date",
+      "kind": "substring",
+      "source_col": "date",
+      "start": 0,
+      "length": 10
+    },
+    {
+      "name": "accident_datetime",
+      "kind": "substring",
+      "source_col": "date",
+      "start": 0
+    },
+    {
+      "name": "hour_str",
+      "kind": "substring",
+      "source_col": "date",
+      "start": 11,
+      "length": 2
+    },
+    {
+      "name": "casualty_count",
+      "kind": "list_length",
+      "source_col": "casualties"
+    },
+    {
+      "name": "vehicle_count",
+      "kind": "list_length",
+      "source_col": "vehicles"
+    },
+    {
+      "name": "primary_vehicle_type",
+      "kind": "list_first_field",
+      "source_col": "vehicles",
+      "field": "type"
+    },
+    {
+      "name": "primary_casualty_mode",
+      "kind": "list_first_field",
+      "source_col": "casualties",
+      "field": "mode"
+    },
+    {
+      "name": "primary_casualty_class",
+      "kind": "list_first_field",
+      "source_col": "casualties",
+      "field": "class"
+    },
+    {
+      "name": "primary_casualty_ageband",
+      "kind": "list_first_field",
+      "source_col": "casualties",
+      "field": "ageBand"
+    },
+    {
+      "name": "severity_band",
+      "kind": "map_values",
+      "source_col": "severity",
+      "mapping": {
+        "Fatal": "critical",
+        "Serious": "high",
+        "Slight": "low"
+      },
+      "default": "unknown"
+    },
+    {
+      "name": "time_of_day_bucket",
+      "kind": "map_values",
+      "source_col": "hour_str",
+      "mapping": {
+        "00": "night",
+        "01": "night",
+        "02": "night",
+        "03": "night",
+        "04": "night",
+        "05": "night",
+        "06": "morning_peak",
+        "07": "morning_peak",
+        "08": "morning_peak",
+        "09": "morning_peak",
+        "10": "daytime",
+        "11": "daytime",
+        "12": "daytime",
+        "13": "daytime",
+        "14": "daytime",
+        "15": "daytime",
+        "16": "evening_peak",
+        "17": "evening_peak",
+        "18": "evening_peak",
+        "19": "evening_peak",
+        "20": "evening",
+        "21": "evening",
+        "22": "evening",
+        "23": "evening"
+      },
+      "default": "unknown"
+    }
+  ],
+  "json_schema": {
+    "accident_id": "string",
+    "accident_date": "string",
+    "accident_datetime": "string",
+    "hour_str": "string",
+    "time_of_day_bucket": "string",
+    "lat": "decimal",
+    "lon": "decimal",
+    "location": "string",
+    "severity": "string",
+    "severity_band": "string",
+    "borough": "string",
+    "casualty_count": "int",
+    "vehicle_count": "int",
+    "primary_vehicle_type": "string",
+    "primary_casualty_mode": "string",
+    "primary_casualty_class": "string",
+    "primary_casualty_ageband": "string"
+  },
+  "_skip_auto_casts": true
+}

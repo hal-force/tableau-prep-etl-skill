@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "questions-statements-api.parliament.uk",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1784729203.776087
+}

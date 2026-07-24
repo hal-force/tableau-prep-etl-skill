@@ -305,15 +305,24 @@ Hyper output you can run cold:
 | `flows/noaa_swpc/v1/` | NOAA SWPC alerts feed | Slot 18 — 30d space-weather alerts, product_id family enrichment. |
 | `flows/wb_mil_expenditure/v1/` | World Bank indicator API | Slot 19 — `json_records_path: "1"` (numeric index into 2-elem envelope); new `numeric_bin` for spend_band. |
 | `flows/cneos_sentry/v1/` | NASA JPL CNEOS Sentry risk table | Slot 20 — pivoted from NEO browse (DEMO_KEY rate limit); Palermo scale binning + diameter_class. |
+| `flows/UK_Police_London_Crime/v1/` | data.police.uk street-level crime | Slot 32 — poly-filtered Central London (Westminster/City/Southwark/Lambeth); dotted_path on nested `location`/`outcome_status`; `crime_month` substring-alias dodges the trend_features month clash. |
+| `flows/UK_EA_Flood_Monitoring/v1/` | environment.data.gov.uk /flood-monitoring/id/measures | Slot 33 — 5.6k EA telemetry-station measurements; `numeric_bin` water-level bands, `map_values` parameter/qualifier normalization, `days_since` reading-freshness. |
+| `flows/UK_Parliament_Written_Questions/v1/` | questions-statements-api.parliament.uk | Slot 34 — Commons + Lords written questions, `json_records_path: "results"` + dotted_path on `.value` wrapper; `days_between` answer latency + department_group map. |
+| `flows/UK_NHS_ORD_Trusts/v1/` | directory.spineservices.nhs.uk (Spine ORD) | Slot 35 — active NHS Trusts (PrimaryRoleId RO197); `substring` postcode area/OrgId prefix; `map_values` postcode-area → England region. |
+| `flows/UK_TfL_AccidentStats_2019/v1/` | api.tfl.gov.uk/AccidentStats/2019 | Slot 36 — full year 51k Greater London road-traffic accidents; new `list_length` derived-col for casualty/vehicle counts; `list_first_field` primary_vehicle_type; substring-hour + time_of_day_bucket map. |
 
-The first 14 form a baseline; flows 1-10 and 11-20 of the **Prep Agent demo
-collection** are the twenty archived flows. Slots 1-10 cover the
-federal / open-government baseline; slots 11-20 cover defense and
-national security (DoD contracts, CVEs, KEV, USGS, TLE catalog,
-GDELT CENTCOM, SWPC, World Bank military expenditure, CNEOS Sentry).
-The collection lives under a nested `Prep Agent` parent project on
-Cloud, each in its own `01 - Federal Outlays`, `02 - Federal Workforce`,
-… child project for browseable side-by-side demos.
+The first 14 form a baseline; flows 1-10, 11-20 and 21-30 of the **Prep Agent demo
+collection** are the thirty archived US flows. Slots 1-10 cover the
+federal / open-government baseline; 11-20 cover defense and national
+security (DoD contracts, CVEs, KEV, USGS, TLE catalog, GDELT CENTCOM,
+SWPC, World Bank military expenditure, CNEOS Sentry); 21-30 cover
+state, local, and education (BLS LAUS, USAspending SLED grants,
+Boston 311, CMS nursing homes, HealthData.gov hospitals, ProPublica
+nonprofits, FEC candidates, LA crime, CDC PLACES, WA EV registrations).
+Slot 31 is the MOD JEWOSC EW fusion demonstration; slots 32-36 are the
+UK Public Sector cohort (Police data.police.uk, Environment Agency
+flood-monitoring, Parliament written questions, NHS ORD Trusts, TfL
+AccidentStats 2019).
 
 Reproduce any one with:
 

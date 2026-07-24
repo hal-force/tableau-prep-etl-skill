@@ -156,6 +156,30 @@ Workaround: when this fails, rerun `--publish` without
 `--auto-create-project` — the project exists by then and the publish
 lands cleanly. See `feedback_publish_project_create_quirk.md`.
 
+**Fully manual publish path (recovery):** when the whole run_loop
+can't be re-driven (e.g. the local verify run has already succeeded
+and we only need to attach the artifact to a new project on Cloud),
+skip `run_loop.py --publish` entirely and invoke the pieces directly:
+
+1. `publish.py <spec> <run_dir>/<flow>.tfl --run-dir <run_dir>` publishes
+   the TFL + creates the schedule (this alone does NOT create the
+   project; use `publish.py --create-project "<name>"` if needed).
+2. If the CLI-created project landed at the site root (no `parent_id`
+   set), reparent it via TSC: `p.parent_id = <prep-agent-id>` then
+   `server.projects.update(p)` — `--create-project` doesn't accept a
+   parent flag.
+3. Invoke `_upload_hypers_as_published_datasources(spec, run_dir,
+   publish_result)` from `run_loop` in a Python REPL, passing a
+   hand-built `publish_result` dict with `status="ok"`, `is_cloud=True`,
+   and the flow/project ids from step 1.
+4. Inject the returned DS LUIDs into `publish_result["datasources"]`
+   and call `_maybe_write_metadata(spec, publish_result, run_dir)`.
+5. `archive_flow.py --spec … --run-dir … --flow-name …` to snapshot.
+
+All five steps are idempotent — safe to re-run individually. This
+is the same pattern the SLED batches (flows 21-30) settled on when
+the auto-create-project cache quirk left projects half-attached.
+
 ## Output
 
 The `--publish` step adds a `publish` block to the run result:

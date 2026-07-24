@@ -1,0 +1,9 @@
+{
+  "signature": {
+    "type": "rest_api",
+    "host": "data.cityofchicago.org",
+    "auth": "none",
+    "format": "json"
+  },
+  "stored_at": 1784214946.272083
+}
