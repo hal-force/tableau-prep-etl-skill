@@ -394,6 +394,23 @@ class TestValidateSpec:
         errors = validate_spec(spec)
         assert any("refresh_cadence" in e for e in errors)
 
+    def test_rejects_subdaily_server_publish_cadence(self):
+        # `every_3_hours` is valid on top-level `refresh_cadence` but
+        # NOT on `server_publish.cadence` — the publisher can't emit it.
+        spec = _ok_spec()
+        spec["refresh_cadence"] = "every_3_hours"
+        spec["server_publish"] = {
+            "project": "P", "cadence": "every_3_hours",
+        }
+        errors = validate_spec(spec)
+        assert any("server_publish.cadence" in e for e in errors), errors
+
+    def test_accepts_hourly_server_publish_cadence(self):
+        spec = _ok_spec()
+        spec["refresh_cadence"] = "every_3_hours"
+        spec["server_publish"] = {"project": "P", "cadence": "hourly"}
+        assert validate_spec(spec) == []
+
     def test_rejects_dotdot_in_source_path(self):
         spec = _ok_spec()
         spec["sources"][0] = {
