@@ -1,0 +1,236 @@
+{
+  "specs": {
+    "CDC_PLACES_County_Health_2023/v1": {
+      "api_caller_b0.py": "010262e787040e28144f3f38a7842c6da7a7d4e9d1b8def1822355fae5fd4cd6"
+    },
+    "MOD_JEWOSC_EW_Fusion/v1": {
+      "api_caller_b0.py": "2ffd0c11b04f03ed4af7e407afa39c7cb11e8ee8afd138ba17ebb7fbea2e19d7",
+      "ew_fusion_b0.py": "4a64c3228daa4368ff023c0a4af173c5e3e4fd60545cbdf8a242c7ae56093318"
+    },
+    "UK_EA_Flood_Monitoring/v1": {
+      "api_caller_b0.py": "5d6d8b454a2bfab42416e65a21334b4b5eeac168a98a38f6401023606ce0a587",
+      "trend_features_b0.py": "d4c65f18fc015438f8bf1c287f9ff53b98f0402b9a50858576bd0b2b4f8cf981",
+      "trend_stats_b0.py": "005b3793c4d8bdc4103b0f150d2a790c46fe62b3e1e88c8079e9ea28eb23602b"
+    },
+    "UK_NHS_ORD_Trusts/v1": {
+      "api_caller_b0.py": "38595a94a525b3fa027dd4683efe85e991940b3674ecd9fd903c4565fe77475a",
+      "trend_features_b0.py": "24da6f0a03e64386ca5a403b2990f8003d0cf35874e6a6a9ee569bbfe55d8e7d",
+      "trend_stats_b0.py": "aff8453aaaad8279f2eefd134ea0697dce9e3bf3978030a6a153ab5bc1b68891"
+    },
+    "UK_Parliament_Written_Questions/v1": {
+      "api_caller_b0.py": "fbc8a58a0200ec11b330c9fa9a3a95a40362f46ece247624301e45ba0f7591f2",
+      "trend_features_b0.py": "1812f0a6ab0e82fe3ab3429e1fb81fc96e7272a824f94f073146c519230ff03d",
+      "trend_stats_b0.py": "0c43acc1cf28c0a773ee2fed89e2eb91988632f00861e678ddf3e07ba6bd5ca9"
+    },
+    "UK_Police_London_Crime/v1": {
+      "api_caller_b0.py": "2674de5a0d0d62db613485d30feb34a4606759ac8ebb81550505b3e339ddd247",
+      "trend_features_b0.py": "6689336b56b8e211824590ef361da3f21b4c85ef12bf9bf252df22ec609156ae",
+      "trend_stats_b0.py": "bf6eb284726f20e3953e034be7e158d423574684ef105859d98fae97cc04b407"
+    },
+    "UK_TfL_AccidentStats_2019/v1": {
+      "api_caller_b0.py": "432128ccb1b308587f2ea452e79d5eee4a7d2ec7636c8dcb4f6d5c71fa5187b1",
+      "trend_features_b0.py": "dd21c333cf0dd844d8aa518fc63f75f316d91bcc55a62387afad2d50b9d23e69",
+      "trend_stats_b0.py": "78fae1de831b5588027f8256b944b211960d05a8ec85ed6e1af4d7521cce5099"
+    },
+    "WA_EV_Registrations/v1": {
+      "api_caller_b0.py": "12066f06bd151ef63224c37a8b7ded808c9748ce92377865350ace2c0fdc0d28"
+    },
+    "bls_laus_states/v1": {
+      "api_caller_b0.py": "4dfa53605b33c7b81054deaa89b6ca60b68c30db7c2b07c574a812647ae0926b",
+      "trend_features_b0.py": "4ee1010adb2d59f9867c2176bad5d63d67e1daa998429a814bf6096665166834",
+      "trend_stats_b0.py": "390941ed7ead3f008644b796d18ca9c093c1fb340e8603dc5ed9575ca0d92d9a"
+    },
+    "boston_311_requests/v1": {
+      "api_caller_b0.py": "ed2fce69705f5d867828ef3dc40cc8bb5ee09358f361a52c99f5d658c9a41448",
+      "trend_features_b0.py": "83173705d4b346b199db8f44856c80cd94842c86752c41cd823b8bebc411fce5",
+      "trend_stats_b0.py": "1be3bae1adb4476429f57823e5f8539dfe5a04c27ce7c4c8af448f894e64cbd0"
+    },
+    "cisa_kev/v1": {
+      "api_caller_b0.py": "b0b9c313daaa5d89e4de524c9b23a19f79d169ef57d20bcad3a5e69236917ad7",
+      "trend_features_b0.py": "12b5f16e5455c271167237c486e8961906a196e532022469c8b42fc045089018",
+      "trend_stats_b0.py": "f5f41d28f83e53ddd0759600b6698596b1a8dd610ac0250f2b5e2d44d193dc9b"
+    },
+    "cisa_kev/v2": {
+      "api_caller_b0.py": "c29c13ce308243a760f402e01134ed7bd4f96c789f40bd1b836a8a97bff38f79",
+      "trend_features_b0.py": "cbccba591f79959297199c6125b6dc066f3fdfb3bc48ffd2dbdf0646f3f2fa21",
+      "trend_stats_b0.py": "1b1ab38ea41b1a33599035e5cc6bce72a729d9d2361035d4545fd235f700e873"
+    },
+    "cms_deficiencies/v1": {
+      "api_caller_b0.py": "834ce11d5ed2e607a42d2a8863aef988cf44e178ac5a6d7a67ea6b3a2ea5c6be",
+      "trend_features_b0.py": "5db8e67513f18f46836baf8ba24b40945dc02f51ab739b93463df52cca8fff0a",
+      "trend_stats_b0.py": "a81f23e04b6deef0f90395159fb4bfd150c0a344bd42f77c2c6767ab105e0b76"
+    },
+    "cms_nursing_home_providers/v1": {
+      "api_caller_b0.py": "145b9ac63c69be0aa10326fc5709eea6d6af1c3fe52b6badf250772b3bdb08b9",
+      "trend_features_b0.py": "8d1ce3ad2d329f649618db975b80af87f44c11354b3d65f046414f28d8320c26",
+      "trend_stats_b0.py": "e81cb55e07bc371ac85918a84a4cdd72494f6233669c5d50e2b07e5a59603cb1"
+    },
+    "cneos_sentry/v1": {
+      "api_caller_b0.py": "92f33e529a2e76ad1abac4f55494dbaa37dee93d17f2ea3237a35d7fe73197ff",
+      "trend_features_b0.py": "95d4d8eaceabe315506e709993e26d9c1e81823abad7ee39b86cd14e13b6d81a",
+      "trend_stats_b0.py": "262b2324a1c2cbcbf54eddee645cc2d637bc7f9e3767600394354e52b4d9bdfa"
+    },
+    "college_scorecard/v1": {
+      "api_caller_b0.py": "3c0f0444e3073735f7a2fb65e033a3088265814298fd9dc1e762629e2daa38f4"
+    },
+    "dod_contracts/v1": {
+      "api_caller_b0.py": "ebce77d9a8902a446eeb1d60b8b191cf325b6af68748d3e6ee725b7919917ba1",
+      "trend_features_b0.py": "e266205644567276889d2d3a3daca3114497cf31977c0587d96149e95c063749",
+      "trend_stats_b0.py": "ee9f0d05955e72c837e356d6dda7205502e5a5d332b6daaf1e80c92e193a72f9"
+    },
+    "dod_critical_infrastructure/v1": {
+      "api_caller_b0.py": "91ed348e8c4e8d225f0a3de889ce9bdbb07cdc018bd240d64cd4ce1e63b5215f"
+    },
+    "dod_critical_infrastructure/v2": {
+      "api_caller_b0.py": "91ed348e8c4e8d225f0a3de889ce9bdbb07cdc018bd240d64cd4ce1e63b5215f"
+    },
+    "doe_data_center_energy_hourly/v1": {
+      "api_caller_b0.py": "6dc320ef80a47ffde57ae7cbf84375505e7b39b3f9bf83c35901fcd02780bb19"
+    },
+    "doe_data_center_energy_monthly/v1": {
+      "api_caller_b0.py": "679cde65fa32223bf1e71d827d1ae7571938b1ed3af3407721d41e3f7e765869",
+      "api_caller_b1.py": "8971f16aa5733b9d288197849858edf7d84a9fccea9c6fede3ce546d1aeacb5c"
+    },
+    "embassy_threat_monitor_v2/v1": {
+      "api_caller_b0.py": "36968f7e83e4fafd07c77d3c8fb559279c74174eb2c55dc7db50a4549658242e",
+      "embassy_risk_summary_b0.py": "824341b7fdb3b2fc611691421033f6b8c05944ae8c4bdad8d4205fde9e469635",
+      "embassy_threat_join_b0.py": "058233297e63ba3dccaf0e6e74bd5d0393915f44e548e9ac7464ea6f0de80d73"
+    },
+    "epa_aqs_ozone/v1": {
+      "api_caller_b0.py": "e29470d96a9e812242f00b5c0774259e419148ff067ba69c582422c6f395b225",
+      "trend_features_b0.py": "7aa29e2cae5a9d564842f466d51e2ea00ecad34dd80ae5bee718ca2d4ccc9902",
+      "trend_stats_b0.py": "2fe18f25525f2429feb3f517a25c7104cd0bfe013b85a81c81fe32cc5e6ac4c1"
+    },
+    "fec_candidate_totals/v1": {
+      "api_caller_b0.py": "68c94f364cd2b8649cebc82ce17b099a1133995e8bc4894db03947e10eb1db04",
+      "trend_features_b0.py": "52d0f4f8e84aede9fa28ad578d9396366d1d2d4a74dfef42f533c7a9097eaf63",
+      "trend_stats_b0.py": "88f647bf581c2424b94d7714a65c191df58bc9be19baf2a48de1b12d5e41dc78"
+    },
+    "fed_outlays/v1": {
+      "api_caller_b0.py": "b294a57145e58c1921788ebf05ee4e550de3b1fc690718a26b29f2865c4d9784",
+      "trend_features_b0.py": "84e6c24ff610f033cedfe53096c10d353a220588086ff8f93c265f4e830943fd",
+      "trend_stats_b0.py": "edf323c850387897710ec9bb841393cb59633d49fd5531bb95748a1343cf0f25"
+    },
+    "fed_register_actions/v1": {
+      "api_caller_b0.py": "faf8514c3f1ca9a9415ea83dd183ee0c77a671b3f8850d99b3481df5b8d2c00c",
+      "trend_features_b0.py": "b206ff301ac056826607c172e1fb7f9f89b2e593067df71730865475491e8ee0",
+      "trend_stats_b0.py": "f026264f2b4086300dc68e590dcf2b8062a8f7d6b78c2e56a3da6724ffd8813b"
+    },
+    "fed_workforce/v1": {
+      "api_caller_b0.py": "45c4dbbe8211695e24c9e1fb0a8997e4bae84a61b13dde247441f0d25b4c0b14",
+      "trend_features_b0.py": "851afc4883e0430ca9e44828ec3943785547424863b6d7cbabffd05242e44b85",
+      "trend_stats_b0.py": "98a918dda27518f0d4216a1fe5433bcc88bd40e4f5aea2d56996e5f2139fcb04"
+    },
+    "fedreg_dod/v1": {
+      "api_caller_b0.py": "1e11489f7ba0ed9fe3c08bc1502b6ffd2fe2ef0bc3d43f07054c3c96e9e00df5",
+      "trend_features_b0.py": "a1b7d70a314c9c008d7dee6e1599a18a602f346943a9d8a2f7c2e41f547b1775",
+      "trend_stats_b0.py": "8530b193909e287ebb1b71bc8e86b598a28b860e693b81596d9696a87a7893b5"
+    },
+    "fema_disasters/v1": {
+      "api_caller_b0.py": "1efe4e45a7aceebbbd0f2fbdaa984e12d10972897d4d70bcf6d5c6afcc379404",
+      "trend_features_b0.py": "0b6138699e8a171dfc4cfcdd22c4b447cf33008e10e63cbf673eff83be461df6",
+      "trend_stats_b0.py": "3b2fb6c1d34929056cfb9b7cb7f5607e2133ae969b478bb5f7b8dcde1000b42e"
+    },
+    "gdelt_centcom/v1": {
+      "api_caller_b0.py": "94300ff05bc173d56700076bd72833255788a1485d73d1ccb07247c6145d2122"
+    },
+    "gdelt_global/v1": {
+      "api_caller_b0.py": "b4415d672689d67b32c4725186638aa25ec412ec8cdd0237f804b85b74fc7549"
+    },
+    "healthdata_hospital_capacity/v1": {
+      "api_caller_b0.py": "e2e9b36164f647f6a957341ac2d1bfd936bf060872b8650e9d6959868da01793",
+      "trend_features_b0.py": "6d7aa6503e31c24dccf863cd0ccff3074d6c4f630fe8351259d03e4db3732dc1",
+      "trend_stats_b0.py": "512036caf678193e4dfa47c5cda5b71958f67be882c41a246418740d8e069569"
+    },
+    "la_crime_2024/v1": {
+      "api_caller_b0.py": "edeb9b78006f3d84cbd9ce87f4e4b1beb7519e8fd06e9172eefcefb7a3919254",
+      "trend_features_b0.py": "83dac75f11370e9045d2b508c49e97e6b0c28a0159279247e4e67546b94cc151",
+      "trend_stats_b0.py": "06233885aedbe04294fc51b0599e098e300f8b42b60b46c616f278b6745abfe8"
+    },
+    "noaa_swpc/v1": {
+      "api_caller_b0.py": "0328dad749cda280daea13e9ecd387c05b566dcab064ad018926c5cd660ca90f",
+      "trend_features_b0.py": "33c6b705cce9ce5c2e354d4d9c03cef583ce20a85864ead91054206971afd112",
+      "trend_stats_b0.py": "da72f0d961d03567eeeff4724bf5701da20530d1db9a500a09edd0fd692614ed"
+    },
+    "nvd_cves/v1": {
+      "api_caller_b0.py": "c3d2709eb9c62af54359e1b7342896ce804235f57d1daba629c9207362d9596b",
+      "trend_features_b0.py": "32d72a061bd577fc84f057cf72b2e34837afcbfaa606e7ecc8ae8cbef5d83999",
+      "trend_stats_b0.py": "2edc7f7676519c1b65394cdac3c85a5d11309b2d2d6d5cc41779ab643c87570d"
+    },
+    "opensky_us/v1": {
+      "api_caller_b0.py": "e05a68bd4ae5c1b573ee0c721f8e9ded60bae16ee27fa505bfec1b2f2489e45a"
+    },
+    "otf_grants/v1": {
+      "api_caller_b0.py": "2902771e0d477ffb0d2851e1f786a0e58e76cf8ad46c39fd3f9f09c28c1111d5",
+      "api_caller_b1.py": "70bc86c6807d28c2cd93f23f8d0f071a768de384a385d1440cc2d6c0522d7426",
+      "api_caller_b2.py": "039ced78b4e7793c73cdfe3f6f788255f2dc2b593b8ab6a1c132df0a4da0e8e3"
+    },
+    "propublica_ny_nonprofits/v1": {
+      "api_caller_b0.py": "567e3c5269c2591d0609e89177fe54cddb2472ac11f3375ba5987dfc5b9b041b"
+    },
+    "russia_ukraine_attrition/v1": {
+      "api_caller_b0.py": "dac261579d29c2137ab33c5aca33d5469f1dc98a045023e46b5fdfe782852a2c",
+      "api_caller_b1.py": "b9f51e2394b2d9f87252ee8fa4e48e822e81c9d6596a599e5045036c0fd06df0",
+      "api_caller_b2.py": "727ce483387fd275cd9d66fcf31e81b109f62663f7d98086c6b0c4e89c9730b8"
+    },
+    "tle_satellites/v1": {
+      "api_caller_b0.py": "a5834c9a3f38e8b23df655e57b67daa58660f83a9da335f164335ab63e5e0c87",
+      "trend_features_b0.py": "5e73b52b2f85d9b08bd4edd210caa43ce72629766691dd390dbaccdd1d172dff",
+      "trend_stats_b0.py": "fc6ec2eab6b126b05a3a27a4650f38eb8b653c634633c6eca5dbce9fb4234bbb"
+    },
+    "us_grid_network/v1": {
+      "api_caller_b0.py": "5ea5e82fde5733f6add6829f2b99aa032607f2b9f779fb08195b8b362f96fe2d",
+      "graph_analyzer_b0.py": "ca434492de3d9c1ecad74ea006248a485263672ee3ed9359bb4e12ab6111f740"
+    },
+    "us_wildfires_eoc/v1": {
+      "api_caller_b0.py": "2415d1fb45ed06026cb0e61977c4189aac4118be451003b7db0ec6a61ec770ce",
+      "eoc_fire_metrics_b0.py": "4086f4ad5143ba40f09af49a248cba87cc33aed518e707ae46d573ab652093e7",
+      "trend_features_b0.py": "21f4e09a8434298f55cd7ceaa5bc5e8f90986028a61f7edee88470d578f67ba8",
+      "trend_stats_b0.py": "8c033a125ad04fea5a5042ee7ab59994665a56d36efdaa5858174223b29263f7"
+    },
+    "usaspending_contracts/v1": {
+      "api_caller_b0.py": "5f2d912864e37b045400bbe4c6b4ff01ef0c5cb733efbd55b4b3ab4c1f27ead5",
+      "trend_features_b0.py": "e266205644567276889d2d3a3daca3114497cf31977c0587d96149e95c063749",
+      "trend_stats_b0.py": "23cf91e9a59a3d74010f71ed6acda4371d4194c7bdb2788d6ff7ebddf1170e2a"
+    },
+    "usaspending_sled_grants/v1": {
+      "api_caller_b0.py": "ce7aeb88d078e2600d05a57f1544e76fd84ac84f2d5b007dd05c0c223ed1b42e",
+      "trend_features_b0.py": "ede5d9d317ffc313ee7eb05c4ac975b6a73d9c7343b4496b089affa361c89a79",
+      "trend_stats_b0.py": "7c536e2b1b6a80330539cf1da2ee5a93c403376e29e14537c6b19e5d9ab38065"
+    },
+    "usgs_earthquakes/v1": {
+      "api_caller_b0.py": "1c6fab9371690b394d9212b2f6e593afb86b82238661a63038f6145bbd6f8c81",
+      "trend_features_b0.py": "10e924814a4632d388de83ee888281cce8d7c93e15bca014d064d9f9dfb2b630",
+      "trend_stats_b0.py": "a0068b83081db3ddc23434372548f92a1f10280895d46ade6877ee55377c5b37"
+    },
+    "wb_mil_expenditure/v1": {
+      "api_caller_b0.py": "d757aabca406775d29651b708bbd17c19d8cc8876b9ded5227a731acb4684985",
+      "trend_features_b0.py": "8129d4890dff434e649589ec2edc011dbd0180a8fd16a248304fe952e1bac1b2",
+      "trend_stats_b0.py": "cda1e22abe7ee3b44b7ee6295b85e8233cbba70200f27c7ef0cc1b0482a4c020"
+    }
+  },
+  "templates": {
+    "acled_caller.py.j2": "e73cb4f7380a89ff40f2476c4380de21cf30dde32efc82032b9c8c77006ffaf1",
+    "api_caller.py.j2": "19f52f1e887fdb7a8a4b58c927f5cf0548152f9fa05cb1de26bfa6a1625d0aeb",
+    "connectors/generic_folder_walker.py.j2": "06d8d27474886547244a0ce26e9d97c050c4193f16b01c35e2c8a5d24e963e12",
+    "connectors/json_walker.py.j2": "94b7bb6fb728c156889aefc579ff759ece42785ef30cf0b8d8d0d59ecd3c0dea",
+    "connectors/pdf_walker.py.j2": "21cdbd8afa081c05d1ef1a6c9e8a8216a50ee4df159867176c3809384a83df07",
+    "crawler.py.j2": "13ee9e9e5e5a10070061b783420cfcaeb2143920213cae40b009f6d4b8cfbc4c",
+    "embassy_acled_join.py.j2": "c08d2ef9255a4e537fe02b4efbf9488893a2bcbf551f5a4097c75c9ff450d54e",
+    "embassy_risk_summary.py.j2": "6bd45062f49d89d2b4796e2668c94cf711b74529437ea68ce0cb3a8fbd3554d8",
+    "embassy_threat_join.py.j2": "99f266d51ddde518b0f84e7d35e0771b99af7006d2b959e8182df7c39127cde8",
+    "eoc_fire_metrics.py.j2": "29d57d60523ee9121a3b17dec5ab9a856ae88e7466634e08d2615818543893b3",
+    "ew_fusion.py.j2": "fa1b8c5528e06e0f318c0552fff011f40760f1bc0823ec700bf151150abea40f",
+    "graph_analyzer.py.j2": "b21e6b481a5e32e1c62e00500ee52ef798d7b7d5c9589d2c26c11ac697e3fde4",
+    "lib/_ssl_ctx.py.j2": "1038edac468a3fd0d4ebcdf1335055555599c22440c738d3dfddee539033a6a4",
+    "pii_audit.py.j2": "687aa7135b401e8ab1f26e53996a913da0b9de7b58202efc2d167c125e4e5a31",
+    "pii_redactor.py.j2": "85feff7960e56f95505812e1a7fadba444bdb364ffbe2264c1ea2503a95f4e09",
+    "pki_connector.py.j2": "442d826b0a0a3cc9af40c21a2174810e82665d3ee065b0050dfef204c9685d0f",
+    "qa_reviewer.py.j2": "6e154ca184c3eb0182539acafbd8cb88b7924eb1e3e47428e1dbc48c65d375b6",
+    "statistical_analyst.py.j2": "284bf970de0310acff9fad2999fc0b52ef278bacbc4edd7e8200da9761920f69",
+    "trend_analyzer.py.j2": "dd7b2eb8775a0aa28160a738336ffab311aeaa37411842e1d8cb90dcbb2dab79",
+    "trend_features.py.j2": "e798e855f5399877cd30902ef4ee46955fcb027ff08a91e925a02085e41ac5ed",
+    "trend_stats.py.j2": "c92fdc994d76a147084f9f1d3e4d4a032ef345150ccc89ed967b954ce2d3e28b",
+    "validator.py.j2": "0c3c7369f50fd142804e2194c2b9097aafaf437eb3f17d45350a39e9254a853f"
+  }
+}
