@@ -34,7 +34,7 @@ docker compose -f docker/docker-compose.yml up -d tabpy
 curl http://localhost:9099/info                            # sanity check
 
 docker compose -f docker/docker-compose.yml run --rm skill \
-    python3 -m pytest -q skill/tests                        # 118 tests
+    python3 -m pytest -q skill/tests                        # 139 tests
 
 docker compose -f docker/docker-compose.yml run --rm skill \
     python3 -m skill.scripts.generate_flow \
@@ -43,6 +43,27 @@ docker compose -f docker/docker-compose.yml run --rm skill \
 
 docker compose -f docker/docker-compose.yml down            # tear down
 ```
+
+### Port `9099` already in use?
+
+If you already run a host TabPy on `:9099` (the native recipe), the
+compose port-map collides silently — `curl localhost:9099/info` still
+returns JSON, but it's your host TabPy, not the container. Remap the
+host port with a one-line override file:
+
+```sh
+cat > docker/compose.local.yml <<'EOF'
+services:
+  tabpy:
+    ports: !override
+      - "127.0.0.1:9199:9099"
+EOF
+docker compose -f docker/docker-compose.yml -f docker/compose.local.yml up -d tabpy
+curl http://localhost:9199/info
+```
+
+The skill sidecar reaches TabPy at `tabpy:9099` over docker's internal
+DNS regardless of the host mapping.
 
 ## Ports + security posture
 
