@@ -1,0 +1,96 @@
+{
+  "request": "Pull New York State nonprofit organizations from ProPublica Nonprofit Explorer (IRS Form 990-derived data). ~10k orgs (API caps at 10k results per search). One row per nonprofit. Enrich with ntee_family (map_values on ntee_code first character -> Arts_Culture / Education / Environment / Animals / Health / Human_Services / International / Public_Benefit / Religion / Other) and subsection_class (map_values on subseccd IRS 501(c) subsection: 3=public_charity, 4=civic_league, 5=labor, 6=business_league, 7=social, others=other). Publish to 'Prep Agent / 26 - NY Nonprofit Directory' on Tableau Server for state AG offices, community-planning agencies, and grantmakers vetting local nonprofits. ProPublica is Cloudflare-fronted at projects.propublica.org, reliable and no auth required.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "path": "",
+      "url": "https://projects.propublica.org/nonprofits/api/v2/search.json?q=&state%5Bid%5D=NY",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 90,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_kind": "page",
+        "json_page_param": "page",
+        "json_page_size_param": "",
+        "json_page_size": 25,
+        "json_page_start": 0,
+        "json_max_pages": 400,
+        "json_max_rows": 10000,
+        "json_records_path": "organizations",
+        "json_derived_columns": [
+          {
+            "name": "subsection_class",
+            "kind": "map_values",
+            "source_col": "subseccd",
+            "mapping": {
+              "3": "public_charity_501c3",
+              "4": "civic_league_501c4",
+              "5": "labor_agricultural_501c5",
+              "6": "business_league_501c6",
+              "7": "social_recreational_501c7",
+              "8": "fraternal_benef_501c8",
+              "9": "voluntary_employee_501c9",
+              "10": "domestic_fraternal_501c10",
+              "19": "veterans_501c19"
+            },
+            "default": "other"
+          }
+        ],
+        "json_schema": {
+          "ein": "int",
+          "strein": "string",
+          "name": "string",
+          "sub_name": "string",
+          "city": "string",
+          "state": "string",
+          "ntee_code": "string",
+          "raw_ntee_code": "string",
+          "subseccd": "int",
+          "subsection_class": "string",
+          "has_subseccd": "bool",
+          "have_filings": "bool",
+          "have_extracts": "bool",
+          "have_pdfs": "bool",
+          "score": "decimal"
+        },
+        "_skip_auto_casts": true
+      },
+      "name": "NY State Nonprofits (ProPublica)",
+      "description": "ProPublica Nonprofit Explorer search endpoint filtered on state=NY. Returns basic org info from IRS Form 990 filings. Fields per org: ein, strein (formatted EIN), name, sub_name, city, state, ntee_code (National Taxonomy of Exempt Entities, 1-4 alphanumeric), raw_ntee_code, subseccd (IRS 501(c) subsection code), has_subseccd, have_filings (Form 990 filed with detailed financials), have_extracts, have_pdfs, score (ProPublica search relevance). API caps at 10,000 results / 400 pages of 25 orgs each per query."
+    }
+  ],
+  "transformations": [],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "NY Nonprofit Directory",
+      "path": "",
+      "description": "Directory of ~10,000 New York State nonprofit organizations from ProPublica Nonprofit Explorer (IRS Form 990-derived data). Fields: ein, strein (formatted EIN), name, sub_name, city, state, ntee_code (National Taxonomy of Exempt Entities), raw_ntee_code, subseccd (IRS 501(c) subsection code), subsection_class (public_charity_501c3, civic_league_501c4, labor_agricultural_501c5, business_league_501c6, social_recreational_501c7, others; from IRS subseccd), has_subseccd, have_filings (Form 990 filed - true means detailed financials available in ProPublica), have_extracts, have_pdfs, score (ProPublica relevance score). Source: projects.propublica.org/nonprofits/api/v2/search.json?state[id]=NY. API caps at 10k results per query. Refresh: monthly. Use for: state AG oversight of nonprofit sector, grantmaker due-diligence, county-planning agencies mapping service providers by NTEE domain.",
+      "source": "",
+      "project": "26 - NY Nonprofit Directory"
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "26 - NY Nonprofit Directory",
+    "parent_project": "Prep Agent",
+    "flow_name": "NY Nonprofit Directory",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 14,
+    "minute_utc": 15,
+    "weekday": "wednesday",
+    "day_of_month": 7,
+    "schedule_name_hint": "NY Nonprofit Directory Monthly Refresh",
+    "balance_tolerance_hours": 2
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

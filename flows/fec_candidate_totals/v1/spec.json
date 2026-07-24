@@ -1,0 +1,151 @@
+{
+  "request": "Pull US federal candidate (House/Senate/President) fundraising totals for the 2024 cycle from the FEC's api.open.fec.gov /v1/candidates/totals endpoint. ~5,323 candidates. One row per candidate-cycle. Enrich with receipts_band (numeric_bin on receipts: micro <10k / small <100k / mid <1M / large <5M / mega >=5M) and party_class (map_values on party: DEM=democratic, REP=republican, LIB=libertarian, GRE=green, IND=independent, others=other). Publish to 'Prep Agent / 27 - FEC Candidate Totals' on Tableau Server for state boards of elections and civic-transparency organizations. Uses DEMO_KEY or user-supplied API_DATA_GOV_KEY.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "path": "",
+      "url": "https://api.open.fec.gov/v1/candidates/totals/?election_year=2024&api_key=DEMO_KEY",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 90,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_kind": "page",
+        "json_page_param": "page",
+        "json_page_size_param": "per_page",
+        "json_page_size": 100,
+        "json_page_start": 1,
+        "json_max_pages": 60,
+        "json_max_rows": 6000,
+        "json_records_path": "results",
+        "json_derived_columns": [
+          {
+            "name": "receipts_band",
+            "kind": "numeric_bin",
+            "source_col": "receipts",
+            "thresholds": [
+              10000,
+              100000,
+              1000000,
+              5000000
+            ],
+            "labels": [
+              "micro",
+              "small",
+              "mid",
+              "large",
+              "mega"
+            ],
+            "default": "unknown"
+          },
+          {
+            "name": "party_class",
+            "kind": "map_values",
+            "source_col": "party",
+            "mapping": {
+              "DEM": "democratic",
+              "REP": "republican",
+              "LIB": "libertarian",
+              "GRE": "green",
+              "IND": "independent",
+              "CON": "constitution",
+              "SLP": "socialist_labor",
+              "REF": "reform"
+            },
+            "default": "other"
+          }
+        ],
+        "json_schema": {
+          "candidate_id": "string",
+          "name": "string",
+          "office": "string",
+          "office_full": "string",
+          "state": "string",
+          "state_full": "string",
+          "district": "string",
+          "party": "string",
+          "party_class": "string",
+          "party_full": "string",
+          "incumbent_challenge": "string",
+          "incumbent_challenge_full": "string",
+          "cycle": "int",
+          "cash_on_hand_end_period": "decimal",
+          "receipts": "decimal",
+          "receipts_band": "string",
+          "disbursements": "decimal",
+          "individual_itemized_contributions": "decimal",
+          "other_political_committee_contributions": "decimal",
+          "transfers_from_other_authorized_committee": "decimal",
+          "debts_owed_by_committee": "decimal",
+          "coverage_start_date": "string",
+          "coverage_end_date": "string",
+          "has_raised_funds": "bool",
+          "candidate_inactive": "bool"
+        },
+        "_skip_auto_casts": true
+      },
+      "name": "FEC Candidate Totals (2024 cycle)",
+      "description": "US Federal Election Commission candidate fundraising totals for the 2024 election cycle. One row per candidate-cycle. Fields: candidate_id, name, office (H=House/S=Senate/P=President), office_full, state, state_full, district, party, party_class, incumbent_challenge (I/C/O), incumbent_challenge_full, cycle, cash_on_hand_end_period, receipts, receipts_band (micro <10k / small <100k / mid <1M / large <5M / mega >=5M), disbursements, individual_itemized_contributions, other_political_committee_contributions, transfers_from_other_authorized_committee, debts_owed_by_committee, coverage_start_date, coverage_end_date, has_raised_funds. Pulled via page-based pagination (per_page=100) with a soft cap of ~5,500 rows."
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "FEC Candidate Totals Trend",
+        "dimensions": [
+          "state",
+          "party_class",
+          "office",
+          "receipts_band"
+        ],
+        "date_col": "coverage_end_date",
+        "rolling_window_days": 365,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level FEC 2024-cycle candidate totals (~5,323 candidates). Fields: candidate_id, name, office, office_full, state, district, party, party_class, incumbent_challenge, cycle, cash_on_hand_end_period, receipts, receipts_band, disbursements, individual_itemized_contributions, other_political_committee_contributions, transfers_from_other_authorized_committee, debts_owed_by_committee, coverage_start_date, coverage_end_date, has_raised_funds, candidate_inactive.",
+        "stats_description": "Long-form FEC statistics (one row per dimension x value over state, party_class, office, receipts_band). Includes counts, z-score anomalies vs national baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Use to identify state-level outliers in candidate fundraising and party competitiveness."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "FEC Candidate Totals",
+      "path": "",
+      "description": "Row-level FEC 2024-cycle candidate fundraising totals (~5,323 candidates). Fields: candidate_id, name, office (H/S/P), office_full, state, state_full, district, party, party_class (democratic/republican/libertarian/green/independent/others), party_full, incumbent_challenge (I=incumbent/C=challenger/O=open), incumbent_challenge_full, cycle, cash_on_hand_end_period, receipts, receipts_band (micro <10k / small <100k / mid <1M / large <5M / mega >=5M), disbursements, individual_itemized_contributions, other_political_committee_contributions, transfers_from_other_authorized_committee, debts_owed_by_committee, coverage_start_date, coverage_end_date, has_raised_funds, candidate_inactive. Source: api.open.fec.gov /v1/candidates/totals?election_year=2024. Refresh: monthly.",
+      "source": "FEC Candidate Totals Trend (Features)",
+      "project": "27 - FEC Candidate Totals"
+    },
+    {
+      "kind": "published_data_source",
+      "name": "FEC Candidate Totals Stats",
+      "path": "",
+      "description": "Long-form FEC statistics (one row per dimension x value over state, party_class, office, receipts_band). Includes counts, z-score anomalies vs national baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value). Use to identify state-level outliers in candidate fundraising and party competitiveness.",
+      "source": "FEC Candidate Totals Trend (Stats)",
+      "project": "27 - FEC Candidate Totals"
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "27 - FEC Candidate Totals",
+    "parent_project": "Prep Agent",
+    "flow_name": "FEC Candidate Totals",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 14,
+    "minute_utc": 30,
+    "weekday": "wednesday",
+    "day_of_month": 7,
+    "schedule_name_hint": "FEC Candidate Totals Monthly Refresh",
+    "balance_tolerance_hours": 2
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

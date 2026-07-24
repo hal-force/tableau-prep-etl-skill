@@ -1,0 +1,141 @@
+{
+  "request": "Pull City of Boston 311 service requests from data.boston.gov's CKAN datastore (resource 1a0b420d-99f1-4887-9851-990b2a5a6e17, calendar-year 2026). Cap at 20,000 rows via CKAN datastore_search offset pagination (limit=5000). Enrich with status_band (open/closed/other) and dept_group (PWD / Streets / ISD / Parks / Police / Neighborhood Svcs / Other) using map_values. Publish to 'Prep Agent / 23 - Boston 311 Service Requests' on Tableau Server for city operations analysts. Note: pivoted from Chicago 311 (data.cityofchicago.org) after repeated DNS resolution failures against the Socrata FedRAMP cluster from within TabPy \u2014 Boston hosts on Cloudflare and is stable.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "Boston 311 Service Requests",
+      "description": "City of Boston 311 service requests, calendar-year 2026 resource (CKAN datastore resource_id 1a0b420d-99f1-4887-9851-990b2a5a6e17). Total ~65k rows for the year. One row per case. Fields include case_enquiry_id, open_dt, sla_target_dt, closed_dt, on_time (Y/N), case_status (Open/Closed), closure_reason, case_title, subject, reason (top-level category \u2014 Housing, Public Works, etc.), type (specific request type), queue, department (ISD / PWDx / BTDT / PARKS / BPS / BPD / etc.), submitted_photo, closed_photo, location, fire/pwd/city_council/police districts, neighborhood, neighborhood_services_district, ward, precinct, location_street_name, location_zipcode, latitude, longitude, geom_4326, source. Pulled via CKAN datastore_search offset pagination (limit=5000, cap 4 pages / 20k rows). CKAN wraps the row list in result.records \u2014 extracted by json_records_path.",
+      "url": "https://data.boston.gov/api/3/action/datastore_search?resource_id=1a0b420d-99f1-4887-9851-990b2a5a6e17",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 120,
+        "max_retries": 3,
+        "json_records_path": "result.records",
+        "json_paginate": true,
+        "json_page_kind": "offset",
+        "json_page_param": "offset",
+        "json_page_size_param": "limit",
+        "json_page_size": 5000,
+        "json_page_start": 0,
+        "json_max_pages": 4,
+        "json_max_rows": 20000,
+        "json_derived_columns": [
+          {
+            "name": "status_band",
+            "kind": "map_values",
+            "source_col": "case_status",
+            "mapping": {
+              "Open": "open",
+              "Closed": "closed"
+            },
+            "default": "other"
+          },
+          {
+            "name": "dept_group",
+            "kind": "map_values",
+            "source_col": "department",
+            "mapping": {
+              "PWDx": "Public_Works",
+              "BTDT": "Transportation",
+              "ISD": "Inspectional_Services",
+              "PARKS": "Parks",
+              "BPD": "Police",
+              "BPS": "Public_Schools",
+              "ONS": "Neighborhood_Services",
+              "PROP": "Property_Mgmt",
+              "BHA": "Housing_Authority",
+              "INFO": "Info_311"
+            },
+            "default": "other"
+          }
+        ],
+        "json_schema": {
+          "case_enquiry_id": "string",
+          "open_dt": "string",
+          "sla_target_dt": "string",
+          "closed_dt": "string",
+          "on_time": "string",
+          "case_status": "string",
+          "status_band": "string",
+          "closure_reason": "string",
+          "case_title": "string",
+          "subject": "string",
+          "reason": "string",
+          "type": "string",
+          "queue": "string",
+          "department": "string",
+          "dept_group": "string",
+          "fire_district": "string",
+          "pwd_district": "string",
+          "city_council_district": "string",
+          "police_district": "string",
+          "neighborhood": "string",
+          "neighborhood_services_district": "string",
+          "ward": "string",
+          "precinct": "string",
+          "location_street_name": "string",
+          "location_zipcode": "string",
+          "latitude": "decimal",
+          "longitude": "decimal"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Boston 311 Trend",
+        "date_col": "open_dt",
+        "dimensions": [
+          "reason",
+          "dept_group",
+          "status_band",
+          "neighborhood"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level Boston 311 service requests (calendar-year 2026, capped at 20k rows). Fields include case_enquiry_id, open_dt (case open timestamp), sla_target_dt, closed_dt, on_time (Y/N vs SLA), case_status, status_band (open/closed/other), closure_reason, case_title, subject, reason (top-level category: Housing, Public Works, Sanitation, etc.), type (specific request type), queue, department (raw code), dept_group (Public_Works / Transportation / Inspectional_Services / Parks / Police / Public_Schools / Neighborhood_Services / other), districts (fire/pwd/city_council/police), neighborhood, ward, precinct, address, zip, latitude, longitude. Plus calendar features parsed from open_dt.",
+        "stats_description": "Long-form Boston 311 statistics (one row per dimension x value x year x month over reason, dept_group, status_band, neighborhood). Includes 30-day rolling counts, z-score anomalies vs baseline, lifetime rank/pct_of_total. Use to spot neighborhood-level spikes in specific complaint categories or shifts in department workload."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Boston 311 Detail",
+      "project": "23 - Boston 311 Service Requests",
+      "source": "Boston 311 Trend (Features)",
+      "description": "Row-level City of Boston 311 service requests (calendar-year 2026, capped at 20k rows). Fields: case_enquiry_id, open_dt, sla_target_dt, closed_dt, on_time (Y/N vs SLA), case_status, status_band (open/closed/other), closure_reason, case_title, subject, reason (top-level category: Housing, Public Works, Sanitation, etc.), type (specific request type), queue, department (raw code), dept_group (Public_Works / Transportation / Inspectional_Services / Parks / Police / Public_Schools / Neighborhood_Services / other), fire_district, pwd_district, city_council_district, police_district, neighborhood, neighborhood_services_district, ward, precinct, location_street_name, location_zipcode, latitude, longitude. Plus calendar features parsed from open_dt. Source: data.boston.gov CKAN datastore resource 1a0b420d-99f1-4887-9851-990b2a5a6e17. Refresh: weekly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "Boston 311 Stats",
+      "project": "23 - Boston 311 Service Requests",
+      "source": "Boston 311 Trend (Stats)",
+      "description": "Long-form Boston 311 request statistics (one row per dimension x value x year x month over reason, dept_group, status_band, neighborhood). Includes 30-day rolling counts, z-score anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to spot neighborhood-level spikes in specific complaint categories or shifts in department workload."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "weekly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "23 - Boston 311 Service Requests",
+    "parent_project": "Prep Agent",
+    "flow_name": "Boston 311 Service Requests",
+    "overwrite": true,
+    "cadence": "weekly",
+    "hour_utc": 13,
+    "minute_utc": 15,
+    "weekday": "tuesday",
+    "schedule_name_hint": "Boston 311 Weekly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

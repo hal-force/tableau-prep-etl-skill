@@ -1,0 +1,6 @@
+baseline_mean,baseline_std,dimension,is_anomaly,lifetime_count,lifetime_rank,month,monthly_count,pct_of_total,rolling_count,value,year,yoy_change,yoy_pct,zscore
+3.0,1.8257418583505538,<redacted>,False,12,26,2,4,0.01,4,<redacted>,2024,4,0.0,0.5477225575051661
+3.0,1.8257418583505538,<redacted>,False,12,26,5,1,0.01,5,<redacted>,2024,1,0.0,-1.0954451150103321
+3.0,1.8257418583505538,<redacted>,False,12,26,12,2,0.01,7,<redacted>,2024,2,0.0,-0.5477225575051661
+1.0,0.0,<redacted>,False,1,52,12,1,0.0008333333333333334,1,<redacted>,2024,1,0.0,0.0
+1.5,0.7071067811865476,<redacted>,False,3,42,11,1,0.0025,1,<redacted>,2024,1,0.0,-0.7071067811865475

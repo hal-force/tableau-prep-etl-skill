@@ -1,0 +1,263 @@
+{
+  "request": "Pull the NHS Organisation Reference Data (ORD) directory of active NHS Trusts from directory.spineservices.nhs.uk (Spine ORD 2-0-0), PrimaryRoleId=RO197 (NHS TRUST). One row per trust (~247 rows). Each record includes Name, OrgId (trust code), Status, OrgRecordClass, PostCode, LastChangeDate, PrimaryRoleDescription. Enrich with postcode_district (substring of PostCode up to the space), postcode_area (substring: first 2 chars \u2014 'BA', 'SW', 'M', etc.), org_id_prefix (substring: first 3 chars of OrgId \u2014 'R1A', 'RXK', etc.), record_freshness_days (days_since LastChangeDate), and region_group (map_values on postcode_area to England regions: NE/NW/YH/EM/WM/EE/L/SE/SW/None). Publish to 'Prep Agent / 35 - UK NHS Organisation Reference Data' on Tableau Server for NHS England / DHSC / regional ICB analysts. Keyless, OGL v3, no API key required.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "NHS ORD Active NHS Trusts",
+      "description": "directory.spineservices.nhs.uk /ORD/2-0-0/organisations, Status=Active, PrimaryRoleId=RO197 (NHS TRUST), Limit=1000 \u2014 247 active NHS Trusts across England. Response is wrapped as {Organisations: [...]}; we walk json_records_path=Organisations. Each record: Name, OrgId (trust code, e.g. R1A/RXK), Status, OrgRecordClass, PostCode, LastChangeDate, PrimaryRoleId, PrimaryRoleDescription, OrgLink. Keyless, OGL v3.",
+      "url": "https://directory.spineservices.nhs.uk/ORD/2-0-0/organisations?Status=Active&PrimaryRoleId=RO197&Limit=1000",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 120,
+        "max_retries": 3,
+        "json_paginate": false,
+        "json_records_path": "Organisations",
+        "json_derived_columns": [
+          {
+            "name": "org_id",
+            "kind": "substring",
+            "source_col": "OrgId",
+            "start": 0
+          },
+          {
+            "name": "org_name",
+            "kind": "substring",
+            "source_col": "Name",
+            "start": 0
+          },
+          {
+            "name": "post_code",
+            "kind": "substring",
+            "source_col": "PostCode",
+            "start": 0
+          },
+          {
+            "name": "org_record_class",
+            "kind": "substring",
+            "source_col": "OrgRecordClass",
+            "start": 0
+          },
+          {
+            "name": "primary_role_id",
+            "kind": "substring",
+            "source_col": "PrimaryRoleId",
+            "start": 0
+          },
+          {
+            "name": "primary_role_description",
+            "kind": "substring",
+            "source_col": "PrimaryRoleDescription",
+            "start": 0
+          },
+          {
+            "name": "last_change_date",
+            "kind": "substring",
+            "source_col": "LastChangeDate",
+            "start": 0
+          },
+          {
+            "name": "org_link",
+            "kind": "substring",
+            "source_col": "OrgLink",
+            "start": 0
+          },
+          {
+            "name": "record_freshness_days",
+            "kind": "days_since",
+            "source_col": "LastChangeDate"
+          },
+          {
+            "name": "postcode_area",
+            "kind": "substring",
+            "source_col": "PostCode",
+            "start": 0,
+            "length": 2
+          },
+          {
+            "name": "org_id_prefix",
+            "kind": "substring",
+            "source_col": "OrgId",
+            "start": 0,
+            "length": 3
+          },
+          {
+            "name": "region_group",
+            "kind": "map_values",
+            "source_col": "postcode_area",
+            "mapping": {
+              "NE": "North East",
+              "DH": "North East",
+              "DL": "North East",
+              "SR": "North East",
+              "TS": "North East",
+              "TD": "North East",
+              "BB": "North West",
+              "BL": "North West",
+              "CA": "North West",
+              "CH": "North West",
+              "CW": "North West",
+              "FY": "North West",
+              "LA": "North West",
+              "L ": "North West",
+              "M ": "North West",
+              "OL": "North West",
+              "PR": "North West",
+              "SK": "North West",
+              "WA": "North West",
+              "WN": "North West",
+              "BD": "Yorkshire and Humber",
+              "DN": "Yorkshire and Humber",
+              "HD": "Yorkshire and Humber",
+              "HG": "Yorkshire and Humber",
+              "HU": "Yorkshire and Humber",
+              "HX": "Yorkshire and Humber",
+              "LS": "Yorkshire and Humber",
+              "S ": "Yorkshire and Humber",
+              "WF": "Yorkshire and Humber",
+              "YO": "Yorkshire and Humber",
+              "DE": "East Midlands",
+              "LE": "East Midlands",
+              "LN": "East Midlands",
+              "NG": "East Midlands",
+              "NN": "East Midlands",
+              "PE": "East Midlands",
+              "B ": "West Midlands",
+              "CV": "West Midlands",
+              "DY": "West Midlands",
+              "HR": "West Midlands",
+              "ST": "West Midlands",
+              "TF": "West Midlands",
+              "WR": "West Midlands",
+              "WS": "West Midlands",
+              "WV": "West Midlands",
+              "AL": "East of England",
+              "CB": "East of England",
+              "CM": "East of England",
+              "CO": "East of England",
+              "EN": "East of England",
+              "IP": "East of England",
+              "LU": "East of England",
+              "NR": "East of England",
+              "SG": "East of England",
+              "SS": "East of England",
+              "E ": "London",
+              "EC": "London",
+              "N ": "London",
+              "NW": "London",
+              "SE": "London",
+              "SW": "London",
+              "W ": "London",
+              "WC": "London",
+              "BR": "London",
+              "CR": "London",
+              "DA": "London",
+              "HA": "London",
+              "IG": "London",
+              "KT": "London",
+              "RM": "London",
+              "SM": "London",
+              "TN": "South East",
+              "TW": "London",
+              "UB": "London",
+              "BN": "South East",
+              "CT": "South East",
+              "GU": "South East",
+              "ME": "South East",
+              "MK": "South East",
+              "OX": "South East",
+              "PO": "South East",
+              "RG": "South East",
+              "RH": "South East",
+              "SL": "South East",
+              "SO": "South East",
+              "BA": "South West",
+              "BH": "South West",
+              "BS": "South West",
+              "DT": "South West",
+              "EX": "South West",
+              "GL": "South West",
+              "PL": "South West",
+              "SN": "South West",
+              "SP": "South West",
+              "TA": "South West",
+              "TQ": "South West",
+              "TR": "South West"
+            },
+            "default": "Other"
+          }
+        ],
+        "json_schema": {
+          "org_id": "string",
+          "org_name": "string",
+          "post_code": "string",
+          "postcode_area": "string",
+          "org_id_prefix": "string",
+          "region_group": "string",
+          "org_record_class": "string",
+          "primary_role_id": "string",
+          "primary_role_description": "string",
+          "last_change_date": "string",
+          "record_freshness_days": "int",
+          "org_link": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "NHS Trusts Trend",
+        "date_col": "last_change_date",
+        "dimensions": [
+          "region_group",
+          "postcode_area",
+          "org_record_class"
+        ],
+        "rolling_window_days": 90,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level NHS ORD active NHS Trust catalogue (PrimaryRoleId RO197). Fields: org_id (trust code, e.g. R1A/RXK), org_name (verbose trust name), post_code (full outward+inward), postcode_area (first 2 chars \u2014 BA/SW/M/etc.), org_id_prefix (first 3 chars of OrgId), region_group (England region \u2014 North East/North West/Yorkshire and Humber/East Midlands/West Midlands/East of England/London/South East/South West/Other), org_record_class (RC1/RC2), primary_role_id (RO197), primary_role_description (NHS TRUST), last_change_date (YYYY-MM-DD), record_freshness_days (days since last ORD update), org_link (canonical ORD URL).",
+        "stats_description": "Long-form NHS Trust reference-data statistics (dimension x value x year x month) over region_group, postcode_area, org_record_class. Rolling 90-day counts, z-anomalies vs baseline. Use to spot regions with unusual ORD churn (bulk updates, boundary changes)."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "UK NHS Trusts Detail",
+      "project": "35 - UK NHS Organisation Reference Data",
+      "source": "NHS Trusts Trend (Features)",
+      "description": "Row-level NHS Organisation Reference Data (ORD) directory of active NHS Trusts \u2014 247 rows. Fields: org_id, org_name, post_code, postcode_area, org_id_prefix, region_group (England region), org_record_class, primary_role_id (RO197), primary_role_description, last_change_date, record_freshness_days, org_link. Enrichments: postcode_area, region_group, record_freshness_days. Source: directory.spineservices.nhs.uk (Spine ORD), OGL v3. Refresh: daily."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "UK NHS Trusts Stats",
+      "project": "35 - UK NHS Organisation Reference Data",
+      "source": "NHS Trusts Trend (Stats)",
+      "description": "Long-form NHS Trust reference-data statistics (dimension x value x year x month) over region_group, postcode_area, org_record_class. Rolling 90-day counts, z-anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True). Joinable from Tableau on (dimension, value, year, month)."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "35 - UK NHS Organisation Reference Data",
+    "parent_project": "Prep Agent",
+    "flow_name": "UK NHS Organisation Reference Data",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 7,
+    "minute_utc": 15,
+    "weekday": "wednesday",
+    "day_of_month": 5,
+    "schedule_name_hint": "UK NHS ORD Daily Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

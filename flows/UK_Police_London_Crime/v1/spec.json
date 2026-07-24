@@ -1,0 +1,190 @@
+{
+  "request": "Pull UK street-level crime records from the Home Office's data.police.uk open data API for a Central London polygon (Westminster / City of London / Southwark), previous complete calendar month. One row per crime. The API returns nested location (latitude/longitude/street.name) and outcome_status (category/date); we flatten those with dotted_path derived columns. Enrich with crime_severity_band (map_values on category: violent-crime/robbery/possession-of-weapons->high, burglary/drugs/vehicle-crime/theft-from-the-person->medium, other -> low), outcome_stage (map_values on outcome_status.category: awaiting/court/complete/no-action) and neighborhood_area (map_values on location.street.name prefix -> Westminster / City / Southwark / Other). Publish to 'Prep Agent / 32 - UK Police Street Crime (London)' on Tableau Server for UK MoJ / Home Office / GLA analysts. data.police.uk is a keyless, rate-friendly open-data API (Home Office).",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "UK Police Street Crime (Central London)",
+      "description": "data.police.uk /api/crimes-street/all-crime endpoint, polygon-filtered to Central London (roughly Westminster + City + Southwark + Lambeth: approx 51.485-51.525N, 0.130W-0.070E). One row per crime; ~2k rows/month for that poly. Nested `location.latitude` / `location.longitude` / `location.street.name` and `outcome_status.category` / `outcome_status.date` are flattened via dotted_path. Keyless.",
+      "url": "https://data.police.uk/api/crimes-street/all-crime?poly=51.485,-0.130:51.485,-0.070:51.525,-0.070:51.525,-0.130&date=2026-05",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_paginate": false,
+        "json_derived_columns": [
+          {
+            "name": "latitude",
+            "kind": "dotted_path",
+            "source_col": "location",
+            "path": "latitude",
+            "cast": "decimal"
+          },
+          {
+            "name": "longitude",
+            "kind": "dotted_path",
+            "source_col": "location",
+            "path": "longitude",
+            "cast": "decimal"
+          },
+          {
+            "name": "street_name",
+            "kind": "dotted_path",
+            "source_col": "location",
+            "path": "street.name",
+            "cast": "string"
+          },
+          {
+            "name": "street_id",
+            "kind": "dotted_path",
+            "source_col": "location",
+            "path": "street.id",
+            "cast": "string"
+          },
+          {
+            "name": "outcome_category",
+            "kind": "dotted_path",
+            "source_col": "outcome_status",
+            "path": "category",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "outcome_month",
+            "kind": "dotted_path",
+            "source_col": "outcome_status",
+            "path": "date",
+            "cast": "string",
+            "default": ""
+          },
+          {
+            "name": "crime_month",
+            "kind": "substring",
+            "source_col": "month",
+            "start": 0
+          },
+          {
+            "name": "crime_severity_band",
+            "kind": "map_values",
+            "source_col": "category",
+            "mapping": {
+              "violent-crime": "high",
+              "robbery": "high",
+              "possession-of-weapons": "<redacted>",
+              "burglary": "medium",
+              "drugs": "medium",
+              "vehicle-crime": "medium",
+              "theft-from-the-person": "medium",
+              "shoplifting": "low",
+              "bicycle-theft": "low",
+              "criminal-damage-arson": "medium",
+              "public-order": "low",
+              "anti-social-behaviour": "low",
+              "other-theft": "low",
+              "other-crime": "low"
+            },
+            "default": "low"
+          },
+          {
+            "name": "outcome_stage",
+            "kind": "map_values",
+            "source_col": "outcome_category",
+            "mapping": {
+              "Awaiting court outcome": "awaiting_court",
+              "Under investigation": "under_investigation",
+              "Investigation complete; no suspect identified": "no_suspect",
+              "Unable to prosecute suspect": "no_prosecution",
+              "Status update unavailable": "status_unknown",
+              "Local resolution": "local_resolution",
+              "Offender given penalty notice": "penalty_notice",
+              "Offender given a caution": "caution",
+              "Court result unavailable": "awaiting_court",
+              "Court case unable to proceed": "no_prosecution",
+              "Suspect charged as part of another case": "charged_elsewhere",
+              "Offender given community sentence": "community_sentence",
+              "Offender sent to prison": "custodial",
+              "Offender given a drugs possession warning": "<redacted>",
+              "Offender fined": "fined",
+              "Formal action is not in the public interest": "no_action",
+              "Action to be taken by another organisation": "referred_out"
+            },
+            "default": "unreported"
+          }
+        ],
+        "json_schema": {
+          "id": "string",
+          "persistent_id": "string",
+          "category": "string",
+          "crime_severity_band": "string",
+          "crime_month": "string",
+          "location_type": "string",
+          "location_subtype": "string",
+          "latitude": "decimal",
+          "longitude": "decimal",
+          "street_id": "string",
+          "street_name": "string",
+          "outcome_category": "string",
+          "outcome_month": "string",
+          "outcome_stage": "string",
+          "context": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "UK Police London Crime Trend",
+        "date_col": "crime_month",
+        "dimensions": [
+          "category",
+          "crime_severity_band",
+          "outcome_stage"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level UK street-level crimes for a Central London polygon (Westminster / City / Southwark / Lambeth). Fields: id, persistent_id, category (Home Office standard: violent-crime, robbery, burglary, drugs, etc.), crime_severity_band (high/medium/low), month (YYYY-MM), location_type, location_subtype, latitude, longitude, street_id, street_name, outcome_category (raw Home Office outcome text), outcome_month, outcome_stage (mapped: awaiting_court, no_suspect, custodial, caution, etc.), context.",
+        "stats_description": "Long-form UK police crime statistics (one row per dimension x value x year x month over category, crime_severity_band, outcome_stage). 30-day rolling counts, z-anomalies vs baseline. Use to spot month-over-month spikes in specific offence types or shifts in outcome mix."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "UK Police London Crime Detail",
+      "project": "32 - UK Police Street Crime (London)",
+      "source": "UK Police London Crime Trend (Features)",
+      "description": "Row-level UK street-level crime records for a Central London polygon (Westminster / City / Southwark / Lambeth), previous complete calendar month. Fields: id, persistent_id, category (Home Office standard), crime_severity_band (high/medium/low), month (YYYY-MM), location_type, location_subtype, latitude, longitude, street_id, street_name (Home Office anonymised 'On or near X'), outcome_category (raw Home Office outcome text), outcome_month, outcome_stage (mapped: awaiting_court / no_suspect / custodial / caution / penalty_notice / community_sentence / etc.), context. Source: data.police.uk. Enrichments: crime_severity_band, outcome_stage. Refresh: monthly."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "UK Police London Crime Stats",
+      "project": "32 - UK Police Street Crime (London)",
+      "source": "UK Police London Crime Trend (Stats)",
+      "description": "Long-form Central London crime statistics (dimension x value x year x month) over category, crime_severity_band, outcome_stage. Rolling 30-day counts, z-anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True). Joinable from Tableau on (dimension, value, year, month)."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "32 - UK Police Street Crime (London)",
+    "parent_project": "Prep Agent",
+    "flow_name": "UK Police Street Crime (London)",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 6,
+    "minute_utc": 30,
+    "weekday": "wednesday",
+    "day_of_month": 5,
+    "schedule_name_hint": "UK Police London Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

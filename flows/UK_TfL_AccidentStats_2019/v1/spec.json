@@ -1,0 +1,199 @@
+{
+  "request": "Pull Transport for London AccidentStats for 2019 (the last complete published year from TfL Unified API), api.tfl.gov.uk/AccidentStats/2019 \u2014 ~51k road-traffic accidents across Greater London. Each row includes lat/lon, location string, ISO datetime, severity (Fatal/Serious/Slight), borough, casualties list and vehicles list. Enrich with casualty_count and vehicle_count via list_length, severity_band via map_values (Fatal=critical/Serious=high/Slight=low), primary_vehicle via list_first_field on vehicles, primary_casualty_mode via list_first_field on casualties, hour_of_day extracted from the ISO date via substring, and time_of_day_bucket via map_values on hour_of_day (00-05=night, 06-09=morning_peak, 10-15=daytime, 16-19=evening_peak, 20-23=evening). Publish to 'Prep Agent / 36 - UK TfL Accident Statistics 2019' on Tableau Server for TfL / MoT / DfT / MPS analysts. Keyless, OGL v3.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "TfL AccidentStats 2019",
+      "description": "api.tfl.gov.uk/AccidentStats/2019 \u2014 full year of Transport for London road-traffic accident records, ~51k rows. Response is a top-level JSON array; each element carries id, lat, lon, location (verbose), date (ISO 8601 Z), severity, borough, casualties (list of {age, class, severity, mode, ageBand}), vehicles (list of {type}). Keyless, OGL v3.",
+      "url": "https://api.tfl.gov.uk/AccidentStats/2019",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 180,
+        "max_retries": 3,
+        "json_paginate": false,
+        "json_derived_columns": [
+          {
+            "name": "accident_id",
+            "kind": "substring",
+            "source_col": "id",
+            "start": 0
+          },
+          {
+            "name": "accident_date",
+            "kind": "substring",
+            "source_col": "date",
+            "start": 0,
+            "length": 10
+          },
+          {
+            "name": "accident_datetime",
+            "kind": "substring",
+            "source_col": "date",
+            "start": 0
+          },
+          {
+            "name": "hour_str",
+            "kind": "substring",
+            "source_col": "date",
+            "start": 11,
+            "length": 2
+          },
+          {
+            "name": "casualty_count",
+            "kind": "list_length",
+            "source_col": "casualties"
+          },
+          {
+            "name": "vehicle_count",
+            "kind": "list_length",
+            "source_col": "vehicles"
+          },
+          {
+            "name": "primary_vehicle_type",
+            "kind": "list_first_field",
+            "source_col": "vehicles",
+            "field": "type"
+          },
+          {
+            "name": "primary_casualty_mode",
+            "kind": "list_first_field",
+            "source_col": "casualties",
+            "field": "mode"
+          },
+          {
+            "name": "primary_casualty_class",
+            "kind": "list_first_field",
+            "source_col": "casualties",
+            "field": "class"
+          },
+          {
+            "name": "primary_casualty_ageband",
+            "kind": "list_first_field",
+            "source_col": "casualties",
+            "field": "ageBand"
+          },
+          {
+            "name": "severity_band",
+            "kind": "map_values",
+            "source_col": "severity",
+            "mapping": {
+              "Fatal": "critical",
+              "Serious": "high",
+              "Slight": "low"
+            },
+            "default": "unknown"
+          },
+          {
+            "name": "time_of_day_bucket",
+            "kind": "map_values",
+            "source_col": "hour_str",
+            "mapping": {
+              "00": "night",
+              "01": "night",
+              "02": "night",
+              "03": "night",
+              "04": "night",
+              "05": "night",
+              "06": "morning_peak",
+              "07": "morning_peak",
+              "08": "morning_peak",
+              "09": "morning_peak",
+              "10": "daytime",
+              "11": "daytime",
+              "12": "daytime",
+              "13": "daytime",
+              "14": "daytime",
+              "15": "daytime",
+              "16": "evening_peak",
+              "17": "evening_peak",
+              "18": "evening_peak",
+              "19": "evening_peak",
+              "20": "evening",
+              "21": "evening",
+              "22": "evening",
+              "23": "evening"
+            },
+            "default": "unknown"
+          }
+        ],
+        "json_schema": {
+          "accident_id": "string",
+          "accident_date": "string",
+          "accident_datetime": "string",
+          "hour_str": "string",
+          "time_of_day_bucket": "string",
+          "lat": "decimal",
+          "lon": "decimal",
+          "location": "string",
+          "severity": "string",
+          "severity_band": "string",
+          "borough": "string",
+          "casualty_count": "int",
+          "vehicle_count": "int",
+          "primary_vehicle_type": "string",
+          "primary_casualty_mode": "string",
+          "primary_casualty_class": "string",
+          "primary_casualty_ageband": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "TfL Accidents Trend",
+        "date_col": "accident_date",
+        "dimensions": [
+          "severity_band",
+          "borough",
+          "time_of_day_bucket",
+          "primary_vehicle_type"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level TfL AccidentStats 2019 records \u2014 ~51k road-traffic accidents across Greater London. Fields: accident_id (unique), accident_date (YYYY-MM-DD), accident_datetime (ISO 8601 Z), hour_str, time_of_day_bucket (night/morning_peak/daytime/evening_peak/evening), lat, lon, location (verbose street description), severity (Fatal/Serious/Slight), severity_band (critical/high/low), borough (London borough), casualty_count, vehicle_count, primary_vehicle_type (Car/Motorcycle/PedalCycle/etc.), primary_casualty_mode, primary_casualty_class (Driver/Passenger/Pedestrian), primary_casualty_ageband (Child/Adult/Elderly/Unknown).",
+        "stats_description": "Long-form TfL accident statistics (dimension x value x year x month) over severity_band, borough, time_of_day_bucket, primary_vehicle_type. Rolling 30-day counts, z-anomalies vs baseline. Use to spot borough-level or time-of-day-level shifts in accident mix; combine severity_band=critical with borough for a fatal-collision heatmap."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "UK TfL Accidents Detail",
+      "project": "36 - UK TfL Accident Statistics 2019",
+      "source": "TfL Accidents Trend (Features)",
+      "description": "Row-level TfL AccidentStats 2019 \u2014 ~51k Greater London road-traffic accidents. Fields: accident_id, accident_date, accident_datetime, hour_str, time_of_day_bucket (night/morning_peak/daytime/evening_peak/evening), lat, lon, location, severity (Fatal/Serious/Slight), severity_band (critical/high/low), borough, casualty_count, vehicle_count, primary_vehicle_type, primary_casualty_mode, primary_casualty_class, primary_casualty_ageband. Enrichments: casualty_count, vehicle_count, severity_band, primary_vehicle_type, time_of_day_bucket. Source: api.tfl.gov.uk/AccidentStats/2019, OGL v3. Refresh: annual (data is a completed year)."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "UK TfL Accidents Stats",
+      "project": "36 - UK TfL Accident Statistics 2019",
+      "source": "TfL Accidents Trend (Stats)",
+      "description": "Long-form TfL accident statistics (dimension x value x year x month) over severity_band, borough, time_of_day_bucket, primary_vehicle_type. Rolling 30-day counts, z-anomalies vs lifetime baseline (|z|>=2.0 flagged is_anomaly=True). Joinable from Tableau on (dimension, value, year, month)."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "36 - UK TfL Accident Statistics 2019",
+    "parent_project": "Prep Agent",
+    "flow_name": "UK TfL Accident Statistics 2019",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 7,
+    "minute_utc": 30,
+    "weekday": "wednesday",
+    "day_of_month": 5,
+    "schedule_name_hint": "UK TfL AccidentStats Annual Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

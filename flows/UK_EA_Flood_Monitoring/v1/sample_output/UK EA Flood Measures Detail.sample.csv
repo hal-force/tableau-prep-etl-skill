@@ -1,0 +1,6 @@
+day_of_week_name,day_of_week_num,hour_bucket,hour_of_day,is_weekend,iso_week,label,latest_date,latest_dateTime,latest_value,level_band,month,notation,parameter,parameterName,parameter_class,period,qualifier,quarter,reading_freshness_days,stage_qualifier_group,stationReference,unitName,valueType,year,year_month
+<redacted>,2,<redacted>,-1,False,30,<redacted>,<redacted>,<redacted>,-0.396,<redacted>,7,<redacted>,<redacted>,<redacted>,<redacted>,900,<redacted>,3,-1,<redacted>,<redacted>,<redacted>,<redacted>,2026,<redacted>
+<redacted>,2,<redacted>,-1,False,30,<redacted>,<redacted>,<redacted>,0.081,<redacted>,7,<redacted>,<redacted>,<redacted>,<redacted>,900,<redacted>,3,-1,<redacted>,<redacted>,<redacted>,<redacted>,2026,<redacted>
+<redacted>,2,<redacted>,-1,False,30,<redacted>,<redacted>,<redacted>,0.817,<redacted>,7,<redacted>,<redacted>,<redacted>,<redacted>,900,<redacted>,3,-1,<redacted>,<redacted>,<redacted>,<redacted>,2026,<redacted>
+<redacted>,2,<redacted>,-1,False,30,<redacted>,<redacted>,<redacted>,0.301,<redacted>,7,<redacted>,<redacted>,<redacted>,<redacted>,900,<redacted>,3,-1,<redacted>,<redacted>,<redacted>,<redacted>,2026,<redacted>
+<redacted>,2,<redacted>,-1,False,30,<redacted>,<redacted>,<redacted>,0.129,<redacted>,7,<redacted>,<redacted>,<redacted>,<redacted>,900,<redacted>,3,-1,<redacted>,<redacted>,<redacted>,<redacted>,2026,<redacted>

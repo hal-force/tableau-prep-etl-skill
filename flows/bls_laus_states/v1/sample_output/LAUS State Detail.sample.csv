@@ -1,0 +1,6 @@
+day_of_week_name,day_of_week_num,hour_bucket,hour_of_day,is_weekend,iso_week,month,obs_date,period,periodName,quarter,rate_band,seriesID,state_fips,value,year,year_month
+<redacted>,4,<redacted>,-1,False,18,5,<redacted>,<redacted>,<redacted>,2,<redacted>,<redacted>,<redacted>,5.3,2026,<redacted>
+<redacted>,2,<redacted>,-1,False,14,4,<redacted>,<redacted>,<redacted>,2,<redacted>,<redacted>,<redacted>,5.3,2026,<redacted>
+<redacted>,6,<redacted>,-1,True,9,3,<redacted>,<redacted>,<redacted>,1,<redacted>,<redacted>,<redacted>,5.3,2026,<redacted>
+<redacted>,6,<redacted>,-1,True,5,2,<redacted>,<redacted>,<redacted>,1,<redacted>,<redacted>,<redacted>,5.4,2026,<redacted>
+<redacted>,3,<redacted>,-1,False,1,1,<redacted>,<redacted>,<redacted>,1,<redacted>,<redacted>,<redacted>,5.4,2026,<redacted>

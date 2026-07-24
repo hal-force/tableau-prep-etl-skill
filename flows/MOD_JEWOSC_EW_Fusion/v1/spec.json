@@ -1,0 +1,105 @@
+{
+  "request": "Prototype an Electronic Warfare fusion demonstration for the UK Ministry of Defence Joint Electronic Warfare Operational Support Cell (JEWOSC). Pull a live snapshot of civil ADS-B state vectors over UK & NW Europe (lat 48-61, lon -8 to 8) from OpenSky Network as an unclassified proxy for a cooperative-track feed. Fuse each row with a synthetic Electronic Order of Battle library keyed on airframe class (fighter / awacs / isr / transport / rotary / drone / unknown) to derive representative RF parametrics (band, centre frequency, PRI, PW, ERP) and a notional operating mode. Compute range/bearing/aspect from an own-ship reference (RAF Odiham, 51.3762N, -1.3086E) and Friis-model received signal power at own-ship (dBm). Assign a categorical threat_band (Non-hostile / Search / Track / Engage / Critical) that presents in an operational context. All emitter parametrics are notional; the EOB library is synthetic and illustrative \u2014 no classified reference material is used. Publish to 'Prep Agent / 31 - MOD JEWOSC EW Fusion Demo' on Tableau Server. Intended audience: JEWOSC analysts evaluating Tableau against complex Defence EW datasets, data-fusion workflows, and operator-facing visualisation.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "OpenSky UK/NW-Europe Live States",
+      "description": "OpenSky Network /api/states/all endpoint, bbox-filtered to the UK and NW-Europe SAR/EW theatre (lamin=48, lamax=61, lomin=-8, lomax=8). Each row = one aircraft state vector at the snapshot time. Public, keyless. Snapshot-only; refresh hourly.",
+      "url": "https://opensky-network.org/api/states/all?lamin=48&lamax=61&lomin=-8&lomax=8",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_paginate": false,
+        "json_records_path": "states",
+        "json_array_columns": [
+          "icao24",
+          "callsign",
+          "origin_country",
+          "time_position",
+          "last_contact",
+          "longitude",
+          "latitude",
+          "baro_altitude",
+          "on_ground",
+          "velocity",
+          "true_track",
+          "vertical_rate",
+          "sensors",
+          "geo_altitude",
+          "squawk",
+          "spi",
+          "position_source"
+        ],
+        "json_schema": {
+          "icao24": "string",
+          "callsign": "string",
+          "origin_country": "string",
+          "time_position": "int",
+          "last_contact": "int",
+          "longitude": "decimal",
+          "latitude": "decimal",
+          "baro_altitude": "decimal",
+          "on_ground": "bool",
+          "velocity": "decimal",
+          "true_track": "decimal",
+          "vertical_rate": "decimal",
+          "geo_altitude": "decimal",
+          "squawk": "string",
+          "spi": "bool",
+          "position_source": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "ew_fusion",
+      "args": {
+        "name": "EW Fusion",
+        "description": "Fuses ADS-B state vectors with a synthetic Electronic Order of Battle library keyed on airframe class. Adds emitter class, primary emitter, RF band, centre frequency (GHz), PRI (us), PW (us), ERP (dBW), notional mode, own-ship range/bearing/aspect, Friis-model received power (dBm) at own-ship, and a categorical threat_band (Non-hostile / Search / Track / Engage / Critical). Emitter parametrics are notional and illustrative \u2014 no classified source. Own-ship reference: RAF Odiham (51.3762N, -1.3086E).",
+        "lat_col": "latitude",
+        "lon_col": "longitude",
+        "alt_col": "baro_altitude",
+        "velocity_col": "velocity",
+        "heading_col": "true_track",
+        "callsign_col": "callsign",
+        "category_col": "category",
+        "icao_col": "icao24",
+        "own_ship_lat": 51.3762,
+        "own_ship_lon": -1.3086,
+        "own_ship_label": "OWN-SHIP RAF Odiham"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "MOD JEWOSC EW Fusion",
+      "project": "31 - MOD JEWOSC EW Fusion Demo",
+      "description": "Fused EW picture for a JEWOSC analyst view. One row per airborne track in the UK / NW-Europe bbox at snapshot time. Track fields from OpenSky ADS-B: icao24, callsign, origin_country, longitude, latitude, baro_altitude (m), velocity (m/s), true_track (deg true), vertical_rate (m/s), geo_altitude, squawk, spi, position_source, time_position (epoch s), last_contact (epoch s), on_ground. Fusion outputs: emitter_class (fighter/awacs/isr/transport/rotary/drone/unknown), primary_emitter (notional payload name), rf_band (L/S/C/X/Ku/EHF/VHF-UHF), centre_freq_ghz, pri_us, pw_us, erp_dbw, mode (search/track/target/passive/silent), range_nm (from own-ship), bearing_deg (from own-ship, 0=N), aspect_deg (0=nose-on, 180=tail-on), rx_dbm (Friis free-space at own-ship), threat_band (Non-hostile/Search/Track/Engage/Critical), fusion_confidence (0..1), own_ship_label. Emitter parametrics are notional and illustrative. Source: OpenSky Network. Refresh: hourly."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "hourly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "31 - MOD JEWOSC EW Fusion Demo",
+    "parent_project": "Prep Agent",
+    "flow_name": "MOD JEWOSC EW Fusion",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 0,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "MOD JEWOSC Hourly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

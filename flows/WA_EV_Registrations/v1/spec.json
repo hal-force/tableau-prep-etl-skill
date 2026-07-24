@@ -1,0 +1,106 @@
+{
+  "request": "Pull Washington State electric-vehicle registrations from data.wa.gov (Socrata resource f6w7-q2d2, WA Dept of Licensing). ~290k rows. One row per registered EV. Enrich with range_band (numeric_bin on electric_range: unknown <1 / short <100 / medium <200 / long <300 / ultra_long >=300) and ev_class (map_values on ev_type: 'Battery Electric Vehicle (BEV)'=bev, 'Plug-in Hybrid Electric Vehicle (PHEV)'=phev, others=other). Publish to 'Prep Agent / 30 - WA EV Registrations' on Tableau Server for WA Department of Ecology, Dept of Commerce EV-incentive teams, and utility planners at PSE/Seattle City Light. data.wa.gov is Socrata-hosted, reliable.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "WA EV Registrations",
+      "description": "WA Department of Licensing electric-vehicle registrations from data.wa.gov Socrata resource f6w7-q2d2. Fields: vin_1_10, county, city, state, zip_code, model_year, make, model, ev_type, ev_class (bev/phev/other), cafv_type (Clean Alternative Fuel Vehicle eligibility), electric_range, range_band (short <100mi / medium <200 / long <300 / ultra_long >=300), legislative_district, dol_vehicle_id, electric_utility, _2020_census_tract. Pulled via SoQL offset pagination (5000 per page).",
+      "url": "https://data.wa.gov/resource/f6w7-q2d2.json?$order=dol_vehicle_id&$select=vin_1_10,county,city,state,zip_code,model_year,make,model,ev_type,cafv_type,electric_range,legislative_district,dol_vehicle_id,electric_utility,_2020_census_tract",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 90,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_kind": "offset",
+        "json_page_param": "$offset",
+        "json_page_size_param": "$limit",
+        "json_page_size": 5000,
+        "json_page_start": 0,
+        "json_max_pages": 65,
+        "json_max_rows": 320000,
+        "json_derived_columns": [
+          {
+            "name": "range_band",
+            "kind": "numeric_bin",
+            "source_col": "electric_range",
+            "thresholds": [
+              1,
+              100,
+              200,
+              300
+            ],
+            "labels": [
+              "unknown",
+              "short",
+              "medium",
+              "long",
+              "ultra_long"
+            ],
+            "default": "unknown"
+          },
+          {
+            "name": "ev_class",
+            "kind": "map_values",
+            "source_col": "ev_type",
+            "mapping": {
+              "Battery Electric Vehicle (BEV)": "bev",
+              "Plug-in Hybrid Electric Vehicle (PHEV)": "phev"
+            },
+            "default": "other"
+          }
+        ],
+        "json_schema": {
+          "vin_1_10": "string",
+          "county": "string",
+          "city": "string",
+          "state": "string",
+          "zip_code": "string",
+          "model_year": "int",
+          "make": "string",
+          "model": "string",
+          "ev_type": "string",
+          "ev_class": "string",
+          "cafv_type": "string",
+          "electric_range": "int",
+          "range_band": "string",
+          "legislative_district": "string",
+          "dol_vehicle_id": "string",
+          "electric_utility": "string",
+          "_2020_census_tract": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "WA EV Registrations",
+      "project": "30 - WA EV Registrations",
+      "source": "WA EV Registrations",
+      "description": "Row-level WA electric-vehicle registrations (~290k rows). Fields: vin_1_10 (first 10 chars of VIN for anonymization), county, city, state, zip_code, model_year, make (Tesla/BMW/Chevrolet/etc), model, ev_type, ev_class (bev/phev/other), cafv_type (Clean Alternative Fuel Vehicle eligibility), electric_range, range_band (unknown / short <100mi / medium <200 / long <300 / ultra_long >=300), legislative_district, dol_vehicle_id, electric_utility (PSE/Seattle City Light/etc), _2020_census_tract. Source: data.wa.gov resource f6w7-q2d2 (WA Dept of Licensing). Refresh: monthly."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "30 - WA EV Registrations",
+    "parent_project": "Prep Agent",
+    "flow_name": "WA EV Registrations",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 15,
+    "minute_utc": 0,
+    "weekday": "wednesday",
+    "day_of_month": 7,
+    "schedule_name_hint": "WA EV Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

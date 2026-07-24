@@ -1,0 +1,191 @@
+{
+  "request": "Pull HHS COVID-19 Reported Patient Impact and Hospital Capacity by State (Timeseries) from healthdata.gov (dataset g62h-syeh, ~82k rows, daily state observations Jan-2020 through Apr-2024 when reporting ended). One row per state x date. Enrich with utilization_band (numeric_bin on inpatient_beds_utilization: low <0.5 / moderate <0.7 / high <0.85 / crisis >=0.85) and census_region (map_values state -> Northeast/Midwest/South/West/territory). Publish to 'Prep Agent / 25 - HHS Hospital Capacity Timeseries' on Tableau Server for state public-health analysts. healthdata.gov resolves to AWS (15.197.185.55 / 3.33.161.206), not the Socrata FedRAMP NLB \u2014 stable from TabPy subprocesses.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "HHS Hospital Capacity Timeseries",
+      "description": "HHS COVID-19 Reported Patient Impact and Hospital Capacity by State Timeseries (healthdata.gov dataset g62h-syeh). One row per state x date, ~82k rows total (all 50 states + DC + PR + VI, daily from 2020-01 through 2024-04-27). Fields: state (2-letter), date (daily), critical_staffing_shortage_today_yes/no/not_reported, hospital_onset_covid, inpatient_beds, inpatient_beds_used, inpatient_beds_used_covid, previous_day_admission_adult_covid_confirmed/suspected, previous_day_admission_pediatric_covid_confirmed/suspected, staffed_adult_icu_bed_occupancy, staffed_icu_adult_patients_confirmed_and_suspected_covid, staffed_icu_adult_patients_confirmed_covid, total_adult_patients_hospitalized_confirmed_and_suspected_covid, total_adult_patients_hospitalized_confirmed_covid, total_pediatric_patients_hospitalized_*, total_staffed_adult_icu_beds, inpatient_beds_utilization (0-1 ratio), adult_icu_bed_utilization, adult_icu_bed_covid_utilization, percent_of_inpatients_with_covid. Pulled via Socrata SoQL offset pagination ($limit=5000 per page, 18 pages, cap 90k rows).",
+      "url": "https://healthdata.gov/resource/g62h-syeh.json",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 120,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_kind": "offset",
+        "json_page_param": "$offset",
+        "json_page_size_param": "$limit",
+        "json_page_size": 5000,
+        "json_page_start": 0,
+        "json_max_pages": 18,
+        "json_max_rows": 90000,
+        "json_derived_columns": [
+          {
+            "name": "utilization_band",
+            "kind": "numeric_bin",
+            "source_col": "inpatient_beds_utilization",
+            "thresholds": [
+              0.5,
+              0.7,
+              0.85
+            ],
+            "labels": [
+              "low",
+              "moderate",
+              "high",
+              "crisis"
+            ],
+            "default": "unknown"
+          },
+          {
+            "name": "census_region",
+            "kind": "map_values",
+            "source_col": "state",
+            "mapping": {
+              "CT": "Northeast",
+              "ME": "Northeast",
+              "MA": "Northeast",
+              "NH": "Northeast",
+              "RI": "Northeast",
+              "VT": "Northeast",
+              "NJ": "Northeast",
+              "NY": "Northeast",
+              "PA": "Northeast",
+              "IL": "Midwest",
+              "IN": "Midwest",
+              "MI": "Midwest",
+              "OH": "Midwest",
+              "WI": "Midwest",
+              "IA": "Midwest",
+              "KS": "Midwest",
+              "MN": "Midwest",
+              "MO": "Midwest",
+              "NE": "Midwest",
+              "ND": "Midwest",
+              "SD": "Midwest",
+              "DE": "South",
+              "FL": "South",
+              "GA": "South",
+              "MD": "South",
+              "NC": "South",
+              "SC": "South",
+              "VA": "South",
+              "DC": "South",
+              "WV": "South",
+              "AL": "South",
+              "KY": "South",
+              "MS": "South",
+              "TN": "South",
+              "AR": "South",
+              "LA": "South",
+              "OK": "South",
+              "TX": "South",
+              "AZ": "West",
+              "CO": "West",
+              "ID": "West",
+              "MT": "West",
+              "NV": "West",
+              "NM": "West",
+              "UT": "West",
+              "WY": "West",
+              "AK": "West",
+              "CA": "West",
+              "HI": "West",
+              "OR": "West",
+              "WA": "West",
+              "PR": "territory",
+              "VI": "territory",
+              "GU": "territory",
+              "MP": "territory",
+              "AS": "territory"
+            },
+            "default": "other"
+          }
+        ],
+        "json_schema": {
+          "state": "string",
+          "date": "string",
+          "census_region": "string",
+          "critical_staffing_shortage_today_yes": "int",
+          "critical_staffing_shortage_today_no": "int",
+          "hospital_onset_covid": "int",
+          "inpatient_beds": "decimal",
+          "inpatient_beds_used": "decimal",
+          "inpatient_beds_used_covid": "decimal",
+          "previous_day_admission_adult_covid_confirmed": "int",
+          "previous_day_admission_adult_covid_suspected": "int",
+          "previous_day_admission_pediatric_covid_confirmed": "int",
+          "previous_day_admission_pediatric_covid_suspected": "int",
+          "staffed_adult_icu_bed_occupancy": "decimal",
+          "staffed_icu_adult_patients_confirmed_and_suspected_covid": "decimal",
+          "staffed_icu_adult_patients_confirmed_covid": "decimal",
+          "total_adult_patients_hospitalized_confirmed_and_suspected_covid": "decimal",
+          "total_adult_patients_hospitalized_confirmed_covid": "decimal",
+          "total_pediatric_patients_hospitalized_confirmed_and_suspected_covid": "decimal",
+          "total_pediatric_patients_hospitalized_confirmed_covid": "decimal",
+          "total_staffed_adult_icu_beds": "decimal",
+          "inpatient_beds_utilization": "decimal",
+          "utilization_band": "string",
+          "adult_icu_bed_utilization": "decimal",
+          "adult_icu_bed_covid_utilization": "decimal",
+          "percent_of_inpatients_with_covid": "decimal"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "HHS Hospital Capacity Trend",
+        "date_col": "date",
+        "dimensions": [
+          "state",
+          "census_region",
+          "utilization_band"
+        ],
+        "rolling_window_days": 14,
+        "anomaly_z": 2.5,
+        "features_description": "Row-level HHS state-daily hospital-capacity observations (~82k rows, 2020-01 through 2024-04). Fields: state, date, census_region (Northeast/Midwest/South/West/territory), critical_staffing_shortage_today_yes/no, hospital_onset_covid, inpatient_beds, inpatient_beds_used, inpatient_beds_used_covid, previous_day_admission_adult_covid_confirmed/suspected, previous_day_admission_pediatric_covid_confirmed/suspected, staffed_adult_icu_bed_occupancy, staffed_icu_adult_patients_confirmed_covid, total_adult_patients_hospitalized_confirmed_and_suspected_covid, total_adult_patients_hospitalized_confirmed_covid, total_pediatric_patients_hospitalized_confirmed_and_suspected_covid, total_staffed_adult_icu_beds, inpatient_beds_utilization (0-1 ratio), utilization_band (low <0.5 / moderate <0.7 / high <0.85 / crisis >=0.85), adult_icu_bed_utilization, adult_icu_bed_covid_utilization, percent_of_inpatients_with_covid. Plus calendar features parsed from date.",
+        "stats_description": "Long-form HHS hospital-capacity statistics (one row per dimension x value x year x month over state, census_region, utilization_band). Includes 14-day rolling counts, z-score anomalies vs lifetime baseline (|z|>=2.5 flagged is_anomaly=True), lifetime rank/pct_of_total. Use to identify surge weeks by state/region and shifts in reporting cadence."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "HHS Hospital Capacity Detail",
+      "project": "25 - HHS Hospital Capacity Timeseries",
+      "source": "HHS Hospital Capacity Trend (Features)",
+      "description": "Row-level HHS state-daily hospital-capacity timeseries (~82k rows spanning 2020-01 through 2024-04-27 when federal reporting ended). Fields: state, date, census_region (Northeast/Midwest/South/West/territory), critical_staffing_shortage_today (yes/no/not_reported), hospital_onset_covid, inpatient_beds, inpatient_beds_used, inpatient_beds_used_covid, previous_day COVID admissions (adult confirmed/suspected + pediatric confirmed/suspected), staffed_adult_icu_bed_occupancy, ICU COVID patient counts (confirmed + confirmed_and_suspected), total_adult_patients_hospitalized COVID counts, pediatric_patients_hospitalized COVID counts, total_staffed_adult_icu_beds, inpatient_beds_utilization (0-1 ratio), utilization_band (low <0.5 / moderate <0.7 / high <0.85 / crisis >=0.85), adult_icu_bed_utilization, adult_icu_bed_covid_utilization, percent_of_inpatients_with_covid. Plus calendar features. Source: healthdata.gov dataset g62h-syeh. Refresh: weekly (dataset is historical, no new rows expected \u2014 schedule kept for archive validation)."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "HHS Hospital Capacity Stats",
+      "project": "25 - HHS Hospital Capacity Timeseries",
+      "source": "HHS Hospital Capacity Trend (Stats)",
+      "description": "Long-form HHS hospital-capacity statistics (one row per dimension x value x year x month over state, census_region, utilization_band). Includes 14-day rolling counts, z-score anomalies vs lifetime baseline (|z|>=2.5 flagged is_anomaly=True), lifetime rank/pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to see surge weeks by state/region and shifts in reporting cadence. Source: healthdata.gov g62h-syeh."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "weekly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "25 - HHS Hospital Capacity Timeseries",
+    "parent_project": "Prep Agent",
+    "flow_name": "HHS Hospital Capacity Timeseries",
+    "overwrite": true,
+    "cadence": "weekly",
+    "hour_utc": 13,
+    "minute_utc": 45,
+    "weekday": "tuesday",
+    "schedule_name_hint": "HHS Hospital Capacity Weekly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

@@ -1,0 +1,6 @@
+day_of_week_name,day_of_week_num,hour_bucket,hour_of_day,is_weekend,iso_week,last_change_date,month,org_id,org_id_prefix,org_link,org_name,org_record_class,post_code,postcode_area,primary_role_description,primary_role_id,quarter,record_freshness_days,region_group,year,year_month
+<redacted>,4,<redacted>,-1,False,15,<redacted>,4,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,2,103,<redacted>,2026,<redacted>
+<redacted>,0,<redacted>,-1,False,23,<redacted>,6,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,2,51,<redacted>,2026,<redacted>
+<redacted>,1,<redacted>,-1,False,46,<redacted>,11,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,4,981,<redacted>,2023,<redacted>
+<redacted>,1,<redacted>,-1,False,34,<redacted>,8,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,3,337,<redacted>,2025,<redacted>
+<redacted>,1,<redacted>,-1,False,46,<redacted>,11,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,<redacted>,4,981,<redacted>,2023,<redacted>
