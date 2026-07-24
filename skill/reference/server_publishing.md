@@ -58,11 +58,12 @@ PAT-authenticated, project-pickered, schedule-aware, and Cloud-aware.
 ### Publisher cadence map — sub-daily workaround
 
 `tflb_lib.publishing` only maps four Cloud schedule primitives:
-`hourly | daily | weekly | monthly`. `spec_validation` also
+`hourly | daily | weekly | monthly`. Top-level `refresh_cadence`
 accepts semantic values like `every_3_hours`, `every_6_hours`,
-`every_12_hours` — but if either of those reaches
-`server_publish.cadence`, the publisher raises
-`KeyError: 'every_6_hours'` at schedule wire-up time.
+`every_12_hours` — but `server_publish.cadence` is validated
+against the publisher-compatible set at spec-validation time. Using
+a sub-daily alias there now raises `SpecValidationError` up-front
+(older builds raised `KeyError` deep in publish).
 
 Working pattern for sub-daily flows (embassy_threat_monitor_v2,
 doe_data_center_energy_hourly):

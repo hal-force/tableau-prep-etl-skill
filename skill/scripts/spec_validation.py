@@ -52,6 +52,11 @@ EVAL_STRATEGIES = (
 )
 REFRESH_CADENCES = ("once", "hourly", "every_3_hours", "every_6_hours",
                     "daily", "weekly", "monthly", "on_demand")
+# `server_publish.cadence` is a proper subset — Tableau REST /
+# TSC only speaks hourly/daily/weekly/monthly. Sub-daily aliases
+# on `refresh_cadence` are documentation-only and should be
+# collapsed to `hourly` at publish time.
+SERVER_PUBLISH_CADENCES = ("hourly", "daily", "weekly", "monthly")
 OUTPUT_KINDS = ("hyper", "csv", "published_data_source")
 
 
@@ -495,6 +500,19 @@ def validate_spec_strict(spec_dict: dict) -> dict:
     cadence = spec_dict.get("refresh_cadence", "once")
     if cadence not in REFRESH_CADENCES:
         errors.append(f"refresh_cadence must be one of {REFRESH_CADENCES}")
+
+    sp = spec_dict.get("server_publish")
+    if isinstance(sp, dict):
+        sp_cadence = str(sp.get("cadence", "daily")).lower()
+        if sp_cadence not in SERVER_PUBLISH_CADENCES:
+            errors.append(
+                f"server_publish.cadence must be one of {SERVER_PUBLISH_CADENCES} "
+                f"(Tableau REST/TSC only accept those four; sub-daily "
+                f"aliases like 'every_3_hours' belong on top-level "
+                f"`refresh_cadence` — set `server_publish.cadence: hourly` "
+                f"as the closest scheduler match). See "
+                f"skill/reference/server_publishing.md."
+            )
 
     outputs = spec_dict.get("outputs") or []
     if not outputs:

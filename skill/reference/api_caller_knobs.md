@@ -26,11 +26,15 @@ example — when in doubt, copy the closest one and edit.
 }
 ```
 
-`extra._skip_auto_casts: true` is set on every Prep Agent demo
-spec — it disables the cast planner so the schema declared in
-JSON_SCHEMA / CSV_SCHEMA flows through verbatim. Skip this and the
-cast planner can introduce ChangeColumnType nodes that don't match
-the actual data shape, dropping rows silently.
+`extra._skip_auto_casts: true` is set on 39 of the 44 archived
+specs — the effective default for anything that already declares a
+`json_schema` / `csv_schema` on the source. Rule of thumb: if you
+have an explicit schema, set this. The cast planner is a **heuristic
+convenience layer** that runs when no schema is declared; on real-world
+column names (CamelCase, `ID` suffixes, date-lookalike strings) it can
+introduce ChangeColumnType nodes that don't match the actual data
+shape and drop rows silently. Turn it off unless you're relying on
+the heuristics.
 
 ## HTTP transport
 

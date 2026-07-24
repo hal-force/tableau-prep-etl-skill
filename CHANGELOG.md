@@ -6,8 +6,27 @@ starting from the initial `v0.9.0-preview` release.
 
 ## [Unreleased]
 
+### Added
+- `docs/authoring_a_spec.md` and `docs/worked_examples.md` — split
+  out of the top-level README. README trimmed from 456 → 363 lines;
+  the 37-row worked-examples table now lives in `docs/`.
+- Unit tests for `metadata_writer` (pure helpers + .tds injection
+  round-trip via a fake TSC server) and for `run_loop` pure helpers
+  (`_new_run_id` / `_safe_tfl_basename` / `_spec_from_dict`) —
+  `skill/tests/test_metadata_writer.py`, `test_run_loop.py`. Total
+  suite is now 116 tests; runs in <0.3 s with no live TabPy /
+  Tableau / LLM dependency.
+
 ### Changed
-- Nothing yet.
+- `spec_validation` now validates `server_publish.cadence` against
+  the publisher-compatible set (`hourly | daily | weekly | monthly`)
+  at spec-validation time. Sub-daily aliases like `every_3_hours`
+  are still accepted on top-level `refresh_cadence` but must
+  collapse to `hourly` for `server_publish.cadence`; the error
+  message points at `skill/reference/server_publishing.md`.
+- `tflb_lib.publishing` `ValueError`s for unknown cadences now
+  reference `server_publish.cadence` explicitly and point at the
+  same doc, instead of a bare `Unknown cadence 'x'`.
 
 ## [0.9.0-preview]
 

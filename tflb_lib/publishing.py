@@ -541,7 +541,13 @@ def _build_interval_item(want: ScheduleSpec):
         return TSC.WeeklyInterval(start, day_const)
     if cadence == "monthly":
         return TSC.MonthlyInterval(start, want.day_of_month)
-    raise ValueError(f"Unknown cadence {cadence!r}")
+    raise ValueError(
+        f"Unknown server_publish.cadence {cadence!r}. Tableau REST/TSC "
+        f"only accept 'hourly' | 'daily' | 'weekly' | 'monthly'. Sub-daily "
+        f"aliases (every_3_hours, every_6_hours) belong on top-level "
+        f"`refresh_cadence` — set `server_publish.cadence: hourly` as the "
+        f"scheduler match. See skill/reference/server_publishing.md."
+    )
 
 
 def _create_cloud_task(
@@ -643,4 +649,10 @@ def _cloud_intervals_xml(want: ScheduleSpec) -> str:
         return f'<intervals><interval weekDay="{want.weekday.title()}"/></intervals>'
     if cadence == "monthly":
         return f'<intervals><interval monthDay="{want.day_of_month}"/></intervals>'
-    raise ValueError(f"Unknown cadence {cadence!r}")
+    raise ValueError(
+        f"Unknown server_publish.cadence {cadence!r}. Tableau REST/TSC "
+        f"only accept 'hourly' | 'daily' | 'weekly' | 'monthly'. Sub-daily "
+        f"aliases (every_3_hours, every_6_hours) belong on top-level "
+        f"`refresh_cadence` — set `server_publish.cadence: hourly` as the "
+        f"scheduler match. See skill/reference/server_publishing.md."
+    )
