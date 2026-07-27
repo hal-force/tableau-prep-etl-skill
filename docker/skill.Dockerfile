@@ -18,10 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /workspace
 
 # Two-step deps: system reqs first (cache-friendly), skill code last.
-# pytest / Faker are dev-time deps — pinned here so a fresh container
-# can immediately run the test suite. Faker is also declared optional
-# in requirements.txt so the archive path can use it; we install it
-# eagerly here to keep the image self-contained.
+# requirements.txt pulls Faker (used by the archive path); pytest is
+# added on top so a fresh container can immediately run the suite.
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt pytest
 

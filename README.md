@@ -83,7 +83,7 @@ source stays in this repo for version control.
 
 ### 2. Python deps
 
-The skill code itself runs in your project's Python (3.10+):
+The skill code itself runs in your project's Python (3.11+):
 
 ```sh
 pip install -r requirements.txt
@@ -389,4 +389,5 @@ anymore, listed for cross-reference):
   NREL, Data.gov).
 - Metadata writer + .tds-roundtrip column-description apply
   (`metadata_api.md`).
-- 10-flow Prep Agent demo collection under a nested parent project.
+- 50+ archived flows (incl. the Prep Agent demo collection under a
+  nested parent project, and the 10 advanced-route use cases).
