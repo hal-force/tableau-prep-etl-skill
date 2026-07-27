@@ -1,0 +1,116 @@
+{
+  "request": "Advanced-route deliverable: post-disaster grant velocity. Pull FEMA Disaster Declaration Summaries for the last 24 months (declarationDate > 2024-07-24) as the F1 anchor. Enrich with days_since_declaration, days_open. Publish two DSes to Tableau Cloud under Prep Agent. Grant-side joins to 'SLED Grants FY24 Detail' + 'USASpending SLED Grants' + 'Fed Outlays' happen at dashboard time \u2014 this is the 4-DS join demo.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "FEMA Disaster Declarations 24mo",
+      "description": "OpenFEMA DisasterDeclarationsSummaries v2 filtered to declarationDate > 2024-07-24 (24mo window). Each row = one declaration (county-level granularity). OData v2 pagination.",
+      "url": "https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries?$filter=declarationDate%20gt%20%272024-07-24T00:00:00.000Z%27",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_param": "$skip",
+        "json_page_size_param": "$top",
+        "json_page_size": 1000,
+        "json_page_start": 1,
+        "json_page_kind": "offset",
+        "json_max_pages": 20,
+        "json_records_path": "DisasterDeclarationsSummaries",
+        "json_derived_columns": [
+          {
+            "name": "days_since_declaration",
+            "kind": "days_since",
+            "source_col": "declarationDate"
+          },
+          {
+            "name": "days_open",
+            "kind": "days_between",
+            "start_col": "declarationDate",
+            "end_col": "disasterCloseoutDate"
+          }
+        ],
+        "json_schema": {
+          "femaDeclarationString": "string",
+          "disasterNumber": "int",
+          "state": "string",
+          "declarationType": "string",
+          "declarationDate": "string",
+          "fyDeclared": "int",
+          "incidentType": "string",
+          "declarationTitle": "string",
+          "incidentBeginDate": "string",
+          "incidentEndDate": "string",
+          "disasterCloseoutDate": "string",
+          "tribalRequest": "bool",
+          "fipsStateCode": "string",
+          "fipsCountyCode": "string",
+          "designatedArea": "string",
+          "ihProgramDeclared": "bool",
+          "iaProgramDeclared": "bool",
+          "paProgramDeclared": "bool",
+          "hmProgramDeclared": "bool",
+          "days_since_declaration": "int",
+          "days_open": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Post Disaster Velocity Trend",
+        "date_col": "declarationDate",
+        "dimensions": [
+          "state",
+          "incidentType"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "FEMA declaration anchor rows keyed on disasterNumber + state + declarationDate with days_since_declaration and days_open. Join at Tableau layer to: (a) 'SLED Grants FY24 Detail' filtered to Start Date in [declarationDate, declarationDate+90d] on state for F2 post-declaration grant $; (b) same DS at (declarationDate-365d, declarationDate) monthly average for F3 baseline; compute velocity_ratio = F2 / (F3 * 3). First-grant lag = min(Start Date - declarationDate) in the same state within 90d.",
+        "stats_description": "Per-(state, incidentType) declaration rate stats for 24mo window. Monthly counts, 30d rolling, z-score anomalies flag surges in declarations (e.g., hurricane season peaks)."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Post Disaster Anchor Detail",
+      "project": "39 - Post Disaster Grant Velocity",
+      "source": "Post Disaster Velocity Trend (Features)",
+      "description": "Row-level FEMA disaster declarations from the last 24 months (declarationDate > 2024-07-24) enriched with days_since_declaration, days_open. Fields include femaDeclarationString, disasterNumber, state, declarationType, declarationDate, fyDeclared, incidentType, declarationTitle, incidentBeginDate/EndDate, disasterCloseoutDate, tribalRequest, fipsStateCode, fipsCountyCode, designatedArea, ih/ia/pa/hmProgramDeclared flags, and calendar features. Refresh: daily.\n\nAdvanced-route notes: this is the FEMA-ANCHOR leg of a 4-DS post-disaster grant velocity view. Grant-side joins happen at Tableau layer to: (a) 'SLED Grants FY24 Detail' + 'USASpending SLED Grants'; (b) 'Fed Outlays' baseline context. Post-declaration grant velocity is TEMPORAL CORRELATION not causation \u2014 CFDA / HMGP program-code crosswalk is not on-site, so we cannot tag which grants are recovery-specific vs unrelated renewals. Major disaster declarations only (DR-prefix)."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "Post Disaster Trend Stats",
+      "project": "39 - Post Disaster Grant Velocity",
+      "source": "Post Disaster Velocity Trend (Stats)",
+      "description": "Per-(state, incidentType) declaration statistics for the 24mo window: monthly counts, 30d rolling, z-score anomalies (|z|>=2.0 flagged is_anomaly=True). Use to spot hurricane / wildfire seasonal surges."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "39 - Post Disaster Grant Velocity",
+    "parent_project": "Prep Agent",
+    "flow_name": "Post Disaster Grant Velocity",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 9,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "Post Disaster Velocity Daily Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

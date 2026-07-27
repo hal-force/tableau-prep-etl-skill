@@ -1,0 +1,103 @@
+{
+  "request": "Advanced-route deliverable: oversight vs execution \u2014 GRACEFUL DEGRADE on Congressional-interest RED. Pull 18mo of Federal Register documents ACROSS all executive-branch agencies (not just DoD) as the oversight-signal proxy. Publish two DSes to Tableau Cloud under Prep Agent. Execution-side joins to DoD Contracts + USASpending SLED Grants happen at dashboard time.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "Federal Register 18mo All Agencies",
+      "description": "Federal Register /documents.json filtered to publication_date >= 2025-01-24 through 2026-07-24 (~18mo). No agency filter \u2014 pulls the cross-agency population for downstream Tableau slicing. Envelope: {count, results:[{title, type, document_number, html_url, publication_date, agencies:[{name}], ...}]}.",
+      "url": "https://www.federalregister.gov/api/v1/documents.json?conditions%5Bpublication_date%5D%5Bgte%5D=2025-01-24&conditions%5Bpublication_date%5D%5Blte%5D=2026-07-24",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_records_path": "results",
+        "json_paginate": true,
+        "json_page_kind": "page",
+        "json_page_param": "page",
+        "json_page_size_param": "per_page",
+        "json_page_size": 100,
+        "json_page_start": 1,
+        "json_max_pages": 50,
+        "json_derived_columns": [
+          {
+            "name": "primary_agency",
+            "kind": "list_first_field",
+            "source_col": "agencies",
+            "field": "name"
+          },
+          {
+            "name": "days_since_published",
+            "kind": "days_since",
+            "source_col": "publication_date"
+          }
+        ],
+        "json_schema": {
+          "title": "string",
+          "type": "string",
+          "abstract": "string",
+          "document_number": "string",
+          "html_url": "string",
+          "publication_date": "string",
+          "primary_agency": "string",
+          "days_since_published": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Oversight Execution Trend",
+        "date_col": "publication_date",
+        "dimensions": [
+          "type",
+          "primary_agency"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level Federal Register documents from the last 18 months across all agencies, with primary_agency extracted and days_since_published + calendar features. Compute monthly document counts per (agency, type) at Tableau layer, then join to 'DoD Award Detail' + 'USASpending SLED Grants' by month + agency for the execution side. Divergence flag = F1 z-score > 2 AND F2 z-score < 0.",
+        "stats_description": "Per-(agency, type) monthly Federal Register statistics with 30d rolling counts and z-score anomalies. Elevated z-scores mark oversight-signal surges."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Oversight vs Execution Detail",
+      "project": "40 - Oversight vs Execution",
+      "source": "Oversight Execution Trend (Features)",
+      "description": "Row-level Federal Register documents 2025-01-24 through 2026-07-24, one row per document. Fields: title, type (Rule/Notice/Proposed Rule), abstract, document_number, html_url, publication_date, primary_agency (first agency in the agencies list), days_since_published, plus calendar features. Refresh: daily.\n\nAdvanced-route notes: this is the OVERSIGHT-PROXY leg of an oversight-vs-execution view, with GRACEFUL DEGRADE on the Congressional-interest RED gap. F4 Congressional oversight pressure (hearings, CRS reports) is NOT available as a structured DS via any approved external host \u2014 Congress.gov API lacks per-agency oversight-intensity metrics and CRS reports aren't indexed. Effect: hearing pressure that hasn't yet materialized as a Fed Register action is INVISIBLE here. Use in Tableau by joining to: (a) 'DoD Award Detail' on month + agency for defense execution; (b) 'USASpending SLED Grants' on month + agency for civilian grants execution. Divergence patterns are QUESTION-RAISERS, not answers."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "Oversight vs Execution Stats",
+      "project": "40 - Oversight vs Execution",
+      "source": "Oversight Execution Trend (Stats)",
+      "description": "Per-(agency, type) Federal Register velocity: monthly counts, 30d rolling counts, z-score anomalies (|z|>=2.0 flagged is_anomaly=True). Use to spot oversight-signal surges per agency."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "40 - Oversight vs Execution",
+    "parent_project": "Prep Agent",
+    "flow_name": "Oversight vs Execution",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 10,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "Oversight vs Execution Daily Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

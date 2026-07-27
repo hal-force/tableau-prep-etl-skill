@@ -1,0 +1,220 @@
+{
+  "request": "Advanced-route deliverable: CENTCOM supplier concentration risk. Pull DoD contract awards from USASpending.gov filtered to CENTCOM-adjacent place-of-performance countries (BH/IQ/JO/KW/OM/QA/SA/SY/YE/AF/EG/IR/LB/IL/KZ/KG/TJ/TM/UZ/PK), rolling 12-month window (2025-07-24 through 2026-07-24). Enrich with NAICS flattening, days_of_performance, open_window_flag, and per-prime trend / concentration / schedule-slip indicators. Publish two DSes on Tableau Cloud under Prep Agent parent. CENTCOM-adjacency is a proxy via place-of-performance country codes; USASpending does not carry combatant-command tags.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "USASpending CENTCOM DoD Awards 12mo",
+      "description": "USASpending.gov spending_by_award API, DoD top-tier awarding agency, place-of-performance country codes in the CENTCOM AOR proxy set, rolling 12-month window ending 2026-07-24. Award types A/B/C/D. Public, keyless. POST + JSON body; pagination via page in body with page_metadata.hasNext cursor termination.",
+      "url": "https://api.usaspending.gov/api/v2/search/spending_by_award/",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 2,
+        "json_http_method": "POST",
+        "json_body": {
+          "filters": {
+            "time_period": [
+              {
+                "start_date": "2025-07-24",
+                "end_date": "2026-07-24"
+              }
+            ],
+            "award_type_codes": [
+              "A",
+              "B",
+              "C",
+              "D"
+            ],
+            "agencies": [
+              {
+                "type": "awarding",
+                "tier": "toptier",
+                "name": "Department of Defense"
+              }
+            ],
+            "place_of_performance_scope": "foreign",
+            "place_of_performance_locations": [
+              {
+                "country": "BHR"
+              },
+              {
+                "country": "IRQ"
+              },
+              {
+                "country": "JOR"
+              },
+              {
+                "country": "KWT"
+              },
+              {
+                "country": "OMN"
+              },
+              {
+                "country": "QAT"
+              },
+              {
+                "country": "SAU"
+              },
+              {
+                "country": "SYR"
+              },
+              {
+                "country": "YEM"
+              },
+              {
+                "country": "AFG"
+              },
+              {
+                "country": "EGY"
+              },
+              {
+                "country": "IRN"
+              },
+              {
+                "country": "LBN"
+              },
+              {
+                "country": "ISR"
+              },
+              {
+                "country": "KAZ"
+              },
+              {
+                "country": "KGZ"
+              },
+              {
+                "country": "TJK"
+              },
+              {
+                "country": "TKM"
+              },
+              {
+                "country": "UZB"
+              },
+              {
+                "country": "PAK"
+              }
+            ]
+          },
+          "fields": [
+            "Award ID",
+            "Recipient Name",
+            "Awarding Agency",
+            "Awarding Sub Agency",
+            "Award Amount",
+            "Award Type",
+            "Start Date",
+            "End Date",
+            "Description",
+            "NAICS",
+            "Place of Performance Country Code",
+            "Place of Performance State Code"
+          ],
+          "limit": 100
+        },
+        "json_paginate": true,
+        "json_page_in_body": true,
+        "json_page_param": "page",
+        "json_page_size_param": "",
+        "json_page_size": 100,
+        "json_page_start": 1,
+        "json_page_kind": "index",
+        "json_max_pages": 50,
+        "json_records_path": "results",
+        "json_has_next_path": "page_metadata.hasNext",
+        "json_derived_columns": [
+          {
+            "name": "naics_code",
+            "kind": "dict_field",
+            "source_col": "NAICS",
+            "field": "code"
+          },
+          {
+            "name": "naics_description",
+            "kind": "dict_field",
+            "source_col": "NAICS",
+            "field": "description"
+          },
+          {
+            "name": "days_of_performance",
+            "kind": "days_between",
+            "start_col": "Start Date",
+            "end_col": "End Date"
+          }
+        ],
+        "json_schema": {
+          "Award ID": "string",
+          "Recipient Name": "string",
+          "Awarding Agency": "string",
+          "Awarding Sub Agency": "string",
+          "Award Amount": "decimal",
+          "Award Type": "string",
+          "Start Date": "string",
+          "End Date": "string",
+          "Description": "string",
+          "Place of Performance Country Code": "string",
+          "Place of Performance State Code": "string",
+          "naics_code": "string",
+          "naics_description": "string",
+          "days_of_performance": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "CENTCOM Supplier Trend",
+        "date_col": "Start Date",
+        "dimensions": [
+          "Recipient Name",
+          "Awarding Sub Agency"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Per-award CENTCOM-adjacent DoD contract records with derived days_of_performance, open_window_flag (End Date >= today), slip_flag (End Date <= today - 90d), naics_code, and calendar features.",
+        "stats_description": "Long-form per-prime and per-sub-agency award statistics over a 12-month rolling window in the CENTCOM AOR. Includes monthly award count, 30-day rolling counts, dollar-weighted average award size, HHI-like concentration signals, and anomaly flags."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "CENTCOM Supplier Awards Detail",
+      "project": "32 - CENTCOM Supplier Risk",
+      "source": "CENTCOM Supplier Trend (Features)",
+      "description": "Row-level DoD contract awards with CENTCOM-adjacent place-of-performance (20-country AOR proxy set) over a rolling 12-month window ending 2026-07-24. Award types A/B/C/D. Includes Award ID, Recipient Name, Awarding Sub Agency (Army/Navy/AF/DLA/etc.), Award Amount, Award Type, Start/End dates, Description, naics_code + naics_description, days_of_performance, Place of Performance Country Code + State Code, plus calendar features (year, month, quarter, day_of_week, iso_week). Source: api.usaspending.gov/api/v2/search/spending_by_award. Refresh: monthly.\n\nAdvanced-route notes: CENTCOM-adjacency is a proxy via place-of-performance country codes (BH/IQ/JO/KW/OM/QA/SA/SY/YE/AF/EG/IR/LB/IL/KZ/KG/TJ/TM/UZ/PK). USASpending does not expose combatant-command tags. Prime-award tier only; sub-contracts and IDVs are excluded."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "CENTCOM Supplier Risk Stats",
+      "project": "32 - CENTCOM Supplier Risk",
+      "source": "CENTCOM Supplier Trend (Stats)",
+      "description": "Long-form per-Recipient and per-Awarding-Sub-Agency statistics for DoD awards in the CENTCOM AOR proxy set (rolling 12mo). Includes 30-day rolling counts, monthly counts, YoY deltas + pct change (limited by window depth), z-score anomalies (|z|>=2.0), lifetime rank and pct_of_total. Joinable from Tableau on (dimension, value, year, month). Use to identify primes with surging CENTCOM award volume or unusually high dollar concentration. Source: USASpending.gov."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "32 - CENTCOM Supplier Risk",
+    "parent_project": "Prep Agent",
+    "flow_name": "CENTCOM Supplier Risk",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 14,
+    "minute_utc": 45,
+    "weekday": "tuesday",
+    "day_of_month": 8,
+    "schedule_name_hint": "CENTCOM Supplier Risk Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

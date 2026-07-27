@@ -1,0 +1,36 @@
+{
+  "question": "For each FEMA disaster declaration in the last 24 months, how quickly do federal grant dollars flow into the affected state?",
+  "internal_scan": {
+    "site": "<sanitized>",
+    "ran_at_utc": "2026-07-24T16:15:00Z",
+    "matches": [
+      {"ds_name": "FEMA Disasters", "project": "Prep Agent", "score": 92.0, "note": "F1 declaration events."},
+      {"ds_name": "USASpending SLED Grants", "project": "Prep Agent", "score": 78.0, "note": "F2/F3 grant flow (FY25-26)."},
+      {"ds_name": "SLED Grants FY24 Detail (flow #3)", "project": "Prep Agent", "score": 71.0, "note": "F2 grant flow (FY24)."},
+      {"ds_name": "Fed Outlays", "project": "Prep Agent", "score": 40.0, "note": "F3 baseline context (not required for build)."}
+    ],
+    "verdict": "All feeder DSes exist. This flow publishes a NEW velocity-scored view keyed on disasterNumber. Uses FEMA as the anchor and pulls fresh disaster data with 24mo window."
+  },
+  "indicators": [
+    {"id": "F1.1", "name": "Disaster identity", "window": "24mo",
+      "candidates": [{"tier": "external", "source": "OpenFEMA DisasterDeclarationsSummaries", "result": "GREEN"}],
+      "acceptance": "declarationDate populated"},
+    {"id": "F2.1", "name": "Post-decl 90d grant $", "window": "24mo",
+      "candidates": [{"tier": "internal", "source": "SLED Grants FY24 + FY25-26 DSes, filtered by (state, Start Date in [declarationDate, declarationDate+90d])", "result": "GREEN — dashboard-time join"}],
+      "acceptance": "Grant DSes cover the disaster window"},
+    {"id": "F3.1", "name": "State 12mo baseline", "window": "trailing",
+      "candidates": [{"tier": "derived", "source": "Tableau windowed average on SLED grants"}],
+      "acceptance": "F2 met"},
+    {"id": "F4.1", "name": "Velocity ratio", "window": "derived",
+      "candidates": [{"tier": "derived"}],
+      "acceptance": "F2 + F3 met"},
+    {"id": "F5.1", "name": "First-grant lag", "window": "24mo",
+      "candidates": [{"tier": "derived", "source": "Tableau min(Start Date - declarationDate)"}],
+      "acceptance": "F2 met"}
+  ],
+  "preference_order_rule": "This build publishes only the FEMA-anchored disaster DS with disaster-focused enrichment. The grant-side joins happen at dashboard time to avoid tightly coupling four separate refresh cadences into one build.",
+  "approval_required_before_acquisition": ["None — fema.gov approved."],
+  "gap_summary": [
+    "Post-declaration grant attribution is TEMPORAL CORRELATION, not causal. Many grants flowing in the 90d window are unrelated program renewals; we cannot tag which grants are recovery-specific without a CFDA / HMGP program-code crosswalk."
+  ]
+}

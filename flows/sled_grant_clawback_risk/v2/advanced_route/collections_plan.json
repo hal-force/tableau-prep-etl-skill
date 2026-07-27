@@ -1,0 +1,82 @@
+{
+  "question": "Which state/local/educational grants disbursed by federal agencies in FY24 show the highest composite clawback-risk score, computed from recipient churn, outlay stagnation, program-status signals from the Federal Register, and FY25 renewal patterns?",
+  "internal_scan": {
+    "site": "<sanitized>",
+    "ran_at_utc": "2026-07-24T14:38:00Z",
+    "matches": [
+      {"ds_name": "USASpending SLED Grants", "project": "Prep Agent", "score": 88.0, "note": "Existing FY25-26 window; needs FY24 pull as a new source. Existing DS is useful as F4.1 (renewal) reference."},
+      {"ds_name": "Fed Register Actions", "project": "Prep Agent", "score": 74.0, "note": "Existing 18mo Federal Register pull; extends to Jan 2025. Needed to backfill FY23 to cover the 24mo signal window."},
+      {"ds_name": "FedReg DoD", "project": "Prep Agent", "score": 32.0, "note": "DoD-scoped; not useful here."}
+    ],
+    "verdict": "Two internal DSes are strong candidates for F4 (renewal via FY25 DS) and F3 (termination signal via Fed Register). Need a NEW pull for FY24-specific SLED grants (existing DS starts 2024-10-01 = FY25). Fed Register 18mo covers most of the 24mo signal window."
+  },
+  "indicators": [
+    {
+      "id": "F1.1",
+      "name": "Distinct Recipient Names per prime_award_recipient_id",
+      "window": "FY24 + FY25",
+      "data_required": ["prime_award_recipient_id, Recipient Name"],
+      "candidates": [
+        {"tier": "internal", "source": "USASpending SLED Grants (FY25-26)", "result": "PARTIAL — covers FY25"},
+        {"tier": "external", "source": "USASpending FY24 SLED pull (2023-10-01 to 2024-09-30)", "result": "PRIMARY — required for FY24 rows"}
+      ],
+      "acceptance": "≥1000 FY24 grants; ≥95% have both fields"
+    },
+    {
+      "id": "F2.1",
+      "name": "(Award Amount - Total Outlays) / Award Amount for awards ≥180d past Start",
+      "window": "as-of today",
+      "data_required": ["Award Amount, Total Outlays, Start Date"],
+      "candidates": [{"tier": "derived", "source": "row-level computation on FY24 pull"}],
+      "acceptance": "Total Outlays populated on ≥80% of rows"
+    },
+    {
+      "id": "F2.2",
+      "name": "Absolute unspent dollars per award",
+      "window": "as-of today",
+      "data_required": ["Same as F2.1"],
+      "candidates": [{"tier": "derived", "source": "computed"}],
+      "acceptance": "F2.1 met"
+    },
+    {
+      "id": "F3.1",
+      "name": "Count of Fed Register termination / rescission / amendment actions per Awarding Sub Agency",
+      "window": "24mo (2024-07-24 → 2026-07-24)",
+      "data_required": ["Fed Register agency, action type / abstract keyword scan"],
+      "candidates": [
+        {"tier": "internal", "source": "Fed Register Actions (existing 18mo DS)", "result": "PARTIAL — 18mo covers 2025-01 onward; missing FY24-Q1"},
+        {"tier": "external", "source": "federalregister.gov API with extended window", "result": "OPTIONAL — 6mo backfill would upgrade F3 from AMBER to GREEN"}
+      ],
+      "acceptance": "≥200 candidate actions matched to an Awarding Sub Agency by name"
+    },
+    {
+      "id": "F3.2",
+      "name": "Days since latest such action per sub-agency",
+      "window": "24mo",
+      "data_required": ["Same as F3.1"],
+      "candidates": [{"tier": "derived", "source": "computed"}],
+      "acceptance": "F3.1 met"
+    },
+    {
+      "id": "F4.1",
+      "name": "Boolean: same recipient has ≥1 FY25 award from same sub-agency",
+      "window": "FY25",
+      "data_required": ["FY25 grants with prime_award_recipient_id + Awarding Sub Agency"],
+      "candidates": [{"tier": "internal", "source": "USASpending SLED Grants (existing FY25 DS)", "result": "GREEN — this is the primary use of the internal DS"}],
+      "acceptance": "existing DS has ≥1000 FY25 rows (verified in Phase 0 metrics)"
+    },
+    {
+      "id": "F5.1",
+      "name": "Sub-agency clawback-signal density (F3.1 / award count)",
+      "window": "24mo",
+      "data_required": ["F3.1 + FY24 award counts per sub-agency"],
+      "candidates": [{"tier": "derived", "source": "computed"}],
+      "acceptance": "F3.1 and F1.1 both met"
+    }
+  ],
+  "preference_order_rule": "INTERNAL first (partial Fed Register + FY25 SLED) → EXTERNAL FY24 pull → DERIVED. This is a hybrid: the answering flow bundles a new FY24 pull with references to two existing internal DSes.",
+  "approval_required_before_acquisition": ["None — USASpending and federalregister.gov both already approved."],
+  "gap_summary": [
+    "F3 signal window: existing Fed Register DS covers 18mo (2025-01 onward). For a full 24mo signal window we'd re-pull with 2024-07-24 start. Downgraded to AMBER for the demo; the flow uses whatever the existing DS provides. Effect: FY24-Q1 terminations not counted; risk score may under-flag sub-agencies whose terminations were concentrated early."
+  ]
+}

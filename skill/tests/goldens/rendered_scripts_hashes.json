@@ -45,6 +45,16 @@
       "trend_features_b0.py": "83173705d4b346b199db8f44856c80cd94842c86752c41cd823b8bebc411fce5",
       "trend_stats_b0.py": "1be3bae1adb4476429f57823e5f8539dfe5a04c27ce7c4c8af448f894e64cbd0"
     },
+    "centcom_supplier_risk/v1": {
+      "api_caller_b0.py": "e7d4e100c1b4b922a7277fb939ea277808e95062b553b157ae5f9e4a8e3cabca",
+      "trend_features_b0.py": "cdc25f3be78a54854b73f9236eb0407cdf8a1f26df30a860d02ac648bd87ad50",
+      "trend_stats_b0.py": "94f9d9b4334e31da28f709389e39674c1f45dc520f685f3d1498b5dc5ba48a4a"
+    },
+    "centcom_supplier_risk/v2": {
+      "api_caller_b0.py": "e7d4e100c1b4b922a7277fb939ea277808e95062b553b157ae5f9e4a8e3cabca",
+      "trend_features_b0.py": "cdc25f3be78a54854b73f9236eb0407cdf8a1f26df30a860d02ac648bd87ad50",
+      "trend_stats_b0.py": "94f9d9b4334e31da28f709389e39674c1f45dc520f685f3d1498b5dc5ba48a4a"
+    },
     "cisa_kev/v1": {
       "api_caller_b0.py": "b0b9c313daaa5d89e4de524c9b23a19f79d169ef57d20bcad3a5e69236917ad7",
       "trend_features_b0.py": "12b5f16e5455c271167237c486e8961906a196e532022469c8b42fc045089018",
@@ -96,6 +106,11 @@
       "embassy_risk_summary_b0.py": "824341b7fdb3b2fc611691421033f6b8c05944ae8c4bdad8d4205fde9e469635",
       "embassy_threat_join_b0.py": "058233297e63ba3dccaf0e6e74bd5d0393915f44e548e9ac7464ea6f0de80d73"
     },
+    "embassy_threat_monitor_v2/v2": {
+      "api_caller_b0.py": "36968f7e83e4fafd07c77d3c8fb559279c74174eb2c55dc7db50a4549658242e",
+      "embassy_risk_summary_b0.py": "824341b7fdb3b2fc611691421033f6b8c05944ae8c4bdad8d4205fde9e469635",
+      "embassy_threat_join_b0.py": "058233297e63ba3dccaf0e6e74bd5d0393915f44e548e9ac7464ea6f0de80d73"
+    },
     "epa_aqs_ozone/v1": {
       "api_caller_b0.py": "e29470d96a9e812242f00b5c0774259e419148ff067ba69c582422c6f395b225",
       "trend_features_b0.py": "7aa29e2cae5a9d564842f466d51e2ea00ecad34dd80ae5bee718ca2d4ccc9902",
@@ -121,6 +136,16 @@
       "trend_features_b0.py": "851afc4883e0430ca9e44828ec3943785547424863b6d7cbabffd05242e44b85",
       "trend_stats_b0.py": "98a918dda27518f0d4216a1fe5433bcc88bd40e4f5aea2d56996e5f2139fcb04"
     },
+    "federal_kev_exposure/v1": {
+      "api_caller_b0.py": "3c889a33c08713a1f36d0f3576786d1c5682daf1127de5ee7a1aeab03643e9f1",
+      "trend_features_b0.py": "4cb52ceccdcb3c909dd512f08a16e7ead34cb296e6aad5029dc9f27065064b57",
+      "trend_stats_b0.py": "f5f41d28f83e53ddd0759600b6698596b1a8dd610ac0250f2b5e2d44d193dc9b"
+    },
+    "federal_kev_exposure/v2": {
+      "api_caller_b0.py": "3c889a33c08713a1f36d0f3576786d1c5682daf1127de5ee7a1aeab03643e9f1",
+      "trend_features_b0.py": "4cb52ceccdcb3c909dd512f08a16e7ead34cb296e6aad5029dc9f27065064b57",
+      "trend_stats_b0.py": "f5f41d28f83e53ddd0759600b6698596b1a8dd610ac0250f2b5e2d44d193dc9b"
+    },
     "fedreg_dod/v1": {
       "api_caller_b0.py": "1e11489f7ba0ed9fe3c08bc1502b6ffd2fe2ef0bc3d43f07054c3c96e9e00df5",
       "trend_features_b0.py": "a1b7d70a314c9c008d7dee6e1599a18a602f346943a9d8a2f7c2e41f547b1775",
@@ -137,6 +162,12 @@
     "gdelt_global/v1": {
       "api_caller_b0.py": "b4415d672689d67b32c4725186638aa25ec412ec8cdd0237f804b85b74fc7549"
     },
+    "grant_outcome_equity/v1": {
+      "api_caller_b0.py": "cff03e0b96e7ed40cf031d440225a1794eca2a791804793de8c386a5643eb8b7"
+    },
+    "grant_outcome_equity/v2": {
+      "api_caller_b0.py": "cff03e0b96e7ed40cf031d440225a1794eca2a791804793de8c386a5643eb8b7"
+    },
     "healthdata_hospital_capacity/v1": {
       "api_caller_b0.py": "e2e9b36164f647f6a957341ac2d1bfd936bf060872b8650e9d6959868da01793",
       "trend_features_b0.py": "6d7aa6503e31c24dccf863cd0ccff3074d6c4f630fe8351259d03e4db3732dc1",
@@ -152,6 +183,16 @@
       "trend_features_b0.py": "33c6b705cce9ce5c2e354d4d9c03cef583ce20a85864ead91054206971afd112",
       "trend_stats_b0.py": "da72f0d961d03567eeeff4724bf5701da20530d1db9a500a09edd0fd692614ed"
     },
+    "nursing_home_collapse_risk/v1": {
+      "api_caller_b0.py": "de742abba264815b84091a0b977551496c0b3bc792674e87f7a88d763cd95a35",
+      "trend_features_b0.py": "1755749c33e7ec444c3678051b9f9223c482789f6700d8002be0d99f23f18de3",
+      "trend_stats_b0.py": "d0b41ddbda93d4a78a71bb6d5ee1c0cd34dfee15a72c3b1fe3a24ef85b9fd0a5"
+    },
+    "nursing_home_collapse_risk/v2": {
+      "api_caller_b0.py": "f200f10ba841a2637a1a1d1d79197b27f02994692ba32602c058cd308f1ef617",
+      "trend_features_b0.py": "32323cab1c93da5bbaf8e0d1a027dad3e40abb5b5900838acd794e3f6706e7e4",
+      "trend_stats_b0.py": "d0b41ddbda93d4a78a71bb6d5ee1c0cd34dfee15a72c3b1fe3a24ef85b9fd0a5"
+    },
     "nvd_cves/v1": {
       "api_caller_b0.py": "c3d2709eb9c62af54359e1b7342896ce804235f57d1daba629c9207362d9596b",
       "trend_features_b0.py": "32d72a061bd577fc84f057cf72b2e34837afcbfaa606e7ecc8ae8cbef5d83999",
@@ -165,6 +206,26 @@
       "api_caller_b1.py": "70bc86c6807d28c2cd93f23f8d0f071a768de384a385d1440cc2d6c0522d7426",
       "api_caller_b2.py": "039ced78b4e7793c73cdfe3f6f788255f2dc2b593b8ab6a1c132df0a4da0e8e3"
     },
+    "oversight_vs_execution/v1": {
+      "api_caller_b0.py": "f4bf704db4870f366209336b9891080b5cbe057a8788f8a2baf187003f6def72",
+      "trend_features_b0.py": "a1b7d70a314c9c008d7dee6e1599a18a602f346943a9d8a2f7c2e41f547b1775",
+      "trend_stats_b0.py": "8530b193909e287ebb1b71bc8e86b598a28b860e693b81596d9696a87a7893b5"
+    },
+    "oversight_vs_execution/v2": {
+      "api_caller_b0.py": "f4bf704db4870f366209336b9891080b5cbe057a8788f8a2baf187003f6def72",
+      "trend_features_b0.py": "a1b7d70a314c9c008d7dee6e1599a18a602f346943a9d8a2f7c2e41f547b1775",
+      "trend_stats_b0.py": "8530b193909e287ebb1b71bc8e86b598a28b860e693b81596d9696a87a7893b5"
+    },
+    "post_disaster_grant_velocity/v1": {
+      "api_caller_b0.py": "a5c3aa62c5994ec426e308b3a1d454272b8d74d4bc931d5705e40f735083779e",
+      "trend_features_b0.py": "0b6138699e8a171dfc4cfcdd22c4b447cf33008e10e63cbf673eff83be461df6",
+      "trend_stats_b0.py": "af602ff57b5810725414405158267313327fb6478cbc84929ecf4666b832eee2"
+    },
+    "post_disaster_grant_velocity/v2": {
+      "api_caller_b0.py": "a5c3aa62c5994ec426e308b3a1d454272b8d74d4bc931d5705e40f735083779e",
+      "trend_features_b0.py": "0b6138699e8a171dfc4cfcdd22c4b447cf33008e10e63cbf673eff83be461df6",
+      "trend_stats_b0.py": "af602ff57b5810725414405158267313327fb6478cbc84929ecf4666b832eee2"
+    },
     "propublica_ny_nonprofits/v1": {
       "api_caller_b0.py": "567e3c5269c2591d0609e89177fe54cddb2472ac11f3375ba5987dfc5b9b041b"
     },
@@ -172,6 +233,26 @@
       "api_caller_b0.py": "dac261579d29c2137ab33c5aca33d5469f1dc98a045023e46b5fdfe782852a2c",
       "api_caller_b1.py": "b9f51e2394b2d9f87252ee8fa4e48e822e81c9d6596a599e5045036c0fd06df0",
       "api_caller_b2.py": "727ce483387fd275cd9d66fcf31e81b109f62663f7d98086c6b0c4e89c9730b8"
+    },
+    "sled_grant_clawback_risk/v1": {
+      "api_caller_b0.py": "197f51385dfaf9168bef5c0e032be51d085cecfb81cd7894636c87804ee99550",
+      "trend_features_b0.py": "fad1ba8b3ca7a5b383ae46e89df91fae4196b36086d3576a050b2d53e5e70e4e",
+      "trend_stats_b0.py": "b2996d888102b52e9ab8453867595af4e4769a557c58d834e9202bed02824909"
+    },
+    "sled_grant_clawback_risk/v2": {
+      "api_caller_b0.py": "197f51385dfaf9168bef5c0e032be51d085cecfb81cd7894636c87804ee99550",
+      "trend_features_b0.py": "fad1ba8b3ca7a5b383ae46e89df91fae4196b36086d3576a050b2d53e5e70e4e",
+      "trend_stats_b0.py": "b2996d888102b52e9ab8453867595af4e4769a557c58d834e9202bed02824909"
+    },
+    "space_domain_convergence/v1": {
+      "api_caller_b0.py": "bd5120e21168efaf548b4247ff4990bb279c9721a233219dec89d41905c783d5",
+      "trend_features_b0.py": "dd86f86df6d9e360936f035e16ceb79c66a57767d672ff97c231f6c05951b841",
+      "trend_stats_b0.py": "dd427392ef944032816bebc3477608ed5d9a7e66a7ea5542b73bae0a45cf59f5"
+    },
+    "space_domain_convergence/v2": {
+      "api_caller_b0.py": "bd5120e21168efaf548b4247ff4990bb279c9721a233219dec89d41905c783d5",
+      "trend_features_b0.py": "dd86f86df6d9e360936f035e16ceb79c66a57767d672ff97c231f6c05951b841",
+      "trend_stats_b0.py": "dd427392ef944032816bebc3477608ed5d9a7e66a7ea5542b73bae0a45cf59f5"
     },
     "tle_satellites/v1": {
       "api_caller_b0.py": "a5834c9a3f38e8b23df655e57b67daa58660f83a9da335f164335ab63e5e0c87",
@@ -207,6 +288,18 @@
       "api_caller_b0.py": "d757aabca406775d29651b708bbd17c19d8cc8876b9ded5227a731acb4684985",
       "trend_features_b0.py": "8129d4890dff434e649589ec2edc011dbd0180a8fd16a248304fe952e1bac1b2",
       "trend_stats_b0.py": "cda1e22abe7ee3b44b7ee6295b85e8233cbba70200f27c7ef0cc1b0482a4c020"
+    },
+    "wildfire_staging_gap/v1": {
+      "api_caller_b0.py": "113798eb650529bac3e1b7528115e0f080d6028b43ae6588a3f81215e437c86f",
+      "eoc_fire_metrics_b0.py": "f43cb57129eef0cd4261c37977d226d9921ee9d830677867169d63310943de39",
+      "trend_features_b0.py": "738f77ee25dd6bf2f66b9816b66fa3288d078dc7734b6083b5c7b3d8620d62fe",
+      "trend_stats_b0.py": "7b544c462db57c26408c9725eae95a0416d5e4d31053460e2e839f7c2630fc47"
+    },
+    "wildfire_staging_gap/v2": {
+      "api_caller_b0.py": "113798eb650529bac3e1b7528115e0f080d6028b43ae6588a3f81215e437c86f",
+      "eoc_fire_metrics_b0.py": "f43cb57129eef0cd4261c37977d226d9921ee9d830677867169d63310943de39",
+      "trend_features_b0.py": "738f77ee25dd6bf2f66b9816b66fa3288d078dc7734b6083b5c7b3d8620d62fe",
+      "trend_stats_b0.py": "7b544c462db57c26408c9725eae95a0416d5e4d31053460e2e839f7c2630fc47"
     }
   },
   "templates": {

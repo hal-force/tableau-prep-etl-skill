@@ -1,0 +1,97 @@
+{
+  "question": "Which prime contractors concentrate the most combined dollar and schedule-slip risk across DoD awards with CENTCOM-adjacent place-of-performance and description signals over the last 12 rolling months?",
+  "internal_scan": {
+    "site": "<sanitized>",
+    "ran_at_utc": "2026-07-24T14:35:00Z",
+    "matches": [
+      {"ds_name": "DoD Award Detail", "project": "11 - DoD Contract Awards (child of Prep Agent)", "score": 72.0, "note": "Existing FY2026 DoD USASpending pull. Wrong window (FY not rolling 12mo) and no CENTCOM adjacency proxy."},
+      {"ds_name": "DoD Award Stats", "project": "11 - DoD Contract Awards", "score": 62.0, "note": "Trend rollup on the same base — same window issue."},
+      {"ds_name": "USASpending Contracts", "project": "Prep Agent", "score": 48.0, "note": "Broader USASpending general contracts feed."}
+    ],
+    "verdict": "The existing DoD Award Detail DS answers ~60% of the ask but is FY-window and lacks the CENTCOM place-of-performance filter. Correct pass: build a new flow (centcom_supplier_risk) that fetches with the CENTCOM country filter and rolling-12mo window, referencing the existing DS as the internal fallback if the API is down."
+  },
+  "indicators": [
+    {
+      "id": "F1.1",
+      "name": "Top-10 primes' share of total AOR-adjacent dollars",
+      "window": "12mo rolling",
+      "data_required": ["Award-level Recipient Name, Award Amount, Place of Performance Country Code, Start Date"],
+      "candidates": [
+        {"tier": "internal", "source": "DoD Award Detail (existing DS)", "result": "PARTIAL — FY-scoped, no country filter"},
+        {"tier": "external", "source": "USASpending.gov spending_by_award with agencies=DoD + country filter", "result": "PRIMARY — this is the canonical live feed"}
+      ],
+      "acceptance": "≥5000 rows over 12mo window with country filter applied; Recipient Name non-null on ≥99%"
+    },
+    {
+      "id": "F1.2",
+      "name": "HHI (sum of squared prime shares × 10000)",
+      "window": "12mo rolling",
+      "data_required": ["Same as F1.1"],
+      "candidates": [{"tier": "derived", "source": "trend_analysis stats layer over Recipient Name"}],
+      "acceptance": "F1.1 met"
+    },
+    {
+      "id": "F1.3",
+      "name": "Award count and dollar-weighted avg award size per prime",
+      "window": "12mo rolling",
+      "data_required": ["Same as F1.1"],
+      "candidates": [{"tier": "derived", "source": "trend_analysis stats — count + sum + avg per Recipient Name"}],
+      "acceptance": "F1.1 met"
+    },
+    {
+      "id": "F2.1",
+      "name": "Sum of open-window dollars per prime",
+      "window": "as-of today",
+      "data_required": ["End Date, Award Amount"],
+      "candidates": [{"tier": "derived", "source": "row-level open_window_flag = End Date >= today; sum per prime"}],
+      "acceptance": "End Date populated on ≥95% of rows"
+    },
+    {
+      "id": "F2.2",
+      "name": "Median days_of_performance per prime",
+      "window": "12mo",
+      "data_required": ["Start Date, End Date"],
+      "candidates": [{"tier": "derived", "source": "json_derived_columns days_between helper"}],
+      "acceptance": "Both dates populated on ≥90% of rows"
+    },
+    {
+      "id": "F2.3",
+      "name": "Share of prime's awards with End Date slipping >90d past today",
+      "window": "12mo",
+      "data_required": ["End Date"],
+      "candidates": [{"tier": "derived", "source": "row-level slip_flag; share per prime"}],
+      "acceptance": "F2.2 met"
+    },
+    {
+      "id": "F3.1",
+      "name": "Sub-agency diversity index per prime",
+      "window": "12mo",
+      "data_required": ["Awarding Sub Agency, Recipient Name"],
+      "candidates": [{"tier": "derived", "source": "distinct sub-agencies / max, per prime"}],
+      "acceptance": "Awarding Sub Agency populated on ≥98% of rows"
+    },
+    {
+      "id": "F4.1",
+      "name": "Month-over-month change in top-10 share",
+      "window": "rolling 12mo",
+      "data_required": ["Start Date bucketed to month, per-prime rolling"],
+      "candidates": [{"tier": "derived", "source": "trend_analysis monthly_count + share computation"}],
+      "acceptance": "F1.1 met"
+    },
+    {
+      "id": "F5.1",
+      "name": "Award-type-code mix share per prime",
+      "window": "12mo",
+      "data_required": ["award_type_code (A/B/C/D)"],
+      "candidates": [
+        {"tier": "external", "source": "USASpending spending_by_award — include Award Type field", "result": "GREEN — field is available in the API"}
+      ],
+      "acceptance": "Award Type populated on ≥99% of rows"
+    }
+  ],
+  "preference_order_rule": "INTERNAL (partial) → EXTERNAL (canonical) → DERIVED. The existing DoD Award Detail DS is a partial internal candidate; the canonical answer requires a new external pull with the CENTCOM country filter.",
+  "approval_required_before_acquisition": ["None — api.usaspending.gov is already approved."],
+  "gap_summary": [
+    "CENTCOM-adjacency is a proxy via Place-of-Performance country codes + description keyword scan. Not a formal combatant-command tag."
+  ]
+}
