@@ -57,6 +57,7 @@ The Tableau Prep CLI itself is macOS-only and stays on the host either way.
 ```sh
 git clone https://github.com/hal-force/tableau-prep-etl-skill.git
 cd tableau-prep-etl-skill
+mkdir -p ~/.claude/skills   # first-time: the skills dir may not exist yet
 ln -s "$PWD/skill" ~/.claude/skills/tableau-prep-etl
 ```
 
@@ -84,6 +85,8 @@ is broken on recent macOS builds. The working recipe is unauth TabPy
 on port 9099 with a 600-second evaluate timeout:
 
 ```sh
+pip install tabpy                # once, into the interpreter you'll launch it from
+
 cat > /tmp/tabpy_smoke.conf <<'EOF'
 [TabPy]
 TABPY_PORT = 9099
@@ -91,8 +94,7 @@ TABPY_EVALUATE_ENABLE = true
 TABPY_EVALUATE_TIMEOUT = 600
 EOF
 
-/Library/Frameworks/Python.framework/Versions/3.13/bin/tabpy \
-    --config=/tmp/tabpy_smoke.conf --disable-auth-warning &
+"$(which tabpy)" --config=/tmp/tabpy_smoke.conf --disable-auth-warning &
 ```
 
 Then point prep-cli at it:
@@ -119,11 +121,17 @@ python3 -m skill.scripts.server_creds --load
 
 The discovery walks env vars → macOS Keychain → Linux libsecret →
 `~/.tableau-prep-etl/server.json` (chmod 600 plaintext, dev only).
-On first run, it saves what it finds in Keychain for future shells:
+On first run, it saves what it finds in Keychain for future shells.
+Copy [`load_env.sh.example`](load_env.sh.example) to
+`~/.tableau-prep-etl/load_env.sh` (it reads secrets from your OS
+keystore — never commit it), then source it:
 
 ```sh
 source ~/.tableau-prep-etl/load_env.sh   # exports TABLEAU_SERVER_*
 ```
+
+For a non-Keychain / CI setup, copy [`.env.example`](.env.example) to
+`.env` (gitignored) and fill in the values, or export them directly.
 
 Required env vars (any one of these paths sets them):
 
