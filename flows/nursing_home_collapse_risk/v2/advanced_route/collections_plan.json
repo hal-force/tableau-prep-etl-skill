@@ -1,0 +1,56 @@
+{
+  "question": "Which CMS-certified nursing home providers show the highest composite quality-collapse-risk score from recent deficiency severity, clustering, correction lag, and local hospital spillover?",
+  "internal_scan": {
+    "site": "<sanitized>",
+    "ran_at_utc": "2026-07-24T14:55:00Z",
+    "matches": [
+      {"ds_name": "CMS Deficiencies", "project": "Prep Agent", "score": 94.0, "note": "Directly answers F1/F2/F3. Existing 12mo pull."},
+      {"ds_name": "CMS Nursing Home Providers", "project": "Prep Agent", "score": 82.0, "note": "Provider roster for identity + state; join key = ccn."},
+      {"ds_name": "HealthData Hospital Capacity", "project": "Prep Agent", "score": 61.0, "note": "State-level; used for F4 spillover."}
+    ],
+    "verdict": "All three internal DSes exist. Correct pass: this is an INTERNAL-only flow — build the composite risk score by pulling the same upstream endpoints (so the flow is standalone) but note that the primary answering DSes already exist. Publish a NEW composite risk DS keyed on ccn."
+  },
+  "indicators": [
+    {"id": "F1.1", "name": "Max deficiency category per provider", "window": "12mo",
+      "data_required": ["ccn, deficiency_category, survey_date"],
+      "candidates": [
+        {"tier": "internal", "source": "CMS Deficiencies DS", "result": "GREEN"},
+        {"tier": "external", "source": "data.cms.gov/provider-data r5ix-sfxw", "result": "PRIMARY — used by this flow's pull"}
+      ],
+      "acceptance": "deficiency_category populated ≥98%"},
+    {"id": "F1.2", "name": "Count of widespread (cat >= F) citations", "window": "12mo",
+      "data_required": ["Same"], "candidates": [{"tier": "derived"}],
+      "acceptance": "F1.1 met"},
+    {"id": "F2.1", "name": "Distinct survey_date count per provider", "window": "12mo",
+      "data_required": ["Same"], "candidates": [{"tier": "derived"}],
+      "acceptance": "F1.1 met"},
+    {"id": "F2.2", "name": "Max citations in a single survey", "window": "12mo",
+      "data_required": ["Same"], "candidates": [{"tier": "derived"}],
+      "acceptance": "F1.1 met"},
+    {"id": "F3.1", "name": "Median days_to_correction per provider", "window": "12mo",
+      "data_required": ["survey_date, correction_date"],
+      "candidates": [{"tier": "derived", "source": "days_to_correction column already computed by existing spec"}],
+      "acceptance": "correction_date populated on ≥60% of rows"},
+    {"id": "F3.2", "name": "Share of open citations past 60d", "window": "12mo",
+      "data_required": ["correction_date null, days_since_survey > 60"],
+      "candidates": [{"tier": "derived"}],
+      "acceptance": "F3.1 met"},
+    {"id": "F4.1", "name": "State inpatient occupancy rolling 30d", "window": "30d",
+      "data_required": ["state, inpatient_beds_used, inpatient_beds_capacity"],
+      "candidates": [{"tier": "internal", "source": "HealthData Hospital Capacity DS", "result": "GREEN"}],
+      "acceptance": "state field populated"},
+    {"id": "F4.2", "name": "State occupancy z-score vs prior year", "window": "30d",
+      "data_required": ["Same as F4.1 with 12mo history"],
+      "candidates": [{"tier": "derived", "source": "trend_analysis stats on HealthData feed"}],
+      "acceptance": "F4.1 met"},
+    {"id": "F5.1", "name": "Staffing signal from PBJ", "window": "N/A",
+      "data_required": ["CMS PBJ payroll-based journal quarterly staffing hours"],
+      "candidates": [{"tier": "external", "source": "CMS PBJ data.cms.gov endpoint", "result": "OUT OF SCOPE — declared as gap"}],
+      "acceptance": "N/A — RED"}
+  ],
+  "preference_order_rule": "INTERNAL first (all three feeder DSes exist); DERIVED for computed indicators. This flow republishes the composite risk score keyed on ccn, using the same upstream endpoints as the feeder DSes so the flow is standalone.",
+  "approval_required_before_acquisition": ["None — data.cms.gov and healthdata.gov already approved."],
+  "gap_summary": [
+    "F5.1 staffing signal (CMS PBJ) is declared RED and substituted with the F1 F-tag proxy. This is the canonical demo of the RED-path gap-declaration workflow."
+  ]
+}

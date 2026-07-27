@@ -1,0 +1,52 @@
+{
+  "question": "Which active US wildfire incidents show a gap between incident scale and assigned resources, and where does grid infrastructure add cascading risk?",
+  "internal_scan": {
+    "site": "<sanitized>",
+    "ran_at_utc": "2026-07-24T15:15:00Z",
+    "matches": [
+      {"ds_name": "US Wildfires EOC", "project": "Prep Agent", "score": 91.0, "note": "Directly answers F1/F2/F3/F5 with existing eoc_fire_metrics enrichment."},
+      {"ds_name": "US Grid Network", "project": "Prep Agent", "score": 58.0, "note": "State-level grid load; dashboard-time join for F4."}
+    ],
+    "verdict": "Existing US Wildfires EOC DS answers most of the question. Correct pass: publish a NEW gap-scored DS by re-pulling WFIGS, adding gap-specific derived columns beyond eoc_fire_metrics, and leaving grid-spillover as a dashboard-time join."
+  },
+  "indicators": [
+    {"id": "F1.1", "name": "IncidentSize", "window": "current",
+      "candidates": [{"tier": "internal", "source": "US Wildfires EOC", "result": "GREEN"}],
+      "acceptance": "Populated ≥95%"},
+    {"id": "F1.2", "name": "days_since_discovery", "window": "current",
+      "candidates": [{"tier": "derived", "source": "eoc_fire_metrics"}],
+      "acceptance": "F1.1 met"},
+    {"id": "F1.3", "name": "daily_growth_rate", "window": "current",
+      "candidates": [{"tier": "derived", "source": "eoc_fire_metrics"}],
+      "acceptance": "F1.1 met"},
+    {"id": "F2.1", "name": "TotalIncidentPersonnel", "window": "current",
+      "candidates": [{"tier": "internal", "source": "US Wildfires EOC", "result": "AMBER"}],
+      "acceptance": "Populated ≥70% (self-reported, lags)"},
+    {"id": "F2.2", "name": "EstimatedCostToDate", "window": "current",
+      "candidates": [{"tier": "internal", "source": "US Wildfires EOC", "result": "AMBER"}],
+      "acceptance": "Populated ≥70%"},
+    {"id": "F2.3", "name": "IncidentComplexityLevel", "window": "current",
+      "candidates": [{"tier": "internal", "source": "US Wildfires EOC", "result": "AMBER"}],
+      "acceptance": "Populated on typed incidents"},
+    {"id": "F3.1", "name": "personnel_per_100acres", "window": "current",
+      "candidates": [{"tier": "derived", "source": "Computed at dashboard time"}],
+      "acceptance": "F1.1 + F2.1 met"},
+    {"id": "F3.2", "name": "cost_per_acre", "window": "current",
+      "candidates": [{"tier": "derived", "source": "Computed at dashboard time"}],
+      "acceptance": "F1.1 + F2.2 met"},
+    {"id": "F3.3", "name": "resource_gap_flag", "window": "current",
+      "candidates": [{"tier": "derived", "source": "Complexity-adjusted threshold Tableau calc"}],
+      "acceptance": "F2.3 + F3.1 met"},
+    {"id": "F4.1", "name": "grid_state_load", "window": "current",
+      "candidates": [{"tier": "internal", "source": "US Grid Network DS join by POOState", "result": "GREEN — dashboard-time"}],
+      "acceptance": "Grid DS current"},
+    {"id": "F5.1", "name": "Jurisdictional mismatch flag", "window": "current",
+      "candidates": [{"tier": "derived", "source": "POOJurisdictionalAgency != POOProtectingAgency comparison"}],
+      "acceptance": "Both fields populated"}
+  ],
+  "preference_order_rule": "INTERNAL first (WFIGS via existing spec). The published DS surfaces F2 fields explicitly so gap ratios are one-hop in Tableau. Grid join stays at dashboard time to avoid tightly coupling this build to grid refresh cadence.",
+  "approval_required_before_acquisition": ["None — NIFC/WFIGS FeatureServer already approved."],
+  "gap_summary": [
+    "F2 personnel and cost are AMBER — self-reported, updated per-shift by IMTs. Effect: staging gap can be over/under-flagged for the most recent shift. Refresh cadence for this flow is hourly to minimize the AMBER lag."
+  ]
+}

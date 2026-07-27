@@ -1,0 +1,133 @@
+{
+  "question": "Which US diplomatic posts are at elevated physical-security risk over the next 30 days, ranked by composite threat score derived from recent (90-day) political-violence event proximity, severity, US-actor involvement, and trend direction?",
+  "internal_scan": {
+    "site": "<sanitized>",
+    "ran_at_utc": "2026-07-24T00:00:00Z",
+    "matches": [
+      {
+        "ds_name": "Embassy Threat Events v2",
+        "project": "Embassy Threat Monitor v2 (child of Prep Agent)",
+        "score": 92.0,
+        "note": "This IS the DS the current flow publishes. A refresh over the same spec is the intended pass."
+      },
+      {
+        "ds_name": "Embassy Risk Summary v2",
+        "project": "Embassy Threat Monitor v2 (child of Prep Agent)",
+        "score": 92.0,
+        "note": "Companion summary DS."
+      },
+      {
+        "ds_name": "GDELT Global Events (Threat Filter)",
+        "project": "Prep Agent",
+        "score": 34.0,
+        "note": "Filtered GDELT feed already on-site; upstream of the two above."
+      }
+    ],
+    "verdict": "This question already has canonical internal DSes on-site. The advanced route's job on this pass is to (a) verify the SAT indicators are still covered by the current spec, (b) surface any indicator drift, and (c) refresh with the same spec.json handoff — not to re-acquire the upstream."
+  },
+  "indicators": [
+    {
+      "id": "F1.1",
+      "name": "Count of qualifying events within 50mi of post",
+      "window": "90d",
+      "data_required": [
+        "Post roster with lat/lon (60 US posts)",
+        "GDELT event records with ActionGeo_Lat/Long, SQLDATE, EventRootCode"
+      ],
+      "candidates": [
+        {"tier": "internal", "source": "Embassy Threat Events v2 (already published)", "result": "GREEN — carries per-event columns feeding this indicator"},
+        {"tier": "internal", "source": "GDELT Global Events (Threat Filter) DS", "result": "AVAILABLE — upstream feed already on-site"},
+        {"tier": "external", "source": "data.gdeltproject.org daily events feed", "result": "FALLBACK — used by the current spec's api_caller"}
+      ],
+      "acceptance": "≥50 posts with non-null lat/lon; events feed has ≥1000 qualifying rows in the last 90d"
+    },
+    {
+      "id": "F1.2",
+      "name": "Min haversine distance of any qualifying event to each post",
+      "window": "30d",
+      "data_required": ["Per-event lat/lon; roster lat/lon; distance calc"],
+      "candidates": [
+        {"tier": "derived", "source": "computed in embassy_threat_join transformation using haversine helper", "result": "GREEN"}
+      ],
+      "acceptance": "F1.1 met"
+    },
+    {
+      "id": "F2.1",
+      "name": "Max CAMEO root code observed within radius per post",
+      "window": "90d",
+      "data_required": ["EventRootCode + spatial join"],
+      "candidates": [
+        {"tier": "derived", "source": "embassy_threat_join scoring layer", "result": "GREEN"}
+      ],
+      "acceptance": "F1.1 met"
+    },
+    {
+      "id": "F2.2",
+      "name": "Weighted incident score (severity × recency-decay × mentions-weight)",
+      "window": "90d",
+      "data_required": ["EventRootCode, SQLDATE, NumMentions"],
+      "candidates": [
+        {"tier": "derived", "source": "embassy_threat_join scoring layer — CAMEO-severity × exp(-days/half_life) × log(mentions)", "result": "GREEN"}
+      ],
+      "acceptance": "F1.1 met; NumMentions non-null on ≥90% of events"
+    },
+    {
+      "id": "F2.3",
+      "name": "Named top-severity event summary + source URL per post",
+      "window": "30d",
+      "data_required": ["Actor1Name, Actor2Name, ActionGeo_FullName, EventCode → human verb, SOURCEURL"],
+      "candidates": [
+        {"tier": "derived", "source": "embassy_threat_join composes event_summary; embassy_risk_summary picks top-severity per post", "result": "GREEN — this is the v2 addition over v1"}
+      ],
+      "acceptance": "Actor1Name populated on ≥70% of qualifying rows"
+    },
+    {
+      "id": "F3.1",
+      "name": "Share of qualifying events with Actor1/2 country = USA",
+      "window": "90d",
+      "data_required": ["Actor1CountryCode, Actor2CountryCode"],
+      "candidates": [
+        {"tier": "derived", "source": "embassy_threat_join us_actor_share column", "result": "GREEN"}
+      ],
+      "acceptance": "F1.1 met; actor country codes present on ≥95% of rows"
+    },
+    {
+      "id": "F4.1",
+      "name": "Week-over-week change in F2.2",
+      "window": "7d vs prior 7d",
+      "data_required": ["F2.2 timestamped per-event"],
+      "candidates": [
+        {"tier": "derived", "source": "embassy_risk_summary trend delta over 7d window", "result": "AMBER — computable but not currently surfaced on the Summary DS as a distinct column; folded into weighted_threat_score's recency-decay term"}
+      ],
+      "acceptance": "F1.1 met over a 14-day window"
+    },
+    {
+      "id": "F4.2",
+      "name": "5-band risk classification per post",
+      "window": "90d cumulative → banded",
+      "data_required": ["F2.2 output; band cut-points"],
+      "candidates": [
+        {"tier": "derived", "source": "embassy_risk_summary risk_band column (CRITICAL/HIGH/ELEVATED/GUARDED/LOW)", "result": "GREEN"}
+      ],
+      "acceptance": "F2.2 met; every post assigned a band"
+    },
+    {
+      "id": "F5.1",
+      "name": "Distinct source-URL count per event (deduplication check)",
+      "window": "90d",
+      "data_required": ["SOURCEURL per event"],
+      "candidates": [
+        {"tier": "derived", "source": "SOURCEURL column carried through to Events DS; NumMentions used as the URL-inflation proxy", "result": "AMBER — GDELT 1.0 emits one row per source URL and does not carry a distinct-event key. Downstream deduplication is heuristic (SQLDATE + ActionGeo_Lat/Long + EventCode)."}
+      ],
+      "acceptance": "SOURCEURL non-null on ≥80% of rows"
+    }
+  ],
+  "preference_order_rule": "INTERNAL (already-published DS) → INTERNAL (upstream feed DS) → DERIVED → EXTERNAL. Internal-first is trivially satisfied — the answering DSes already exist.",
+  "approval_required_before_acquisition": [
+    "None — refresh runs against data.gdeltproject.org, already an approved host on this site."
+  ],
+  "gap_summary": [
+    "F4.1 is AMBER: WoW trend delta is folded into weighted_threat_score's decay term rather than surfaced as its own column. A v3 could split it out.",
+    "F5.1 is AMBER: GDELT 1.0's URL-per-row shape means distinct-event dedup is heuristic. Switching to GDELT 2.0 (which carries GKGRECORDID) would upgrade this to GREEN but changes the upstream contract."
+  ]
+}

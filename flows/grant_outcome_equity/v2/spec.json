@@ -1,0 +1,90 @@
+{
+  "request": "Advanced-route deliverable: grant-outcome equity. Pull CDC PLACES county-level health-outcomes (2023) as a NEED proxy. Publish a PLACES-focused DS keyed on county+measure that operators can pivot in Tableau. State-level FY24 SLED grant totals come from the existing flow #3 output at dashboard-time. This is the CANONICAL pass-3 proxy-substitution demo: real grant outcomes aren't available, so we substitute health-outcome burden as a need proxy.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "CDC PLACES County Health 2023 (Equity view)",
+      "description": "CDC PLACES 2023 county-level health metrics filtered to health_outcomes (categoryid=HLTHOUT) via SoQL, one row per (county, measure). ~90k rows filtered to HLTHOUT.",
+      "url": "https://chronicdata.cdc.gov/resource/swc5-untb.json?$where=year%3D%272023%27+AND+categoryid%3D%27HLTHOUT%27&$order=locationid&$select=year,stateabbr,statedesc,locationname,category,measure,data_value,totalpopulation,locationid,categoryid,measureid,short_question_text",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 90,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_kind": "offset",
+        "json_page_param": "$offset",
+        "json_page_size_param": "$limit",
+        "json_page_size": 5000,
+        "json_page_start": 0,
+        "json_max_pages": 40,
+        "json_max_rows": 120000,
+        "json_derived_columns": [
+          {
+            "name": "value_band",
+            "kind": "numeric_bin",
+            "source_col": "data_value",
+            "thresholds": [
+              10,
+              20,
+              30
+            ],
+            "labels": [
+              "low",
+              "moderate",
+              "elevated",
+              "high"
+            ],
+            "default": "unknown"
+          }
+        ],
+        "json_schema": {
+          "year": "string",
+          "stateabbr": "string",
+          "statedesc": "string",
+          "locationname": "string",
+          "category": "string",
+          "measure": "string",
+          "data_value": "decimal",
+          "totalpopulation": "int",
+          "locationid": "string",
+          "categoryid": "string",
+          "measureid": "string",
+          "short_question_text": "string",
+          "value_band": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "PLACES Health Outcome Burden Detail",
+      "project": "38 - Grant Outcome Equity",
+      "source": "CDC PLACES County Health 2023 (Equity view)",
+      "description": "Row-level 2023 CDC PLACES health-outcomes data (categoryid=HLTHOUT) filtered from chronicdata.cdc.gov swc5-untb. One row per (county, measure). Fields: year, state (stateabbr + statedesc), county (locationname), 5-digit FIPS (locationid), category, measure, measureid, short_question_text, data_value, totalpopulation, value_band (low/moderate/elevated/high threshold binning). Refresh: monthly (aligned with PLACES release cadence).\n\nAdvanced-route notes: this is the NEED-proxy leg of the grant-outcome equity analysis (pass-3 proxy substitution). Real grant OUTCOME data (recipient-level performance, program-effectiveness metrics) is NOT publicly available at scale \u2014 declared RED for the outcome factor. We substitute PLACES health-outcome burden as a NEED PROXY. Join at Tableau layer to 'SLED Grants FY24 Detail' aggregated by state (stateabbr) to compute equity_ratio = grant_$_per_capita / burden_per_capita. Ratios diverging from 1 indicate DOLLARS-VS-NEED mismatch \u2014 a DIAGNOSTIC signal, not a normative equity determination. Trend analysis would require multi-year data (PLACES is annual and this pull is single-year), so the DS is a static snapshot."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "38 - Grant Outcome Equity",
+    "parent_project": "Prep Agent",
+    "flow_name": "Grant Outcome Equity",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 8,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 15,
+    "schedule_name_hint": "Grant Outcome Equity Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

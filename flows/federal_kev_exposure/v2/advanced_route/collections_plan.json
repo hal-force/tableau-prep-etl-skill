@@ -1,0 +1,50 @@
+{
+  "question": "Which KEV entries are highest-risk for federal-civilian agencies given SLA pressure, ransomware use, CWE class, and workforce load?",
+  "internal_scan": {
+    "site": "<sanitized>",
+    "ran_at_utc": "2026-07-24T15:30:00Z",
+    "matches": [
+      {"ds_name": "CISA KEV", "project": "Prep Agent", "score": 96.0, "note": "Directly answers F1/F2/F3."},
+      {"ds_name": "Fed Workforce", "project": "Prep Agent", "score": 55.0, "note": "F4 capacity proxy; dashboard-time join."},
+      {"ds_name": "NVD CVEs", "project": "Prep Agent", "score": 41.0, "note": "Not required (KEV is the exploit subset)."}
+    ],
+    "verdict": "This is the CANONICAL RED-path demo. The full-scope answer requires per-agency CVE inventory, which is not publicly available. Reframe to KEV catalog + BLS workforce and declare F5 as RED in the DS description."
+  },
+  "indicators": [
+    {"id": "F1.1", "name": "days_to_due", "window": "current",
+      "candidates": [{"tier": "derived", "source": "days_since(dueDate) with sign flip"}],
+      "acceptance": "dueDate populated"},
+    {"id": "F1.2", "name": "overdue_flag", "window": "current",
+      "candidates": [{"tier": "derived"}],
+      "acceptance": "F1.1 met"},
+    {"id": "F1.3", "name": "exploit_sla_days", "window": "current",
+      "candidates": [{"tier": "derived", "source": "days_between(dateAdded, dueDate)"}],
+      "acceptance": "Both dates populated"},
+    {"id": "F2.1", "name": "knownRansomwareCampaignUse", "window": "current",
+      "candidates": [{"tier": "internal", "source": "CISA KEV field", "result": "GREEN"}],
+      "acceptance": "Populated ≥95%"},
+    {"id": "F2.2", "name": "cwe_list", "window": "current",
+      "candidates": [{"tier": "derived", "source": "list_join on cwes array"}],
+      "acceptance": "Populated ≥80%"},
+    {"id": "F3.1", "name": "30d new-KEV count per vendor", "window": "30d",
+      "candidates": [{"tier": "derived", "source": "trend_analysis stats"}],
+      "acceptance": "Sufficient volume"},
+    {"id": "F3.2", "name": "90d rolling KEV per vendor", "window": "90d",
+      "candidates": [{"tier": "derived", "source": "trend_analysis stats"}],
+      "acceptance": "Sufficient volume"},
+    {"id": "F4.1", "name": "Federal civilian employment", "window": "latest month",
+      "candidates": [{"tier": "internal", "source": "Fed Workforce DS", "result": "GREEN — dashboard join"}],
+      "acceptance": "Series current within 60 days"},
+    {"id": "F5.1", "name": "Per-agency CVE inventory", "window": "N/A",
+      "candidates": [
+        {"tier": "external", "source": "CDM per-agency inventory", "result": "NOT PUBLIC — no approved external host"},
+        {"tier": "external", "source": "vulnrichment repo", "result": "TESTED — vulnerability enrichment for CISA, not per-agency inventory"}
+      ],
+      "acceptance": "N/A — RED"}
+  ],
+  "preference_order_rule": "INTERNAL first (KEV DS exists). This flow republishes an EXPOSURE-scored view of the same KEV data with the additional F1 due-date computation.",
+  "approval_required_before_acquisition": ["None — cisa.gov and api.bls.gov approved."],
+  "gap_summary": [
+    "F5 per-agency CVE inventory is the canonical RED gap. Every ranking in this DS is an UPPER-BOUND estimate at the vendorProject/product level, not a targeted per-agency assessment."
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "question": "For federal sub-agencies, where does Fed Register oversight signal diverge from execution volume in contracts and grants?",
+  "internal_scan": {
+    "site": "<sanitized>",
+    "ran_at_utc": "2026-07-24T16:30:00Z",
+    "matches": [
+      {"ds_name": "Fed Register Actions", "project": "Prep Agent", "score": 78.0, "note": "F1 oversight proxy."},
+      {"ds_name": "FedReg DoD", "project": "Prep Agent", "score": 66.0, "note": "F1 DoD-focused subset."},
+      {"ds_name": "DoD Award Detail (dod_contracts)", "project": "Prep Agent", "score": 71.0, "note": "F2 execution."},
+      {"ds_name": "USASpending SLED Grants", "project": "Prep Agent", "score": 68.0, "note": "F2 execution."}
+    ],
+    "verdict": "Existing feeder DSes cover F1 + F2. F4 Congressional interest is RED. Publish a NEW Fed Register-anchored DS with cross-agency emphasis for oversight-vs-execution triage; degrade gracefully on F4."
+  },
+  "indicators": [
+    {"id": "F1.1", "name": "Monthly Fed Reg doc count per agency", "window": "18mo",
+      "candidates": [{"tier": "external", "source": "federalregister.gov/api/v1/documents.json", "result": "GREEN"}],
+      "acceptance": "Doc count populated"},
+    {"id": "F1.2", "name": "Rule vs notice mix", "window": "18mo",
+      "candidates": [{"tier": "derived", "source": "type field"}],
+      "acceptance": "type populated"},
+    {"id": "F2.1", "name": "DoD contract obligations", "window": "18mo",
+      "candidates": [{"tier": "internal", "source": "DoD Award Detail DS", "result": "GREEN — dashboard join"}],
+      "acceptance": "DS current"},
+    {"id": "F2.2", "name": "SLED grant $", "window": "18mo",
+      "candidates": [{"tier": "internal", "source": "USASpending SLED Grants DS", "result": "GREEN — dashboard join"}],
+      "acceptance": "DS current"},
+    {"id": "F3.1", "name": "Rolling correlation", "window": "6mo",
+      "candidates": [{"tier": "derived", "source": "Tableau calc"}],
+      "acceptance": "F1 + F2 met"},
+    {"id": "F3.2", "name": "Divergence flag", "window": "18mo",
+      "candidates": [{"tier": "derived", "source": "Tableau calc"}],
+      "acceptance": "F1 + F2 met"},
+    {"id": "F4.1", "name": "Congressional interest", "window": "N/A",
+      "candidates": [
+        {"tier": "external", "source": "Congress.gov API", "result": "TESTED — bill and member data available but no structured 'agency oversight intensity' metric"},
+        {"tier": "external", "source": "CRS reports", "result": "NOT INDEXED — no approved external host with structured metadata"}
+      ],
+      "acceptance": "N/A — RED"}
+  ],
+  "preference_order_rule": "INTERNAL first; GRACEFUL DEGRADE on RED F4 by relying on F1 alone as the oversight proxy and clearly labeling the limitation.",
+  "approval_required_before_acquisition": ["None — federalregister.gov approved."],
+  "gap_summary": [
+    "F4 Congressional interest is RED. Congress.gov API has bill/member data but no structured 'agency oversight intensity' metric. CRS reports are not indexed via any approved external host. Effect: the divergence signal here uses ONLY the Fed Register proxy — Congressional hearing pressure that hasn't yet materialized as a Fed Register action is INVISIBLE. Reframe the DS as 'Fed Register oversight signal vs execution volume', not the fuller 'oversight vs execution'."
+  ]
+}

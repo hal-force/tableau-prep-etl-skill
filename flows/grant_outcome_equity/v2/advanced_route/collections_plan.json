@@ -1,0 +1,42 @@
+{
+  "question": "For each US state, is FY24 SLED grant flow proportional to health-outcome burden (PLACES) per capita?",
+  "internal_scan": {
+    "site": "<sanitized>",
+    "ran_at_utc": "2026-07-24T16:00:00Z",
+    "matches": [
+      {"ds_name": "CDC PLACES County Health 2023", "project": "Prep Agent", "score": 82.0, "note": "F2 burden proxy."},
+      {"ds_name": "USASpending SLED Grants", "project": "Prep Agent", "score": 61.0, "note": "F1 grants (FY25-26). FY24 comes from flow #3."},
+      {"ds_name": "SLED Grants FY24 Detail (flow #3)", "project": "Prep Agent", "score": 91.0, "note": "F1 canonical."}
+    ],
+    "verdict": "PLACES exists (F2). FY24 grants exist from flow #3. This flow pulls PLACES fresh and joins by state at build time to a fresh USASpending FY24 aggregate — republishing an equity-scored view. Direct grant OUTCOMES are not available (canonical pass-3 substitution)."
+  },
+  "indicators": [
+    {"id": "F1.1", "name": "State-level FY24 SLED $ total", "window": "FY24",
+      "candidates": [
+        {"tier": "external", "source": "USASpending POST spending_by_award (FY24 SLED, aggregated by state)", "result": "GREEN"}
+      ],
+      "acceptance": "50 states + DC coverage"},
+    {"id": "F2.1", "name": "State-level pop-weighted health-outcomes score", "window": "2023",
+      "candidates": [
+        {"tier": "external", "source": "CDC PLACES 2023 chronicdata.cdc.gov swc5-untb, filtered to categoryid=HLTHOUT", "result": "GREEN"}
+      ],
+      "acceptance": "F2 populated ≥95%"},
+    {"id": "F3.1", "name": "State population", "window": "2023",
+      "candidates": [{"tier": "derived", "source": "PLACES totalpopulation aggregated by state"}],
+      "acceptance": "totalpopulation populated"},
+    {"id": "F4.1", "name": "Grant $ per capita", "window": "derived",
+      "candidates": [{"tier": "derived", "source": "Tableau calc F1 / F3"}],
+      "acceptance": "F1 + F3 met"},
+    {"id": "F5.1", "name": "Burden per capita", "window": "derived",
+      "candidates": [{"tier": "derived", "source": "Tableau calc F2 / F3"}],
+      "acceptance": "F2 + F3 met"},
+    {"id": "F6.1", "name": "Equity ratio", "window": "derived",
+      "candidates": [{"tier": "derived", "source": "Tableau calc F4 / F5"}],
+      "acceptance": "F4 + F5 met"}
+  ],
+  "preference_order_rule": "PROXY substitution is explicit: outcomes → burden. INTERNAL first (PLACES exists); external pull for FY24 SLED aggregate at state level.",
+  "approval_required_before_acquisition": ["None — usaspending.gov and chronicdata.cdc.gov approved."],
+  "gap_summary": [
+    "F0 direct per-grant OUTCOME data is not publicly available at scale — this flow substitutes CDC PLACES health-outcomes as a NEED proxy. 'Equity ratio' surfaces DOLLARS-PER-NEED, not any normative determination about grant effectiveness."
+  ]
+}
