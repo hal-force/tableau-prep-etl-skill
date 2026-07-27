@@ -1,0 +1,149 @@
+{
+  "request": "Advanced-route deliverable: SLED grant clawback risk for FY24. Pull FY24 (2023-10-01 through 2024-09-30) federal grants awarded to state/local/educational recipients from USASpending. Award types 02/03/04/05. Derive per-award clawback-risk signals: outlay stagnation ratio (Award Amount - Total Outlays) / Award Amount for awards >=180d past Start, unspent_dollars, recipient_name_count per prime_award_recipient_id. Publish two DSes to Tableau Cloud under Prep Agent. Fed Register signal join and FY25 renewal join are handled at dashboard time from existing DSes.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "USASpending SLED Grants FY24",
+      "description": "USASpending.gov POST /api/v2/search/spending_by_award for FY24 SLED grants. award_type_codes 02/03/04/05, recipient_type_names limited to state/local/educational governments. Sorted by Award Amount desc. Body-mode pagination via 'page', 100 per page, cap 50 pages / 5000 rows.",
+      "url": "https://api.usaspending.gov/api/v2/search/spending_by_award/",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 120,
+        "max_retries": 3,
+        "json_http_method": "POST",
+        "json_body": {
+          "subawards": false,
+          "sort": "Award Amount",
+          "order": "desc",
+          "filters": {
+            "time_period": [
+              {
+                "start_date": "2023-10-01",
+                "end_date": "2024-09-30"
+              }
+            ],
+            "award_type_codes": [
+              "02",
+              "03",
+              "04",
+              "05"
+            ],
+            "recipient_type_names": [
+              "State Government",
+              "County Government",
+              "City or Township Government",
+              "Special District Government",
+              "Independent School District",
+              "State Controlled Institution of Higher Education",
+              "Public/State Controlled Institution of Higher Education"
+            ]
+          },
+          "fields": [
+            "Award ID",
+            "Recipient Name",
+            "Award Amount",
+            "Total Outlays",
+            "Awarding Agency",
+            "Awarding Sub Agency",
+            "Award Type",
+            "recipient_location_state_code",
+            "recipient_location_county_name",
+            "recipient_location_city_name",
+            "Start Date",
+            "End Date",
+            "prime_award_recipient_id"
+          ]
+        },
+        "json_records_path": "results",
+        "json_paginate": true,
+        "json_page_in_body": true,
+        "json_page_param": "page",
+        "json_page_size_param": "limit",
+        "json_page_size": 100,
+        "json_page_start": 1,
+        "json_page_kind": "index",
+        "json_max_pages": 50,
+        "json_has_next_path": "page_metadata.hasNext",
+        "json_derived_columns": [
+          {
+            "name": "days_since_start",
+            "kind": "days_since",
+            "source_col": "Start Date"
+          }
+        ],
+        "json_schema": {
+          "Award ID": "string",
+          "Recipient Name": "string",
+          "Award Amount": "decimal",
+          "Total Outlays": "decimal",
+          "Awarding Agency": "string",
+          "Awarding Sub Agency": "string",
+          "Award Type": "string",
+          "recipient_location_state_code": "string",
+          "recipient_location_county_name": "string",
+          "recipient_location_city_name": "string",
+          "Start Date": "string",
+          "End Date": "string",
+          "prime_award_recipient_id": "string",
+          "days_since_start": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "SLED FY24 Trend",
+        "date_col": "Start Date",
+        "dimensions": [
+          "Awarding Sub Agency",
+          "recipient_location_state_code"
+        ],
+        "rolling_window_days": 90,
+        "anomaly_z": 2.0,
+        "features_description": "Per-award FY24 SLED grant records with days_since_start and calendar features. Compute per-award outlay stagnation ratio in Tableau via (Award Amount - Total Outlays) / Award Amount, filtered to days_since_start >= 180.",
+        "stats_description": "Long-form FY24 SLED grant statistics keyed by (Awarding Sub Agency, state). Includes monthly award counts, dollar totals, and z-score anomalies for concentration."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "SLED Grants FY24 Detail",
+      "project": "33 - SLED Grant Clawback Risk",
+      "source": "SLED FY24 Trend (Features)",
+      "description": "Row-level federal FY24 grants (2023-10-01 to 2024-09-30) to state/local/educational recipients. Award types 02/03/04/05. Includes Award ID, Recipient Name, Award Amount, Total Outlays, Awarding Agency + Sub Agency, Award Type, recipient state / county / city, Start / End dates, prime_award_recipient_id, days_since_start, and calendar features (year, month, quarter, day_of_week, iso_week). Source: api.usaspending.gov/api/v2/search/spending_by_award. Refresh: monthly.\n\nAdvanced-route notes: clawback risk is a SIGNAL score, not a formal recovery determination. Use in Tableau by joining to: (a) 'USASpending SLED Grants' (FY25-26) on prime_award_recipient_id + Awarding Sub Agency for the F4.1 renewal boolean; (b) 'Fed Register Actions' filtered to termination/rescission keywords, joined on Awarding Sub Agency for F3 program-status signals. The joined signal score is intentionally left as a Tableau calc so operators can tune the weights."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "SLED FY24 Sub-Agency Stats",
+      "project": "33 - SLED Grant Clawback Risk",
+      "source": "SLED FY24 Trend (Stats)",
+      "description": "Per-Awarding-Sub-Agency and per-state FY24 SLED grant rollups: award count, dollar totals, monthly rolling counts, z-score anomalies. Use in Tableau to identify sub-agencies with unusually concentrated FY24 SLED activity or state distributions."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "33 - SLED Grant Clawback Risk",
+    "parent_project": "Prep Agent",
+    "flow_name": "SLED Grant Clawback Risk",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 15,
+    "minute_utc": 0,
+    "weekday": "wednesday",
+    "day_of_month": 9,
+    "schedule_name_hint": "SLED Grant Clawback Risk Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

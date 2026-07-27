@@ -1,0 +1,99 @@
+{
+  "request": "Advanced-route deliverable: nursing-home quality-collapse early warning. Pull CMS Nursing Home Health Deficiencies (r5ix-sfxw, 12mo since 2025-07-24). Enrich with days_since_survey, days_to_correction. Compute per-provider F1/F2/F3 signals in trend_analysis rollup. Publish two DSes on Cloud under Prep Agent. F4 hospital-spillover and F5 PBJ staffing are declared as scope decisions (F4 pulled from existing HealthData Hospital Capacity DS at dashboard-time; F5 is RED gap).",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "CMS Nursing Home Health Deficiencies 12mo",
+      "description": "CMS Nursing Home Health Inspection Deficiencies (Provider Data API datastore r5ix-sfxw). One row = one health-inspection citation. Filtered to survey_date > 2025-07-24 (~12mo). Public, keyless. limit/offset pagination.",
+      "url": "https://data.cms.gov/provider-data/api/1/datastore/query/r5ix-sfxw/0?conditions%5B0%5D%5Bproperty%5D=survey_date&conditions%5B0%5D%5Bvalue%5D=2025-07-24&conditions%5B0%5D%5Boperator%5D=%3E",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_paginate": true,
+        "json_page_param": "offset",
+        "json_page_size_param": "limit",
+        "json_page_size": 1000,
+        "json_page_start": 1,
+        "json_page_kind": "offset",
+        "json_max_pages": 50,
+        "json_records_path": "results",
+        "json_derived_columns": [
+          {"name": "days_since_survey", "kind": "days_since", "source_col": "survey_date"},
+          {"name": "days_to_correction", "kind": "days_between", "start_col": "survey_date", "end_col": "correction_date"}
+        ],
+        "json_schema": {
+          "cms_certification_number_ccn": "string",
+          "provider_name": "string",
+          "citytown": "string",
+          "state": "string",
+          "survey_date": "string",
+          "correction_date": "string",
+          "deficiency_tag_number": "string",
+          "deficiency_description": "string",
+          "scope_severity_code": "string",
+          "deficiency_category": "string",
+          "inspection_cycle": "string",
+          "standard_deficiency": "string",
+          "complaint_deficiency": "string",
+          "infection_control_inspection_deficiency": "string",
+          "days_since_survey": "int",
+          "days_to_correction": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Nursing Home Collapse Trend",
+        "date_col": "survey_date",
+        "dimensions": ["state", "cms_certification_number_ccn", "deficiency_category"],
+        "rolling_window_days": 90,
+        "anomaly_z": 2.0,
+        "features_description": "Per-citation nursing-home deficiency records with days_since_survey, days_to_correction, scope-severity, and category encoding. Use in Tableau to drive per-provider collapse risk score via aggregation on ccn.",
+        "stats_description": "Per-(state, provider, category) deficiency rollups: monthly counts, 90-day rolling counts, YoY deltas, z-score anomalies. Use to spot providers with surging widespread-severity citations or clustered survey activity."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Nursing Home Deficiency Detail",
+      "project": "34 - Nursing Home Collapse Risk",
+      "source": "Nursing Home Collapse Trend (Features)",
+      "description": "Row-level CMS nursing-home health-inspection deficiencies over the last 12 months (survey_date > 2025-07-24). Includes ccn, provider_name, city/state, survey_date, correction_date, deficiency_tag_number + deficiency_description, scope_severity_code, deficiency_category, inspection_cycle, standard/complaint/infection-control flags, days_since_survey, days_to_correction, plus calendar features. Source: data.cms.gov/provider-data r5ix-sfxw. Refresh: monthly.\n\nAdvanced-route notes: this DS is the feature-level input to a composite provider-level collapse-risk score computed at dashboard time. Join at Tableau layer to: (a) 'CMS Nursing Home Providers' on cms_certification_number_ccn for full provider metadata; (b) 'HealthData Hospital Capacity' on state for F4 spillover signal. RED indicator: CMS PBJ staffing data is not on this site — F5 staffing signal is substituted with F1 F-tag clustering. Facilities under-staffed but with an otherwise clean deficiency history will not be flagged; the F1 proxy lags underlying staffing by ~1 survey cycle."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "Nursing Home Deficiency Stats",
+      "project": "34 - Nursing Home Collapse Risk",
+      "source": "Nursing Home Collapse Trend (Stats)",
+      "description": "Long-form per-(state, provider, deficiency category) statistics. Includes 90-day rolling counts, monthly counts, YoY deltas, z-score anomalies (|z|>=2.0 flagged is_anomaly=True). Use to identify providers with sudden clustering of widespread-severity citations."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "monthly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "34 - Nursing Home Collapse Risk",
+    "parent_project": "Prep Agent",
+    "flow_name": "Nursing Home Collapse Risk",
+    "overwrite": true,
+    "cadence": "monthly",
+    "hour_utc": 15,
+    "minute_utc": 15,
+    "weekday": "thursday",
+    "day_of_month": 10,
+    "schedule_name_hint": "Nursing Home Collapse Risk Monthly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

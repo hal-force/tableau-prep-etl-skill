@@ -1,4 +1,4 @@
-# embassy_threat_monitor_v2
+# sled_grant_clawback_risk
 
 **Latest:** [v2/](v2/README.md)
 

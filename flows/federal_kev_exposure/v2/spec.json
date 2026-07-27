@@ -1,0 +1,113 @@
+{
+  "request": "Advanced-route deliverable: federal KEV exposure ranking. Pull the CISA Known Exploited Vulnerabilities catalog and enrich for FCEB agencies with SLA pressure (days_to_due, exploit_sla_days), ransomware flag, and CWE class. This is the CANONICAL RED-path demo: per-agency CVE inventory is not publicly available and is declared as gap in the DS description. Publish two DSes to Tableau Cloud under Prep Agent. Fed Workforce (BLS CES) join is a dashboard-time capacity proxy.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "CISA KEV Catalog (Exposure view)",
+      "description": "U.S. CISA Known Exploited Vulnerabilities catalog with computed SLA pressure derived at ingest.",
+      "url": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_records_path": "vulnerabilities",
+        "json_paginate": false,
+        "json_derived_columns": [
+          {
+            "name": "cwe_list",
+            "kind": "list_join",
+            "source_col": "cwes",
+            "sep": ", "
+          },
+          {
+            "name": "exploit_sla_days",
+            "kind": "days_between",
+            "start_col": "dateAdded",
+            "end_col": "dueDate"
+          },
+          {
+            "name": "days_since_added",
+            "kind": "days_since",
+            "source_col": "dateAdded"
+          },
+          {
+            "name": "days_since_due",
+            "kind": "days_since",
+            "source_col": "dueDate"
+          }
+        ],
+        "json_schema": {
+          "cveID": "string",
+          "vendorProject": "string",
+          "product": "string",
+          "vulnerabilityName": "string",
+          "dateAdded": "string",
+          "shortDescription": "string",
+          "requiredAction": "string",
+          "dueDate": "string",
+          "knownRansomwareCampaignUse": "string",
+          "notes": "string",
+          "cwe_list": "string",
+          "exploit_sla_days": "int",
+          "days_since_added": "int",
+          "days_since_due": "int"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Federal KEV Exposure Trend",
+        "date_col": "dateAdded",
+        "dimensions": [
+          "vendorProject"
+        ],
+        "rolling_window_days": 90,
+        "anomaly_z": 2.0,
+        "features_description": "Row-level CISA KEV records with SLA pressure (exploit_sla_days, days_since_added, days_since_due), ransomware flag, and CWE list. Compute overdue_flag = days_since_due > 0 in Tableau. Join to 'Fed Workforce' at dashboard time as a capacity proxy.",
+        "stats_description": "Long-form KEV velocity per vendorProject: monthly / rolling / anomaly stats. Use to identify vendors with surging KEV additions."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Federal KEV Exposure Detail",
+      "project": "36 - Federal KEV Exposure",
+      "source": "Federal KEV Exposure Trend (Features)",
+      "description": "Row-level CISA KEV catalog with federal-exposure enrichment (one row per CVE). Fields: cveID, vendorProject, product, vulnerabilityName, dateAdded, shortDescription, requiredAction, dueDate, knownRansomwareCampaignUse, notes, cwe_list, exploit_sla_days, days_since_added, days_since_due, plus calendar features. Refresh: weekly.\n\nAdvanced-route notes: this DS is the CANONICAL RED-path demo. Per-agency CVE inventory (F5) is NOT publicly available \u2014 every ranking here is an UPPER-BOUND estimate at the vendorProject / product level, NOT a targeted per-agency assessment. Use in Tableau by: (a) filtering to days_since_due > 0 for OVERDUE items; (b) sorting by knownRansomwareCampaignUse desc + exploit_sla_days asc; (c) joining to 'Fed Workforce' on year+month for the workforce capacity proxy. BOD 22-01 SLA scope is FCEB only; DoD and IC have separate obligations."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "Federal KEV Exposure Stats",
+      "project": "36 - Federal KEV Exposure",
+      "source": "Federal KEV Exposure Trend (Stats)",
+      "description": "Long-form KEV velocity per vendorProject with monthly counts, 90d rolling counts, YoY deltas, z-score anomalies. Use to spot vendors with surging catalog additions \u2014 a leading indicator of federal-wide patching pressure."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "weekly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "36 - Federal KEV Exposure",
+    "parent_project": "Prep Agent",
+    "flow_name": "Federal KEV Exposure",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 6,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "Federal KEV Exposure Weekly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

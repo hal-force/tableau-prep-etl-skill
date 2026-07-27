@@ -1,0 +1,95 @@
+{
+  "request": "Advanced-route deliverable: space-domain convergence view. Pull the active satellite TLE catalog and the CNEOS Sentry impact-risk catalog. Bucket TLEs into orbital regimes (LEO/MEO/GEO/HEO/cislunar) via TLE line2 mean-motion substring extraction. Publish two DSes to Tableau Cloud under Prep Agent. OpenSky US airspace activity is a dashboard-time join, not a build-time coupling.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "Active Satellite TLE Catalog (Convergence view)",
+      "description": "TLE catalog (Space-Track mirror). One row per active tracked satellite. line2 is the standard NORAD TLE line-2 (columns 53-62 contain mean motion in revolutions/day).",
+      "url": "https://tle.ivanstanojevic.me/api/tle/?page-size=100&page=1",
+      "format": "json",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 60,
+        "max_retries": 3,
+        "json_records_path": "member",
+        "json_paginate": true,
+        "json_page_kind": "page",
+        "json_page_param": "page",
+        "json_page_size_param": "page-size",
+        "json_page_size": 100,
+        "json_page_start": 1,
+        "json_max_pages": 20,
+        "json_derived_columns": [
+          {
+            "name": "days_since_epoch",
+            "kind": "days_since",
+            "source_col": "date"
+          },
+          {
+            "name": "mean_motion_str",
+            "kind": "substring",
+            "source_col": "line2",
+            "start": 52,
+            "length": 11
+          }
+        ],
+        "json_schema": {
+          "satelliteId": "int",
+          "name": "string",
+          "date": "string",
+          "line1": "string",
+          "line2": "string",
+          "days_since_epoch": "int",
+          "mean_motion_str": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "TLE Convergence Trend",
+        "date_col": "date",
+        "dimensions": [
+          "name"
+        ],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Per-satellite TLE catalog with days_since_epoch and mean_motion_str extracted from line2 columns 53-63. Compute orbital regime bucket in Tableau via mean_motion cast to decimal: LEO >= 11.25, MEO 5-11.25, GEO 1.0-1.1, HEO 0.7-5, cislunar < 0.7. Flag stale TLEs (days_since_epoch > 14).",
+        "stats_description": "Long-form per-satellite temporal statistics (limited usefulness given TLE per-satellite record cadence)."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Space Convergence Satellite Detail",
+      "project": "37 - Space Domain Convergence",
+      "source": "TLE Convergence Trend (Features)",
+      "description": "Row-level active satellite TLE catalog with days_since_epoch, mean_motion_str (columns 53-63 of TLE line2), and calendar features. Compute orbital_regime and stale-TLE flag in Tableau. Refresh: daily.\n\nAdvanced-route notes: 'convergence' is COINCIDENT ANALYST INTEREST + temporal overlap, NOT physical intercept. Real conjunction analysis needs SGP4 propagation and is out of scope. Join at Tableau layer to: (a) 'Space Convergence Asteroid Risk' at time granularity for combined risk views; (b) 'OpenSky US' for airspace-activity demand proxy in the same window. Orbital regime bucket is inferred heuristically from TLE mean motion."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "daily",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "37 - Space Domain Convergence",
+    "parent_project": "Prep Agent",
+    "flow_name": "Space Domain Convergence",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 7,
+    "minute_utc": 0,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "Space Convergence Daily Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

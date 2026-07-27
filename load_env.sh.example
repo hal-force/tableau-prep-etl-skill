@@ -1,0 +1,46 @@
+# load_env.sh.example — source this to export Tableau + skill env vars.
+#
+# Copy to ~/.tableau-prep-etl/load_env.sh and customize, then:
+#   source ~/.tableau-prep-etl/load_env.sh
+#
+# This file lives OUTSIDE the repo on purpose — it is machine-local and
+# must NEVER be committed. It reads secrets from your OS keystore so no
+# plaintext secret is written to disk.
+#
+# `python3 -m skill.scripts.server_creds --load` writes the Keychain
+# entries this script reads (macOS). On Linux, store the same
+# service/account pairs with `secret-tool store`.
+
+# ── Tableau Server / Cloud (service "tableau-prep-etl") ────────────────
+# macOS Keychain path. On Linux swap `security find-generic-password
+# -s tableau-prep-etl -a <account> -w` for
+# `secret-tool lookup service tableau-prep-etl account <account>`.
+export TABLEAU_SERVER_URL=$(security find-generic-password -s tableau-prep-etl -a url -w 2>/dev/null)
+export TABLEAU_SERVER_PAT_NAME=$(security find-generic-password -s tableau-prep-etl -a pat-name -w 2>/dev/null)
+export TABLEAU_SERVER_PAT_SECRET=$(security find-generic-password -s tableau-prep-etl -a pat-secret -w 2>/dev/null)
+export TABLEAU_SERVER_SITE=$(security find-generic-password -s tableau-prep-etl -a site -w 2>/dev/null)
+
+# Optional: username/password for local prep-cli runs of flows with
+# internal_published_ds sources (prep-cli v2026.1 rejects PATs — product gap).
+export TABLEAU_SERVER_USERNAME=$(security find-generic-password -s tableau-prep-etl -a tableau-username -w 2>/dev/null)
+export TABLEAU_SERVER_PASSWORD=$(security find-generic-password -s tableau-prep-etl -a tableau-password -w 2>/dev/null)
+
+# ── LLM gateway (intake + metadata generation) ────────────────────────
+# Production uses claude-sonnet-4-6. Prefer env vars in CI/production;
+# local dev may instead run `python3 -m skill.scripts.llm_config`.
+export LLM_GATEWAY_URL='https://your-gateway/chat/completions'
+export LLM_GATEWAY_KEY=$(security find-generic-password -s tableau-prep-etl -a llm-gateway-key -w 2>/dev/null)
+export LLM_GATEWAY_MODEL='claude-sonnet-4-6'
+
+# ── Tableau Prep CLI binary (override if not at the default path) ──────
+# export TABLEAU_PREP_CLI='/Applications/Tableau Prep Builder (Apple silicon) 2026.1.app/Contents/scripts/tableau-prep-cli'
+
+# ── Per-data-source API keys (add as your flows need them) ─────────────
+# The api_caller reads whichever env name a spec declares in
+# extra.api_key_env. Store each key under its own Keychain account.
+# export EIA_API_KEY=$(security find-generic-password -s tableau-prep-etl -a eia-api-key -w 2>/dev/null)
+# export ACLED_API_KEY=$(security find-generic-password -s tableau-prep-etl -a acled-api-key -w 2>/dev/null)
+
+# NOTE: after adding a new keychain-mapped var, kill and relaunch TabPy
+# from a shell that just sourced this file — the daemon captures env at
+# launch and won't see new vars otherwise.

@@ -1,0 +1,107 @@
+{
+  "request": "Advanced-route deliverable: wildfire staging-resource gap. Pull active US wildfire incidents from NIFC/WFIGS (ActiveFireCandidate=1). Enrich with EOC metrics (size class, growth rate, days-since-discovery). Surface F2 assigned-resource fields (TotalIncidentPersonnel, EstimatedCostToDate, IncidentComplexityLevel) explicitly so gap ratios are one-hop in Tableau. Publish two DSes to Tableau Cloud under Prep Agent. Grid-spillover join to US Grid Network is a dashboard-time step, not a build-time join.",
+  "sources": [
+    {
+      "type": "rest_api",
+      "name": "WFIGS US Wildfire Incidents (Staging Gap view)",
+      "description": "NIFC/WFIGS Current Incident Locations FeatureServer (ActiveFireCandidate=1). One row per active wildfire incident with geometry (point) and IRWIN attributes. Personnel and cost fields are IMT self-reported.",
+      "url": "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_Current/FeatureServer/0/query",
+      "format": "arcgis_features",
+      "auth": "none",
+      "extra": {
+        "verify_ssl": true,
+        "timeout_s": 180,
+        "max_retries": 3,
+        "arcgis_where": "1=1",
+        "arcgis_out_fields": "OBJECTID,IrwinID,UniqueFireIdentifier,IncidentName,IncidentTypeCategory,IncidentTypeKind,FireDiscoveryDateTime,ContainmentDateTime,ControlDateTime,FireOutDateTime,ModifiedOnDateTime_dt,IncidentSize,DiscoveryAcres,FinalAcres,PercentContained,FireCause,FireCauseGeneral,FireMgmtComplexity,FireBehaviorGeneral,GACC,POOState,POOCounty,POOFips,POOCity,POOJurisdictionalAgency,POOJurisdictionalUnit,POOLandownerCategory,POOProtectingAgency,InitialLatitude,InitialLongitude,TotalIncidentPersonnel,EstimatedCostToDate,EstimatedFinalCost,IncidentManagementOrganization,IncidentComplexityLevel,ActiveFireCandidate",
+        "arcgis_field_types": {
+          "IncidentSize": "decimal",
+          "DiscoveryAcres": "decimal",
+          "FinalAcres": "decimal",
+          "PercentContained": "decimal",
+          "InitialLatitude": "decimal",
+          "InitialLongitude": "decimal",
+          "TotalIncidentPersonnel": "int",
+          "EstimatedCostToDate": "decimal",
+          "EstimatedFinalCost": "decimal",
+          "OBJECTID": "int",
+          "ActiveFireCandidate": "int"
+        },
+        "arcgis_return_geometry": true,
+        "arcgis_geometry_kind": "point",
+        "arcgis_out_sr": 4326,
+        "arcgis_page_size": 2000,
+        "_skip_auto_casts": true
+      }
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "eoc_fire_metrics",
+      "args": {
+        "branch": 0,
+        "name": "EOC Fire Metrics",
+        "size_col": "IncidentSize",
+        "discovery_col": "FireDiscoveryDateTime",
+        "modified_col": "ModifiedOnDateTime_dt",
+        "containment_col": "PercentContained",
+        "containment_dt_col": "ContainmentDateTime",
+        "state_col": "POOState",
+        "county_col": "POOCounty",
+        "agency_col": "POOJurisdictionalAgency",
+        "cause_col": "FireCauseGeneral",
+        "name_col": "IncidentName",
+        "type_col": "IncidentTypeCategory",
+        "fire_out_col": "FireOutDateTime"
+      }
+    },
+    {
+      "kind": "trend_analysis",
+      "args": {
+        "branch": 0,
+        "name": "Staging Gap Trend",
+        "date_col": "FireDiscoveryDateTime",
+        "dimensions": ["POOState", "IncidentComplexityLevel", "POOJurisdictionalAgency"],
+        "rolling_window_days": 30,
+        "anomaly_z": 2.0,
+        "features_description": "Per-incident active wildfires with EOC size/growth/staleness enrichment plus explicit staging-gap fields: TotalIncidentPersonnel, EstimatedCostToDate, IncidentComplexityLevel, jurisdictional agency + protecting agency. Compute personnel_per_100acres = TotalIncidentPersonnel / (IncidentSize/100), cost_per_acre = EstimatedCostToDate / IncidentSize in Tableau.",
+        "stats_description": "Long-form per-(state, complexity, agency) statistics on discovery volume with 30d rolling counts and z-score anomalies. Use to spot regional surges."
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "Wildfire Staging Gap Detail",
+      "project": "35 - Wildfire Staging Gap",
+      "source": "Staging Gap Trend (Features)",
+      "description": "Row-level active US wildfire incidents from NIFC/WFIGS (ActiveFireCandidate=1) enriched for staging-resource gap analysis. Each row includes IncidentName, IncidentSize (acres), PercentContained, days_since_discovery, size_class, containment_band, acres_per_day, POOState/County/City, POOJurisdictionalAgency + POOProtectingAgency, POOLandownerCategory, TotalIncidentPersonnel, EstimatedCostToDate, IncidentComplexityLevel, geometry (point), plus temporal calendar axes. Source: NIFC/WFIGS. Refresh: hourly.\n\nAdvanced-route notes: staging gap is a HEURISTIC proxy — real staging goes through ICS resource orders. F2 personnel + cost are IMT self-reported and lag by one shift. Use in Tableau by: (a) computing personnel_per_100acres and cost_per_acre; (b) flagging incidents where the ratio is below a complexity-adjusted threshold; (c) joining to 'US Grid Network' on POOState for grid-load spillover; (d) flagging POOJurisdictionalAgency != POOProtectingAgency for multi-jurisdiction friction."
+    },
+    {
+      "kind": "published_data_source",
+      "name": "Wildfire Staging Gap Stats",
+      "project": "35 - Wildfire Staging Gap",
+      "source": "Staging Gap Trend (Stats)",
+      "description": "Long-form per-(state, complexity, agency) discovery statistics for active wildfires: monthly counts, 30-day rolling counts, z-score anomalies (|z|>=2.0 flagged is_anomaly=True). Use to identify states / agencies with unusual clustering that would strain staging."
+    }
+  ],
+  "qa_tier": "none",
+  "eval_strategy": "sample_validation",
+  "deployment": "tableau_server",
+  "refresh_cadence": "hourly",
+  "parameterize_query": false,
+  "server_publish": {
+    "project": "35 - Wildfire Staging Gap",
+    "parent_project": "Prep Agent",
+    "flow_name": "Wildfire Staging Gap",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 0,
+    "minute_utc": 45,
+    "weekday": "monday",
+    "day_of_month": 1,
+    "schedule_name_hint": "Wildfire Staging Gap Hourly Refresh"
+  },
+  "confidence": 1.0,
+  "open_questions": []
+}

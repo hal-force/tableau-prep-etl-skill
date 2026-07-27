@@ -208,9 +208,13 @@ def find_project(
 def list_projects(server: TSC.Server) -> list[TSC.ProjectItem]:
     """Return all projects on the connected site. Used by the publish
     picker UX to surface candidates the user can choose from before any
-    upload is attempted."""
-    all_projects, _ = server.projects.get()
-    return list(all_projects)
+    upload is attempted.
+
+    Paginate with TSC.Pager: `server.projects.get()` returns only the
+    first page (default 100), which silently drops freshly-created
+    projects on busy sites.
+    """
+    return list(TSC.Pager(server.projects))
 
 
 def create_project(

@@ -1,0 +1,42 @@
+{
+  "question": "Where do satellite orbital regimes and Sentry impact-risk objects overlap in time and analyst attention, alongside US airspace activity?",
+  "internal_scan": {
+    "site": "<sanitized>",
+    "ran_at_utc": "2026-07-24T15:45:00Z",
+    "matches": [
+      {"ds_name": "TLE Satellites", "project": "Prep Agent", "score": 89.0, "note": "F1/F2"},
+      {"ds_name": "CNEOS Sentry", "project": "Prep Agent", "score": 84.0, "note": "F3"},
+      {"ds_name": "OpenSky US", "project": "Prep Agent", "score": 58.0, "note": "F4 proxy; dashboard-time"}
+    ],
+    "verdict": "All three feeder DSes exist. This flow republishes convergence-scored views of TLE and Sentry; OpenSky stays as dashboard-time."
+  },
+  "indicators": [
+    {"id": "F1.1", "name": "days_since_epoch", "window": "current",
+      "candidates": [{"tier": "internal", "source": "TLE Satellites DS", "result": "GREEN"}],
+      "acceptance": "Populated on all rows"},
+    {"id": "F1.2", "name": "Stale-TLE flag", "window": "current",
+      "candidates": [{"tier": "derived", "source": "days_since_epoch > 14 threshold"}],
+      "acceptance": "F1.1 met"},
+    {"id": "F2.1", "name": "Orbital regime bucket", "window": "current",
+      "candidates": [{"tier": "derived", "source": "Substring extraction from TLE line2 (mean motion column 53-62), then numeric_bin"}],
+      "acceptance": "line2 populated"},
+    {"id": "F2.2", "name": "Regime population count", "window": "current",
+      "candidates": [{"tier": "derived", "source": "trend_analysis stats"}],
+      "acceptance": "F2.1 met"},
+    {"id": "F3.1", "name": "palermo_band", "window": "current",
+      "candidates": [{"tier": "internal", "source": "CNEOS Sentry DS", "result": "GREEN"}],
+      "acceptance": "ps_cum populated"},
+    {"id": "F3.2", "name": "days_since_last_obs", "window": "current",
+      "candidates": [{"tier": "internal", "source": "CNEOS Sentry DS", "result": "GREEN"}],
+      "acceptance": "last_obs populated"},
+    {"id": "F4.1", "name": "US aircraft state count", "window": "current",
+      "candidates": [{"tier": "internal", "source": "OpenSky US DS", "result": "GREEN — dashboard-time"}],
+      "acceptance": "OpenSky DS current"},
+    {"id": "F5.1", "name": "Composite convergence score", "window": "current",
+      "candidates": [{"tier": "derived", "source": "Tableau calc combining F1.2, F3.1, F4.1"}],
+      "acceptance": "Feeders present"}
+  ],
+  "preference_order_rule": "INTERNAL first. Publish two convergence-scored DSes (satellite + asteroid); OpenSky stays as dashboard-time to avoid coupling to its refresh cadence.",
+  "approval_required_before_acquisition": ["None — tle.ivanstanojevic.me and ssd-api.jpl.nasa.gov approved."],
+  "gap_summary": []
+}

@@ -50,6 +50,22 @@ Requires:
 Prefer Docker for TabPy + Python deps? See **[`docker/README.md`](docker/README.md)**.
 The Tableau Prep CLI itself is macOS-only and stays on the host either way.
 
+### Prerequisites you must obtain (not `pip`-installable)
+
+Two dependencies require access/licensing that no setup script can
+grant — arrange these **before** you start, as they can take days:
+
+| Prerequisite | Needed for | How to obtain |
+|---|---|---|
+| **Tableau Prep Builder** 2025.3+ | Running `.tfl` flows locally (any run that isn't `--skip-cli`) | Licensed product. Bundled with **Tableau Creator**; download from [tableau.com/products/prep](https://www.tableau.com/products/prep). A 14-day trial works for evaluation. The bundled `tableau-prep-cli` binary is what this skill drives. |
+| **LLM gateway** | Natural-language intake + column-metadata generation | Any OpenAI-compatible `/chat/completions` endpoint serving `claude-sonnet-4-6`. At Salesforce, request access to the internal AI gateway; otherwise point `LLM_GATEWAY_URL`/`LLM_GATEWAY_KEY` at your own provider. **Not required** if you author `spec.json` by hand and run with `--spec` (see step 5, Option C). |
+| **Tableau Server / Cloud** + PAT | Publishing flows, data sources, and metadata (`--publish`) | Only needed to publish. Use an existing org tenant or a Tableau Cloud trial; create a Personal Access Token under **My Account Settings → Personal Access Tokens**. Local-only flow authoring needs none of this. |
+
+Everything else — the skill code, TabPy, Python deps — installs from
+this repo and `pip`. If you only want to **build and validate** flows
+(no local execution, no publish), you can skip the Prep Builder and
+Tableau Server rows entirely and run with `--skip-cli`.
+
 ## First-run setup
 
 ### 1. Clone and link
@@ -57,6 +73,7 @@ The Tableau Prep CLI itself is macOS-only and stays on the host either way.
 ```sh
 git clone https://github.com/hal-force/tableau-prep-etl-skill.git
 cd tableau-prep-etl-skill
+mkdir -p ~/.claude/skills   # first-time: the skills dir may not exist yet
 ln -s "$PWD/skill" ~/.claude/skills/tableau-prep-etl
 ```
 
@@ -84,6 +101,8 @@ is broken on recent macOS builds. The working recipe is unauth TabPy
 on port 9099 with a 600-second evaluate timeout:
 
 ```sh
+pip install tabpy                # once, into the interpreter you'll launch it from
+
 cat > /tmp/tabpy_smoke.conf <<'EOF'
 [TabPy]
 TABPY_PORT = 9099
@@ -91,8 +110,7 @@ TABPY_EVALUATE_ENABLE = true
 TABPY_EVALUATE_TIMEOUT = 600
 EOF
 
-/Library/Frameworks/Python.framework/Versions/3.13/bin/tabpy \
-    --config=/tmp/tabpy_smoke.conf --disable-auth-warning &
+"$(which tabpy)" --config=/tmp/tabpy_smoke.conf --disable-auth-warning &
 ```
 
 Then point prep-cli at it:
@@ -119,11 +137,17 @@ python3 -m skill.scripts.server_creds --load
 
 The discovery walks env vars → macOS Keychain → Linux libsecret →
 `~/.tableau-prep-etl/server.json` (chmod 600 plaintext, dev only).
-On first run, it saves what it finds in Keychain for future shells:
+On first run, it saves what it finds in Keychain for future shells.
+Copy [`load_env.sh.example`](load_env.sh.example) to
+`~/.tableau-prep-etl/load_env.sh` (it reads secrets from your OS
+keystore — never commit it), then source it:
 
 ```sh
 source ~/.tableau-prep-etl/load_env.sh   # exports TABLEAU_SERVER_*
 ```
+
+For a non-Keychain / CI setup, copy [`.env.example`](.env.example) to
+`.env` (gitignored) and fill in the values, or export them directly.
 
 Required env vars (any one of these paths sets them):
 
