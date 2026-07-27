@@ -50,6 +50,22 @@ Requires:
 Prefer Docker for TabPy + Python deps? See **[`docker/README.md`](docker/README.md)**.
 The Tableau Prep CLI itself is macOS-only and stays on the host either way.
 
+### Prerequisites you must obtain (not `pip`-installable)
+
+Two dependencies require access/licensing that no setup script can
+grant — arrange these **before** you start, as they can take days:
+
+| Prerequisite | Needed for | How to obtain |
+|---|---|---|
+| **Tableau Prep Builder** 2025.3+ | Running `.tfl` flows locally (any run that isn't `--skip-cli`) | Licensed product. Bundled with **Tableau Creator**; download from [tableau.com/products/prep](https://www.tableau.com/products/prep). A 14-day trial works for evaluation. The bundled `tableau-prep-cli` binary is what this skill drives. |
+| **LLM gateway** | Natural-language intake + column-metadata generation | Any OpenAI-compatible `/chat/completions` endpoint serving `claude-sonnet-4-6`. At Salesforce, request access to the internal AI gateway; otherwise point `LLM_GATEWAY_URL`/`LLM_GATEWAY_KEY` at your own provider. **Not required** if you author `spec.json` by hand and run with `--spec` (see step 5, Option C). |
+| **Tableau Server / Cloud** + PAT | Publishing flows, data sources, and metadata (`--publish`) | Only needed to publish. Use an existing org tenant or a Tableau Cloud trial; create a Personal Access Token under **My Account Settings → Personal Access Tokens**. Local-only flow authoring needs none of this. |
+
+Everything else — the skill code, TabPy, Python deps — installs from
+this repo and `pip`. If you only want to **build and validate** flows
+(no local execution, no publish), you can skip the Prep Builder and
+Tableau Server rows entirely and run with `--skip-cli`.
+
 ## First-run setup
 
 ### 1. Clone and link
