@@ -42,7 +42,7 @@ the heuristics.
 |---------------------|------------------------|-----------------------------------------------------------------------|
 | `verify_ssl`        | `true`                 | Set to `false` only for self-signed dev endpoints.                    |
 | `timeout_s`         | `120`                  | Per-request timeout. Bump for slow public APIs (EPA AQS, Federal Register at scale). |
-| `max_retries`       | `3`                    | Retries on `URLError` / `TimeoutError` and 5xx / 429. 4xx other than 429 is treated as permanent. |
+| `max_retries`       | `6`                    | Retries on `URLError` / `TimeoutError` and 5xx / 429. 4xx other than 429 is treated as permanent. |
 | `api_key_env`       | `'API_KEY'`            | (auth=='api_key' \| 'query_key') env var holding the bearer token / query-string key. Never put the secret in the spec. |
 | `user_env`          | `'API_USER'`           | (auth=='basic') env var holding the username.                         |
 | `pwd_env`           | `'API_PASSWORD'`       | (auth=='basic') env var holding the password.                         |

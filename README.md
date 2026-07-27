@@ -25,11 +25,10 @@ tableau-prep-etl-skill/
 │   └── reference/            # tfl_format, tabpy_setup, server_publishing,
 │                             #   metadata_api, examples
 │
-└── flows/                    # archived per-flow artifacts (cred-scrubbed)
-    ├── otf_grants/v1/
-    ├── us_wildfires_eoc/v1/
-    ├── us_grid_network/v1/
-    └── gdelt_global/v1/
+└── flows/                    # 50+ archived per-flow artifacts (cred-scrubbed)
+    ├── gdelt_global/v1/       #   e.g. otf_grants, us_wildfires_eoc,
+    ├── otf_grants/v1/         #   cisa_kev, fema_disasters, la_crime_2024, …
+    └── …                      #   see docs/worked_examples.md for the full set
 ```
 
 ## Platform support
@@ -48,7 +47,9 @@ Requires:
 - Tableau Server 2022.3+ or Tableau Cloud for `--publish`
 
 Prefer Docker for TabPy + Python deps? See **[`docker/README.md`](docker/README.md)**.
-The Tableau Prep CLI itself is macOS-only and stays on the host either way.
+The Tableau Prep CLI is a host-side binary either way — install it on
+macOS or Windows (see the Platform support table above); it is not
+available inside the Linux container.
 
 ### Prerequisites you must obtain (not `pip`-installable)
 
@@ -255,9 +256,10 @@ pagination shape, every derived column kind):
 
 ## Worked examples
 
-37 archived flows live under `flows/<name>/v*/`, each with a
+50+ archived flows live under `flows/<name>/v*/`, each with a
 self-contained spec.json + flow.tfl + sample Hyper you can run cold.
-The full table with per-flow highlights and reproduction commands:
+A representative table with per-flow highlights and reproduction
+commands:
 **[`docs/worked_examples.md`](docs/worked_examples.md)**.
 
 Quick pointers by shape:

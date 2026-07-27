@@ -46,7 +46,7 @@ page is the "I want to drive it" guide.
 
 3. **Python modules in TabPy's interpreter** (NOT the project venv):
    ```sh
-   /Library/Frameworks/Python.framework/Versions/3.13/bin/pip install \
+   "$(dirname "$(which tabpy)")/pip" install \
      pandas networkx rapidfuzz \
      PyPDF2 pdfplumber pdf2image pytesseract \
      python-dateutil openai certifi tableauserverclient tableauhyperapi

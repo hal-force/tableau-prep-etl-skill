@@ -45,10 +45,13 @@ hardening for v2:
 3. **Sample validation GT**: emits a `USER_SUPPLY_GROUND_TRUTH.md`
    placeholder. v2 will pull a real sample from the source and ask
    the user to confirm.
-4. **Tableau Server publishing**: documented in
-   `skill/reference/server_publishing.md` as deferred. Authentication
-   and multipart upload are non-trivial; defer until v1 .tfl shape
-   is stable.
+4. **Tableau Server publishing**: SHIPPED. PAT auth, .tfl publish,
+   Hyper-backed published data source, project auto-create, schedule
+   wiring, and column-metadata write (.tds round-trip) all work via
+   `--publish` (`skill/scripts/publish.py`, `tflb_lib/publishing.py`).
+   See `skill/reference/server_publishing.md`. Remaining deferred bits:
+   sub-daily schedule emission and cross-flow dependency ordering
+   (see the README v2 roadmap).
 5. **Native-connector full config**: v1 emits a `LoadSql` skeleton
    with the connector class noted in `description`. v2 needs the
    per-connector attribute schemas (Snowflake account/warehouse,

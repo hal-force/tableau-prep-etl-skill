@@ -15,6 +15,7 @@ Third-party components (installed at runtime via requirements.txt):
   - certifi                     MPL-2.0
   - tableauhyperapi             Proprietary (Salesforce, Inc.)
   - tableauserverclient         MIT
+  - Faker                       MIT
   - PyPDF2 / pdfplumber /
     pdf2image / pytesseract /
     Pillow                      MIT / BSD / Apache-2.0 (respective upstreams)

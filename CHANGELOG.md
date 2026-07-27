@@ -7,6 +7,31 @@ starting from the initial `v0.9.0-preview` release.
 ## [Unreleased]
 
 ### Added
+- 10 advanced-route use-case flows (embassy_threat_monitor_v2,
+  centcom_supplier_risk, sled_grant_clawback_risk,
+  nursing_home_collapse_risk, wildfire_staging_gap,
+  federal_kev_exposure, space_domain_convergence,
+  grant_outcome_equity, post_disaster_grant_velocity,
+  oversight_vs_execution), each archived with its SAT-brief /
+  collections-plan / collections-log quartet under
+  `flows/<name>/v2/advanced_route/`.
+- `load_env.sh.example` — Keychain-backed env-var template matching
+  `server_creds.py`, so a fresh machine can reconstruct the shell
+  helper the docs reference.
+- `SECURITY.md` — vulnerability-disclosure policy pointing at GitHub
+  private reporting; documents the credential / SSRF-guard /
+  host-approval surface.
+- README "Prerequisites you must obtain" section (Tableau Prep
+  Builder license, LLM gateway, Server/PAT) and bootstrap fixes
+  (`mkdir -p ~/.claude/skills`, `pip install tabpy`,
+  portable `$(which tabpy)`), plus an expanded `.env.example`.
+
+### Fixed
+- `tflb_lib/publishing.py::list_projects` now walks `TSC.Pager`
+  instead of `server.projects.get()` (first page only), so the
+  publish picker sees freshly-created child projects on busy sites.
+
+### Prior unreleased work
 - `docker/` — optional docker-compose stack: unauth loopback-only
   TabPy sidecar + a Python 3.11 skill runner with `requirements.txt`
   pre-installed. Bind-mounts the repo at `/workspace`; connector
@@ -19,7 +44,7 @@ starting from the initial `v0.9.0-preview` release.
   round-trip via a fake TSC server) and for `run_loop` pure helpers
   (`_new_run_id` / `_safe_tfl_basename` / `_spec_from_dict`) —
   `skill/tests/test_metadata_writer.py`, `test_run_loop.py`. Total
-  suite is now 139 tests; runs in <0.3 s with no live TabPy /
+  suite is now 140 tests; runs in <0.3 s with no live TabPy /
   Tableau / LLM dependency.
 - Synthetic-sample generation in `archive_flow._synthesize_sample`:
   string values in the 5-row archived sample for non-open-source

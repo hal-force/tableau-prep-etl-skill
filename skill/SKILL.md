@@ -3,7 +3,8 @@ name: tableau-prep-etl
 description: >-
   Build a Tableau Prep flow (.tfl) from a natural-language ETL request.
   Handles local-folder ingestion, REST/GraphQL APIs, native Tableau
-  connectors, web-crawl pipelines (Crawl4AI), and PKI-authenticated
+  connectors, web-crawl pipelines (Crawl4AI; opt-in — uncomment
+  crawl4ai in requirements.txt), and PKI-authenticated
   endpoints. Runs the built flow via `tableau-prep-cli`, verifies the
   produced Hyper against a deterministic QA gate, and optionally
   publishes the flow + a Hyper-backed published data source to Tableau
@@ -160,7 +161,7 @@ For each `spec.sources[*]`, pick a strategy:
 | `native_connector` | `.v1.SqlConnection` / `.v1.LoadCsv` / `.v1.LoadExcel` |
 | `rest_api` | `templates/api_caller.py.j2` Python step. Format-aware: `json`, `jsonl/ndjson`, `csv`, `csv_zip`, `csv_index_then_zip`, `arcgis_features`. Honors paginated walks (index, offset, body-side), POST + body, nested envelopes, derived columns, and per-column schema coercion. See `reference/api_caller_knobs.md`. |
 | `graphql_api` | `templates/api_caller.py.j2` (GraphQL variant) |
-| `web_crawl` | `templates/crawler.py.j2` Crawl4AI step + Prep parameter for query |
+| `web_crawl` | `templates/crawler.py.j2` Crawl4AI step + Prep parameter for query (opt-in — requires `pip install crawl4ai>=0.4` in TabPy's interpreter) |
 | `pki_endpoint` | `templates/pki_connector.py.j2` cert-auth Python step |
 | `internal_published_ds` | Native Tableau Server input bound to a published DS LUID (no Python step). Resolved at backgrounder run time via the user's site session. |
 
@@ -313,10 +314,13 @@ LLM-generated descriptions written back to the site:
 - **DS-level description** via REST `PUT /datasources/{luid}` — a 2-4
   sentence catalog entry covering what the data is and what it's
   good for.
-- **Per-column descriptions** via the Metadata API GraphQL
-  `updateField` mutation (with `updateColumn` fallback for older
-  Server builds) — one sentence per column, mentioning units / format
-  when sample rows make it obvious.
+- **Per-column descriptions** via .tds XML round-trip — download the
+  .tdsx, inject `<column><desc>` elements into the .tds, repack, and
+  re-publish with `mode='Overwrite'`. This is the only working write
+  path on Tableau Cloud (its Metadata API GraphQL mutations are
+  read-only — `updateField`/`updateColumn` return Internal Server
+  Errors). One sentence per column, mentioning units / format when
+  sample rows make it obvious. See `reference/metadata_api.md`.
 
 **Default: auto-apply.** Pass `--review-metadata` to write the
 proposal to `runtime/<run_id>/metadata_<output>.json` and stop without
