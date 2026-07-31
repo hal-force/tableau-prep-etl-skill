@@ -19,7 +19,7 @@ tableauserverclient>=0.25
 # PDF handling (only needed for local_folder + pdf_portfolio sources)
 PyPDF2>=3.0
 pdfplumber>=0.10
-pdf2image>=1.16
+pdf2image>=1.17.0
 pytesseract>=0.3
 Pillow>=10.0
 
