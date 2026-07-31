@@ -17,7 +17,7 @@ tableauhyperapi>=0.0.18000
 tableauserverclient>=0.25
 
 # PDF handling (only needed for local_folder + pdf_portfolio sources)
-PyPDF2>=3.0
+PyPDF2>=3.0.1
 pdfplumber>=0.10
 pdf2image>=1.16
 pytesseract>=0.3
