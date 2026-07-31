@@ -29,4 +29,4 @@ Pillow>=10.0
 # Synthetic sample generation (archive_flow: non-open-source flows get
 # a 5-row synthetic sample; falls back to <redacted> if Faker missing).
 # Optional — omit if you don't archive PII/internal flows.
-Faker>=20.0
+Faker>=40.36.0
