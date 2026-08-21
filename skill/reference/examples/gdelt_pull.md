@@ -11,24 +11,34 @@ User request:
 {
   "sources": [{
     "type": "rest_api",
+    "name": "GDELT Events",
     "url": "http://data.gdeltproject.org/events/index.html",
     "format": "csv_index_then_zip",
     "auth": "none",
-    "refresh_cadence": "daily"
+    "extra": {
+      "country_filter": "US",
+      "verify_ssl": true,
+      "max_retries": 3
+    }
   }],
-  "transformations": [
-    {"kind": "filter", "field": "ActionGeo_CountryCode", "value": "US"},
-    {"kind": "select_columns", "fields": [
-      "GLOBALEVENTID", "SQLDATE", "Actor1Name", "Actor2Name",
-      "EventCode", "GoldsteinScale", "ActionGeo_FullName"
-    ]}
-  ],
-  "outputs": [{"kind": "hyper", "name": "gdelt_us_events.hyper"}],
+  "transformations": [],
+  "outputs": [{"kind": "hyper", "name": "gdelt_us_events"}],
   "qa_tier": "deterministic",
   "eval_strategy": "sample_validation",
-  "deployment": "local"
+  "deployment": "local",
+  "refresh_cadence": "daily"
 }
 ```
+
+> **Schema note.** Source-acquisition options live under `extra` (not
+> as top-level source keys), `refresh_cadence` is a **top-level** spec
+> field, and `transformations` entries must be `{"kind": ..., "args": ...}`
+> using a dispatched kind — arbitrary `filter` / `select_columns`
+> transforms are not implemented and would fail validation. GDELT's
+> US filter is done at acquisition time via `extra.country_filter`;
+> the `csv_index_then_zip` format emits GDELT v1's fixed column schema.
+> To keep a subset of columns, publish all and hide the rest in the
+> `.tds`, or select downstream in Tableau.
 
 ## Strategy chosen by `source_planner.py`
 
@@ -45,7 +55,8 @@ User request:
 
 ## Notes
 
-- `refresh_cadence: daily` is captured in `spec.json` but v1 doesn't
-  schedule it. v2 will wire this to Tableau Conductor.
+- `refresh_cadence: daily` is captured in `spec.json`; on `--publish`
+  it maps to the closest Tableau schedule (see
+  `../server_publishing.md` for the cadence mapping).
 - No PKI, no OAuth, no rate-limit risk — clean case.
 - The api_caller template handles ZIP unpacking and retry-on-failure.

@@ -324,23 +324,28 @@ window".
 
 ## Quick command-line shape
 
-```bash
-# Advanced route — collections planning then flow build
-python3 -m skill.scripts.run_loop \
-    --question "Which US diplomatic posts are at elevated physical-security risk over the next 30 days?" \
-    --flow-name embassy_threat_monitor \
-    --route advanced \
-    --publish --auto-create-project
+The advanced route is **not** a `run_loop.py` flag — there is no
+`--route` or `--question` argument. It is a manual, agent-driven
+methodology: work through the SAT refinement → factors → indicators →
+collections plan → acquisition passes above (with a human in the loop),
+and the product is a `spec.json`. You then hand that spec to the
+simplified route, which is the only automated entry point:
 
-# Simplified route — direct spec (default)
+```bash
+# 1. Advanced route (this document): produce a collections-plan spec.json
+#    by hand — e.g. for the question "Which US diplomatic posts are at
+#    elevated physical-security risk over the next 30 days?" — and save it.
+
+# 2. Simplified route runs that spec (the standard one-shot pipeline):
 python3 -m skill.scripts.run_loop \
     --spec flows/embassy_threat_monitor/v1/spec.json \
     --flow-name embassy_threat_monitor \
     --publish --auto-create-project
 ```
 
-`--route advanced` activates Phase 0.5; without it the planner skips
-SAT refinement and the run is the standard one-shot.
+Wiring the advanced route to an actual `--route`/`--question` flag (and
+automating Phase 0.5) is roadmap work; today the phase is executed by
+the agent, not by `run_loop.py`.
 
 ## Related references
 

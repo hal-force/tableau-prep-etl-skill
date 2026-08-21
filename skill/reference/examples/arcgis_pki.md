@@ -11,22 +11,31 @@ User request:
 {
   "sources": [{
     "type": "pki_endpoint",
+    "name": "ArcGIS Parcels",
     "url": "https://arcgis.internal.example.com/server/rest/services/Parcels/MapServer/0/query",
     "format": "esri_feature_service_json",
     "auth": "client_cert",
-    "cert_path_env": "ARCGIS_CLIENT_CERT_PATH",
-    "cert_key_env": "ARCGIS_CLIENT_KEY_PATH"
+    "extra": {
+      "cert_path_env": "ARCGIS_CLIENT_CERT_PATH",
+      "cert_key_env": "ARCGIS_CLIENT_KEY_PATH",
+      "timeout_s": 90
+    }
   }],
-  "transformations": [
-    {"kind": "flatten_geometry"},
-    {"kind": "select_columns", "fields": ["OBJECTID", "PARCEL_ID", "OWNER", "ACRES"]}
-  ],
-  "outputs": [{"kind": "hyper", "name": "parcels.hyper"}],
+  "transformations": [],
+  "outputs": [{"kind": "hyper", "name": "parcels"}],
   "qa_tier": "deterministic",
   "eval_strategy": "sample_validation",
   "deployment": "local"
 }
 ```
+
+> **Schema note.** The cert-path env-var names are `extra` keys on a
+> `pki_endpoint` source, not top-level source keys (top-level unknown
+> keys fail validation). The `pki_connector.py.j2` template flattens
+> the feature-service geometry and returns a flat DataFrame itself —
+> there is no `flatten_geometry` / `select_columns` transform kind, so
+> `transformations` stays empty and column pruning happens downstream
+> (in Tableau or via `.tds` hiding).
 
 ## Strategy chosen by `source_planner.py`
 

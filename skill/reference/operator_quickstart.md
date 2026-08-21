@@ -18,8 +18,11 @@ a collections plan, and iterates over up to three passes (INTERNAL
 sources first, external second) before handing off to the simplified
 pipeline. Full walkthrough: `advanced_collections_route.md`.
 
-Activate the advanced route with `--route advanced` on `run_loop.py`,
-or `--question "..."` in place of `--spec`. Default is simplified.
+The advanced route is a manual, agent-driven methodology — there is
+**no `--route` or `--question` flag** on `run_loop.py`. Follow
+`advanced_collections_route.md` by hand to produce a `spec.json`, then
+run the simplified route on that spec (`--spec <plan>.json`). Simplified
+is the default and the only automated entry point.
 
 ## What this skill does
 
@@ -121,9 +124,12 @@ scratch:
 
 ```sh
 python3 -m skill.scripts.run_loop \
-    --request "Pull GDELT daily and load into Tableau, geocode events" \
+    "Pull GDELT daily and load into Tableau, geocode events" \
     --flow-name my_flow
 ```
+
+(The request is the **positional** first argument — there is no
+`--request` flag.)
 
 The skill returns `{"status": "needs_user_decision", ...}` for any
 clarifying questions; rerun with the resolved fields.
@@ -157,6 +163,22 @@ After every run (local or publish), check four things:
    the DS. The lineage / Data Details browser page may still 404
    for 10-30 min — that's Catalog indexing lag, not a failure.
    See `server_publishing.md`.
+
+**Reading `eval_status` / `passed`.** The run result reports one of:
+`scored` (an accuracy gate ran — `passed` is the real true/false against
+the threshold), `not_evaluated` (`passed: null` — the flow built cleanly
+but there was **no ground-truth holdout** to score against, e.g. a
+deterministic passthrough or `self_consistency` with no GT; this is a
+**success, not a failure**), `build_failed` (`passed: false` — prep-cli
+errored or produced no rows), or `not_run`. A `not_evaluated` result with
+a good Hyper + `metadata: applied ok` is a clean run — don't chase the
+old `passed:false / final_mean:0.0`, which no longer appears for this case.
+
+**Advisories.** The result may carry an `advisories[]` list (also printed
+to stderr and echoed in `report.md`). The common one: a `local_csv` /
+script-node source published to Tableau **Cloud** with a refresh cadence —
+the Cloud backgrounder can't reach the source, so the schedule is inert.
+Refresh by re-running the local publish.
 
 ## Common breakages
 

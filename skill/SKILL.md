@@ -68,9 +68,13 @@ ask, not the data shape.
   consume unchanged. Full workflow + templates:
   `reference/advanced_collections_route.md`.
 
-Trigger the advanced route with `--route advanced` (or by passing
-`--question "..."` instead of `--spec`); otherwise the simplified
-route is the default.
+The advanced route is a **manual, agent-driven methodology**, not a
+`run_loop.py` flag — there is no `--route` or `--question` argument.
+To run it, follow `reference/advanced_collections_route.md` by hand
+(question → factors → indicators → collections plan → acquisition
+passes) until it produces a `spec.json`, then feed that spec to the
+simplified route: `python3 -m skill.scripts.run_loop --spec <plan>.json`.
+The simplified route is the default and the only automated entry point.
 
 **Internal-first sourcing** applies to both routes — Phase 0 always
 runs first unless `--skip-scan` is passed. The advanced route makes
@@ -158,6 +162,7 @@ For each `spec.sources[*]`, pick a strategy:
 | Source type | Strategy |
 |---|---|
 | `local_folder` | folder-listing input + per-file Script node |
+| `local_csv` | a CSV already on disk read via the `LoadCsv`/textscan path. Distinct from `native_connector` (format=csv); honors `extra.csv_schema` / `casts` / `_skip_auto_casts`. Used by the internal-DS extract-download fallback. |
 | `native_connector` | `.v1.SqlConnection` / `.v1.LoadCsv` / `.v1.LoadExcel` |
 | `rest_api` | `templates/api_caller.py.j2` Python step. Format-aware: `json`, `jsonl/ndjson`, `csv`, `csv_zip`, `csv_index_then_zip`, `arcgis_features`. Honors paginated walks (index, offset, body-side), POST + body, nested envelopes, derived columns, and per-column schema coercion. See `reference/api_caller_knobs.md`. |
 | `graphql_api` | `templates/api_caller.py.j2` (GraphQL variant) |
@@ -174,6 +179,19 @@ For each `spec.sources[*]`, pick a strategy:
 | `graph_analysis` | `graph_analyzer.py.j2` | Per-node centralities (degree, betweenness, eigenvector, pagerank, closeness) + Fruchterman-Reingold spring layout x/y. One row per edge endpoint. |
 | `eoc_fire_metrics` | `eoc_fire_metrics.py.j2` | EOC analyst metrics for WFIGS/NIFC fire incidents (size_class, growth_band, containment_band, days_since_discovery, region_key, incident_summary). |
 | `pii_redaction` | `pii_redactor.py.j2` + `pii_audit.py.j2` (siblings) | Two outputs: row-preserving Redacted (PII masked in place) + long-form Audit (one row per detection, sha256 of original — never the original). |
+
+**Domain-specific transform kinds** (also dispatched in
+`source_planner.py`; built for specific demo collections rather than
+general use — the template name matches the kind):
+
+| Kind | Template | Output shape |
+|---|---|---|
+| `ew_fusion` | `ew_fusion.py.j2` | JEWOSC EW: fuse live ADS-B track vectors with a synthetic Electronic Order of Battle. |
+| `ew_intercept_fusion` | `ew_intercept_fusion.py.j2` | JEWOSC EW: fuse ELINT/ES intercept "cuts" (measured parametrics) to mission-data-file emitter records. |
+| `ew_intercept_match` | `ew_intercept_match.py.j2` | JEWOSC EW: parametric nearest-neighbour MATCH half of the intercept pipeline (modelling only). |
+| `embassy_threat_join` | `embassy_threat_join.py.j2` | Spatial join of GDELT events to US diplomatic posts. |
+| `embassy_acled_join` | `embassy_acled_join.py.j2` | Spatial join of ACLED events to US diplomatic posts. |
+| `embassy_risk_summary` | `embassy_risk_summary.py.j2` | Per-post weighted risk-band roll-up of the embassy event-level pairs. |
 
 ### Phase 4: Source Acquisition + Schema Inference
 
@@ -338,6 +356,8 @@ trail of what got pushed to the site.
 - `LLM_GATEWAY_URL` — full URL ending in `/chat/completions`
 - `LLM_GATEWAY_KEY` — bearer token
 - `LLM_GATEWAY_MODEL` — model id (default `claude-sonnet-4-6`)
+- `LLM_GATEWAY_VERIFY_SSL` — optional; set `false` only for a dev
+  gateway with a self-signed cert (default `true`).
 
 ### Tableau Server (publish + INTERNAL scan + metadata writer)
 

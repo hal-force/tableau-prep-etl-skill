@@ -259,22 +259,25 @@ breaks both:
 Use plain `dict` / `list` (no subscripts) at module level. Function
 bodies and lazy annotations are fine.
 
-### Sibling-output routing via `output.source.transformation`
+### Sibling-output routing via `output.source`
 
 When two outputs need to consume different transformations off a
 shared upstream tail (the Embassy Threat Monitor pattern), set
-`output.source.transformation` on each output:
+`output.source` on each output to the **node name string** of the
+transformation whose output it should consume (the transform's
+`args.name`, not a dict):
 
 ```json
 "outputs": [
-  {"name": "Threat Events", "source": {"transformation": "embassy_threat_join"}},
-  {"name": "Risk Summary",  "source": {"transformation": "embassy_risk_summary"}}
+  {"kind": "published_data_source", "name": "Threat Events", "source": "Embassy Threat Join"},
+  {"kind": "published_data_source", "name": "Risk Summary",  "source": "Embassy Risk Summary"}
 ]
 ```
 
-`generate_flow.py` connects each output edge to the named
-transformation's node id rather than the linear flow tail. Linear
-flows omit `output.source` and inherit the tail.
+`generate_flow.py` connects each output edge to the named node's id
+rather than the linear flow tail. `output.source` is a plain string —
+a dict form raises `TypeError: unhashable type: 'dict'`. Linear flows
+omit `output.source` and inherit the tail.
 
 ## Past failure modes (codified to prevent repeat)
 
