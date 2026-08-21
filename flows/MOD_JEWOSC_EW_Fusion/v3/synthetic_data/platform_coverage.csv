@@ -1,0 +1,26 @@
+emitter_id,mdf_covered_count,coverage_gap_count,covering_platforms,uncovered_platforms,coverage_summary
+EMT-001,7,1,PLT-01|PLT-02|PLT-03|PLT-04|PLT-05|PLT-06|PLT-07,PLT-08,7/8 platform MDFs recognise this emitter; 1 coverage gap(s).
+EMT-002,2,6,PLT-01|PLT-06,PLT-02|PLT-03|PLT-04|PLT-05|PLT-07|PLT-08,2/8 platform MDFs recognise this emitter; 6 coverage gap(s).
+EMT-003,4,4,PLT-01|PLT-03|PLT-05|PLT-06,PLT-02|PLT-04|PLT-07|PLT-08,4/8 platform MDFs recognise this emitter; 4 coverage gap(s).
+EMT-004,4,4,PLT-01|PLT-04|PLT-06|PLT-07,PLT-02|PLT-03|PLT-05|PLT-08,4/8 platform MDFs recognise this emitter; 4 coverage gap(s).
+EMT-005,5,3,PLT-01|PLT-03|PLT-04|PLT-06|PLT-08,PLT-02|PLT-05|PLT-07,5/8 platform MDFs recognise this emitter; 3 coverage gap(s).
+EMT-006,6,2,PLT-02|PLT-04|PLT-05|PLT-06|PLT-07|PLT-08,PLT-01|PLT-03,6/8 platform MDFs recognise this emitter; 2 coverage gap(s).
+EMT-007,7,1,PLT-01|PLT-02|PLT-03|PLT-04|PLT-05|PLT-06|PLT-07,PLT-08,7/8 platform MDFs recognise this emitter; 1 coverage gap(s).
+EMT-008,4,4,PLT-02|PLT-03|PLT-06|PLT-08,PLT-01|PLT-04|PLT-05|PLT-07,4/8 platform MDFs recognise this emitter; 4 coverage gap(s).
+EMT-009,6,2,PLT-01|PLT-02|PLT-05|PLT-06|PLT-07|PLT-08,PLT-03|PLT-04,6/8 platform MDFs recognise this emitter; 2 coverage gap(s).
+EMT-010,5,3,PLT-01|PLT-02|PLT-04|PLT-05|PLT-07,PLT-03|PLT-06|PLT-08,5/8 platform MDFs recognise this emitter; 3 coverage gap(s).
+EMT-011,6,2,PLT-01|PLT-02|PLT-03|PLT-04|PLT-06|PLT-07,PLT-05|PLT-08,6/8 platform MDFs recognise this emitter; 2 coverage gap(s).
+EMT-012,8,0,PLT-01|PLT-02|PLT-03|PLT-04|PLT-05|PLT-06|PLT-07|PLT-08,,8/8 platform MDFs recognise this emitter; 0 coverage gap(s).
+EMT-013,4,4,PLT-04|PLT-06|PLT-07|PLT-08,PLT-01|PLT-02|PLT-03|PLT-05,4/8 platform MDFs recognise this emitter; 4 coverage gap(s).
+EMT-014,5,3,PLT-01|PLT-03|PLT-05|PLT-06|PLT-08,PLT-02|PLT-04|PLT-07,5/8 platform MDFs recognise this emitter; 3 coverage gap(s).
+EMT-015,6,2,PLT-01|PLT-02|PLT-03|PLT-04|PLT-05|PLT-07,PLT-06|PLT-08,6/8 platform MDFs recognise this emitter; 2 coverage gap(s).
+EMT-016,6,2,PLT-01|PLT-02|PLT-03|PLT-05|PLT-06|PLT-08,PLT-04|PLT-07,6/8 platform MDFs recognise this emitter; 2 coverage gap(s).
+EMT-017,7,1,PLT-01|PLT-02|PLT-03|PLT-04|PLT-05|PLT-06|PLT-07,PLT-08,7/8 platform MDFs recognise this emitter; 1 coverage gap(s).
+EMT-018,5,3,PLT-01|PLT-03|PLT-05|PLT-06|PLT-08,PLT-02|PLT-04|PLT-07,5/8 platform MDFs recognise this emitter; 3 coverage gap(s).
+EMT-019,6,2,PLT-01|PLT-02|PLT-03|PLT-06|PLT-07|PLT-08,PLT-04|PLT-05,6/8 platform MDFs recognise this emitter; 2 coverage gap(s).
+EMT-020,6,2,PLT-01|PLT-02|PLT-04|PLT-06|PLT-07|PLT-08,PLT-03|PLT-05,6/8 platform MDFs recognise this emitter; 2 coverage gap(s).
+EMT-021,5,3,PLT-02|PLT-04|PLT-06|PLT-07|PLT-08,PLT-01|PLT-03|PLT-05,5/8 platform MDFs recognise this emitter; 3 coverage gap(s).
+EMT-022,7,1,PLT-01|PLT-02|PLT-03|PLT-04|PLT-06|PLT-07|PLT-08,PLT-05,7/8 platform MDFs recognise this emitter; 1 coverage gap(s).
+EMT-023,5,3,PLT-01|PLT-02|PLT-04|PLT-05|PLT-08,PLT-03|PLT-06|PLT-07,5/8 platform MDFs recognise this emitter; 3 coverage gap(s).
+EMT-024,3,5,PLT-01|PLT-06|PLT-08,PLT-02|PLT-03|PLT-04|PLT-05|PLT-07,3/8 platform MDFs recognise this emitter; 5 coverage gap(s).
+EMT-025,6,2,PLT-01|PLT-02|PLT-03|PLT-04|PLT-05|PLT-06,PLT-07|PLT-08,6/8 platform MDFs recognise this emitter; 2 coverage gap(s).

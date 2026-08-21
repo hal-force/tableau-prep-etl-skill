@@ -1,0 +1,26 @@
+emitter_id,lib_nato_name,lib_system_type,lib_band,lib_centre_freq_ghz,lib_pri_us,lib_pw_us,lib_scan_type,lib_erp_dbw,lib_modes,lib_lethality,lib_assoc_weapon,lib_max_range_km,lib_threat_priority
+EMT-001,BIG BIRD-N,EW/Surveillance,S,2.9,3000.0,20.0,circular,88.0,search,low,-,350,3
+EMT-002,TALL RACK-N,EW/Acquisition,L,1.3,2200.0,30.0,circular,84.0,search/acq,low,-,300,3
+EMT-003,CLAM SHELL-N,Acquisition,C,5.2,900.0,1.5,raster,78.0,acq,medium,SA-N-long,250,4
+EMT-004,GRAVE STONE-N,Engagement,X,9.4,250.0,0.9,track/monopulse,72.0,track/guidance,critical,SA-N-long,200,8
+EMT-005,TOMB STONE-N,Engagement,X,9.6,240.0,0.8,track/monopulse,71.0,track/guidance,critical,SA-N-long,200,8
+EMT-006,FLAP LID-N,Engagement,X,10.1,300.0,0.7,track,68.0,track/guidance,critical,SA-N-med,150,8
+EMT-007,SNOW DRIFT-N,Acquisition,S,3.3,1100.0,2.0,circular,80.0,acq,medium,SA-N-med,160,5
+EMT-008,GRILL PAN-N,Engagement,X,9.9,280.0,0.8,phased/track,70.0,track/guidance,critical,SA-N-med,120,8
+EMT-009,HOT SHOT-N,Engagement,Ku,14.5,180.0,0.5,track,62.0,track/guidance,high,SHORAD,40,7
+EMT-010,DOG EAR-N,Acquisition,F,0.9,1800.0,25.0,circular,76.0,acq,medium,SHORAD,80,5
+EMT-011,SPOON REST-N,EW/Surveillance,A,0.16,6000.0,60.0,circular,90.0,search,low,-,400,2
+EMT-012,BOX SPRING-N,EW/Comms-jam,VHF,0.22,0.0,0.0,-,85.0,jam,high,-,120,6
+EMT-013,RICH TON-N,EW/Comms-jam,UHF,0.42,0.0,0.0,-,82.0,jam,high,-,100,6
+EMT-014,FIRE DOME-N,Engagement,X,9.2,260.0,0.9,phased/track,69.0,track/guidance,critical,SA-N-med,130,8
+EMT-015,CHEESE BRICK-N,Fire-control,Ku,15.1,150.0,0.4,track,58.0,guidance,high,naval-SAM,35,7
+EMT-016,PALM FROND-N,Navigation,X,9.4,1000.0,1.0,circular,55.0,nav,none,-,60,1
+EMT-017,SQUARE HEAD-N,IFF,L,1.03,2000.0,1.0,-,50.0,iff,none,-,80,1
+EMT-018,BILL BOARD-N,EW/Surveillance,S,2.7,2800.0,22.0,circular,86.0,search,low,-,320,3
+EMT-019,LOW BLOW-N,Engagement,G,5.9,320.0,1.2,track,66.0,track/guidance,high,SA-N-legacy,120,7
+EMT-020,STRAIGHT FLUSH-N,Engagement,H,7.1,350.0,1.4,track,65.0,acq/track/guidance,high,SA-N-legacy,90,7
+EMT-021,SIDE NET-N,Acquisition,E,2.9,1500.0,18.0,nodding,79.0,height-find,low,-,300,3
+EMT-022,SCRUM HALF-N,Engagement,Ku,14.8,160.0,0.4,track,60.0,track/guidance,high,SHORAD,25,7
+EMT-023,KITE SCREECH-N,Fire-control,X,9.1,240.0,0.7,track,64.0,gun-fc,medium,naval-gun,35,5
+EMT-024,BAND STAND-N,Fire-control,X,9.3,220.0,0.6,track,63.0,ssm-guidance,high,naval-SSM,50,7
+EMT-025,MUSHROOM-N,Airborne-intercept,X,9.5,200.0,0.5,track/scan,61.0,ai-search/track,high,AAM,90,7

@@ -1,0 +1,26 @@
+emitter_id,eob_site_count,eob_primary_affiliation,eob_affiliations,eob_confirmed_count,eob_active_count,eob_site_ids,eob_summary
+EMT-001,2,RED,BLUE|RED,1,0,SITE-032|SITE-035,"2 known site(s), primary affiliation RED; 1 confirmed, 0 active."
+EMT-002,2,RED,NEUTRAL|RED,1,2,SITE-007|SITE-026,"2 known site(s), primary affiliation RED; 1 confirmed, 2 active."
+EMT-003,5,RED,RED,3,4,SITE-002|SITE-015|SITE-023|SITE-025|SITE-036,"5 known site(s), primary affiliation RED; 3 confirmed, 4 active."
+EMT-004,2,RED,RED,1,1,SITE-027|SITE-038,"2 known site(s), primary affiliation RED; 1 confirmed, 1 active."
+EMT-005,0,NONE,,0,0,,No known EOB site on file for this emitter.
+EMT-006,1,BLUE,BLUE,1,0,SITE-005,"1 known site(s), primary affiliation BLUE; 1 confirmed, 0 active."
+EMT-007,0,NONE,,0,0,,No known EOB site on file for this emitter.
+EMT-008,1,NEUTRAL,NEUTRAL,1,0,SITE-016,"1 known site(s), primary affiliation NEUTRAL; 1 confirmed, 0 active."
+EMT-009,2,RED,NEUTRAL|RED,0,1,SITE-006|SITE-024,"2 known site(s), primary affiliation RED; 0 confirmed, 1 active."
+EMT-010,1,RED,RED,0,1,SITE-022,"1 known site(s), primary affiliation RED; 0 confirmed, 1 active."
+EMT-011,4,RED,RED,3,4,SITE-012|SITE-013|SITE-019|SITE-037,"4 known site(s), primary affiliation RED; 3 confirmed, 4 active."
+EMT-012,0,NONE,,0,0,,No known EOB site on file for this emitter.
+EMT-013,2,RED,RED,1,1,SITE-017|SITE-029,"2 known site(s), primary affiliation RED; 1 confirmed, 1 active."
+EMT-014,1,NEUTRAL,NEUTRAL,0,1,SITE-001,"1 known site(s), primary affiliation NEUTRAL; 0 confirmed, 1 active."
+EMT-015,1,RED,RED,1,1,SITE-030,"1 known site(s), primary affiliation RED; 1 confirmed, 1 active."
+EMT-016,1,BLUE,BLUE,1,0,SITE-028,"1 known site(s), primary affiliation BLUE; 1 confirmed, 0 active."
+EMT-017,3,RED,RED,1,1,SITE-021|SITE-033|SITE-040,"3 known site(s), primary affiliation RED; 1 confirmed, 1 active."
+EMT-018,1,RED,RED,0,1,SITE-014,"1 known site(s), primary affiliation RED; 0 confirmed, 1 active."
+EMT-019,1,RED,RED,0,1,SITE-010,"1 known site(s), primary affiliation RED; 0 confirmed, 1 active."
+EMT-020,2,RED,RED,0,1,SITE-003|SITE-018,"2 known site(s), primary affiliation RED; 0 confirmed, 1 active."
+EMT-021,2,RED,NEUTRAL|RED,2,1,SITE-004|SITE-008,"2 known site(s), primary affiliation RED; 2 confirmed, 1 active."
+EMT-022,1,BLUE,BLUE,1,1,SITE-034,"1 known site(s), primary affiliation BLUE; 1 confirmed, 1 active."
+EMT-023,3,NEUTRAL,BLUE|NEUTRAL|RED,2,2,SITE-011|SITE-031|SITE-039,"3 known site(s), primary affiliation NEUTRAL; 2 confirmed, 2 active."
+EMT-024,2,NEUTRAL,NEUTRAL|RED,2,1,SITE-009|SITE-020,"2 known site(s), primary affiliation NEUTRAL; 2 confirmed, 1 active."
+EMT-025,0,NONE,,0,0,,No known EOB site on file for this emitter.

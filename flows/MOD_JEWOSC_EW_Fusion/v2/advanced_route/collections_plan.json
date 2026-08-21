@@ -1,0 +1,147 @@
+{
+  "question": "Across a set of representative unclassified EW scenarios, does the Tableau Prep -> Server -> Desktop chain (a) ingest and normalise multi-domain, high-dimensional sensor data, (b) fuse those feeds and apply physics-based + rule-based models to derive threat-relevant intelligence, and (c) present the result to an operator in a recognisably operational surface, to a standard that lets JEWOSC judge production maturity?",
+  "internal_scan": {
+    "site": "prod-useast-a.online.tableau.com / <site>",
+    "ran_at_utc": "2026-07-27T00:00:00Z",
+    "matches": [
+      {"name": "MOD JEWOSC EW Fusion", "project": "Prep Agent / 31 - MOD JEWOSC EW Fusion Demo", "relevance": "HIGH", "note": "v1 of this very flow. Air picture + synthetic EOB fusion already published. Reuse its source + transform as the v2 spine."},
+      {"name": "OpenSky US Live Air Traffic", "project": "Prep Agent / 08 - OpenSky", "relevance": "MED", "note": "Same OpenSky /states/all endpoint, US bbox. Proves the live-JSON-array ingestion shape; v2 reuses the config with the UK/NW-Europe bbox (already what v1 does)."},
+      {"name": "NOAA SWPC Alerts", "project": "Prep Agent / (space-weather)", "relevance": "MED", "note": "Space Weather Prediction Center product feed. Candidate for the HF-propagation / EM-environment layer (F3.1)."},
+      {"name": "Active Satellite TLE Catalog", "project": "Prep Agent / (space)", "relevance": "MED", "note": "TLE orbital elements. Candidate for the space-domain object-density layer (F3.1)."}
+    ],
+    "verdict": "Strong internal footprint. v1 of this flow IS an internal DS; three sibling demo flows already prove the exact ingestion shapes v2 needs (live JSON array, product-feed JSON, paginated catalogue JSON). Internal-first satisfied: v2 builds on published assets rather than acquiring new upstreams. External reach is limited to the SAME public endpoints those internal DSes already wrap (OpenSky, SWPC, TLE mirror), keyless and auth:none."
+  },
+  "preference_inversion": {
+    "inverted": false,
+    "note": "No inversion. This is unusual for a demo: the internal scan is genuinely load-bearing because prior demo flows already established every ingestion shape v2 requires. The external endpoints reached are the public feeds those internal DSes wrap, not net-new hosts."
+  },
+  "indicators": [
+    {
+      "id": "F1.1",
+      "name": "Three+ independent feeds of different ingestion shapes fused",
+      "grain": "per-source",
+      "data_required": [
+        "Live JSON-array snapshot feed (air picture)",
+        "Periodic product-feed JSON (EM environment / space weather)",
+        "Paginated catalogue JSON (space-object elements)"
+      ],
+      "candidates": [
+        {"tier": "internal", "source": "Published DSes: OpenSky + NOAA SWPC + TLE catalog (all on-site)", "rationale": "All three ingestion shapes already proven as published demo flows."},
+        {"tier": "external", "source": "opensky-network.org/api/states/all (bbox UK/NW-Europe), services.swpc.noaa.gov/products/alerts.json, tle.ivanstanojevic.me/api/tle", "rationale": "The same public endpoints the internal DSes wrap. Keyless, auth:none.", "format": "json (array / product / paginated)"}
+      ],
+      "acceptance": "Deliverable ingests >=3 feeds of visibly different shape; >=1 live-refreshing."
+    },
+    {
+      "id": "F1.2",
+      "name": "At least one live-snapshot feed refreshed on schedule",
+      "grain": "per-run",
+      "data_required": ["OpenSky /states/all bbox snapshot, hourly refresh"],
+      "candidates": [
+        {"tier": "internal", "source": "v1 MOD JEWOSC EW Fusion (already hourly)", "result": "GREEN inherited"}
+      ],
+      "acceptance": "server_publish.cadence=hourly on the air feed."
+    },
+    {
+      "id": "F2.1",
+      "name": "Fused row carries >=25 columns across kinematics/RF/geometry/threat",
+      "grain": "per-row",
+      "data_required": ["v1 output schema (31 cols) + environment columns"],
+      "candidates": [
+        {"tier": "internal", "source": "v1 ew_fusion output (31 columns)", "result": "GREEN inherited"},
+        {"tier": "derived", "source": "environment columns added by the fusion step from the space-weather + space layers"}
+      ],
+      "acceptance": "Produced Hyper has >=25 populated columns; QA gate confirms."
+    },
+    {
+      "id": "F3.1",
+      "name": "Air tracks correlated with a space/RF-environment layer",
+      "grain": "per-row",
+      "data_required": [
+        "Per-track: an EM-environment state (HF-propagation / geomagnetic condition) applicable at snapshot time",
+        "Optional: space-object density over the theatre bbox as an environment scalar"
+      ],
+      "candidates": [
+        {"tier": "internal", "source": "NOAA SWPC Alerts DS + TLE catalog DS", "rationale": "Both on-site. Environment layer is low-cardinality/periodic, so it correlates as a snapshot-time scalar joined to every track rather than a per-track spatial join."},
+        {"tier": "external", "source": "SWPC alerts.json (latest K-index / radio-blackout state) + TLE count over bbox", "rationale": "Public, keyless.", "format": "json"},
+        {"tier": "external", "source": "services.swpc.noaa.gov/products/noaa-planetary-k-index.json", "rationale": "Cleaner scalar for a single em_environment_band than the free-text alerts feed.", "format": "json"}
+      ],
+      "acceptance": "Each track row carries an em_environment_band (or Kp value) and a space_object_context scalar for the snapshot; both non-null."
+    },
+    {
+      "id": "F3.2",
+      "name": "Each track fused with EOB library keyed on inferred emitter class",
+      "grain": "per-row",
+      "data_required": ["Synthetic EOB library (baked into ew_fusion.py.j2)"],
+      "candidates": [{"tier": "internal", "source": "v1 ew_fusion EOB_LIBRARY + _classify heuristics", "result": "GREEN inherited"}],
+      "acceptance": "emitter_class + primary_emitter + rf_band + parametrics present per row."
+    },
+    {
+      "id": "F4.1",
+      "name": "Great-circle range/bearing/aspect from fixed own-ship",
+      "grain": "per-row",
+      "data_required": ["own-ship lat/lon (RAF Odiham) + per-track lat/lon"],
+      "candidates": [{"tier": "internal", "source": "v1 _haversine_nm / _bearing_deg / _aspect_deg", "result": "GREEN inherited"}],
+      "acceptance": "range_nm, bearing_deg, aspect_deg present & populated."
+    },
+    {
+      "id": "F4.2",
+      "name": "Friis free-space received power (dBm) at own-ship",
+      "grain": "per-row",
+      "data_required": ["ERP + range + centre frequency per track"],
+      "candidates": [{"tier": "internal", "source": "v1 _rx_dbm", "result": "GREEN inherited"}],
+      "acceptance": "rx_dbm present; NaN only where geometry/power legitimately absent (silent/passive)."
+    },
+    {
+      "id": "F5.1",
+      "name": "Categorical threat_band from documented rule set",
+      "grain": "per-row",
+      "data_required": ["mode + range + aspect + rx_dbm"],
+      "candidates": [{"tier": "internal", "source": "v1 _threat_band", "result": "GREEN inherited"}],
+      "acceptance": "threat_band in {Non-hostile,Search,Track,Engage,Critical}; thresholds documented in DS description."
+    },
+    {
+      "id": "F5.2",
+      "name": "fusion_confidence exposed (0..1)",
+      "grain": "per-row",
+      "data_required": ["classification confidence from _classify"],
+      "candidates": [{"tier": "internal", "source": "v1 fusion_confidence", "result": "GREEN inherited"}],
+      "acceptance": "fusion_confidence present; low-confidence rows visible/filterable."
+    },
+    {
+      "id": "F6.1",
+      "name": "Dashboard spec includes a PPI polar",
+      "grain": "deliverable",
+      "data_required": ["bearing_deg + range_nm columns; PPI_X/PPI_Y calcs"],
+      "candidates": [{"tier": "derived", "source": "dashboard artifact in v2/dashboard/ with PPI_X/PPI_Y calc definitions"}],
+      "acceptance": "PPI construct + calcs specified in a versioned artifact."
+    },
+    {
+      "id": "F6.2",
+      "name": "Dashboard includes tactical geo + track list + RF de-interleave",
+      "grain": "deliverable",
+      "data_required": ["lat/lon, threat_band, rx_dbm, centre_freq_ghz, pri_us, rf_band"],
+      "candidates": [{"tier": "derived", "source": "dashboard artifact worksheet specs"}],
+      "acceptance": "All three constructs specified with encodings."
+    },
+    {
+      "id": "F7.1",
+      "name": "Decision-first hierarchy with select-to-drill",
+      "grain": "deliverable",
+      "data_required": ["threat_rank calc; dashboard actions"],
+      "candidates": [{"tier": "derived", "source": "dashboard artifact layout + actions spec"}],
+      "acceptance": "Layout ordered threat->location->identity; filter/highlight actions specified."
+    },
+    {
+      "id": "F8.1",
+      "name": "Synthetic/notional boundary declared in DS description AND on dashboard",
+      "grain": "deliverable",
+      "data_required": ["disclaimer text"],
+      "candidates": [{"tier": "derived", "source": "output.description string + mandatory dashboard footer"}],
+      "acceptance": "Disclaimer present in both places, verbatim."
+    }
+  ],
+  "preference_order_rule": "INTERNAL -> DERIVED -> EXTERNAL. Internal is unusually strong: v1 of this flow plus three sibling demo DSes cover 9 of 13 indicators as GREEN-inherited. Net-new work is the environment layer (F3.1) and the versioned dashboard artifact (F6/F7/F8). External reach limited to the public endpoints the internal DSes already wrap.",
+  "approval_required_before_acquisition": [
+    "External web fetch on public feeds (already-known hosts, previously approved for the sibling demo flows): opensky-network.org, services.swpc.noaa.gov, tle.ivanstanojevic.me"
+  ]
+}

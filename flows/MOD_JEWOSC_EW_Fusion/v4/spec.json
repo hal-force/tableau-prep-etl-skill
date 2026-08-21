@@ -1,0 +1,284 @@
+{
+  "request": "MOD JEWOSC EW intercept -> mission-data fusion (v4, native joins). A fuzzy parametric MATCH node assigns each ELINT/ES intercept cut a library emitter_id (modelling; nearest-neighbour can't be an equality join), then three reference sources \u2014 an emitter threat library, an Electronic Order of Battle laydown rollup, and platform mission-data-file coverage \u2014 are FUSED onto the matched intercepts with native Prep SuperJoins on emitter_id. Surfaces matched/ambiguous/unknown emitters, reprogramming triggers, library-vs-measured parametrics, EOB affiliation, and platform coverage gaps. Baltic scenario. All data synthetic/notional for a JEWOSC evaluation demo.",
+  "sources": [
+    {
+      "type": "local_csv",
+      "path": "/Users/jgillmore/claude-projects/tableau-prep-etl-skill/flows/MOD_JEWOSC_EW_Fusion/v4/synthetic_data/intercepts.csv",
+      "format": "csv",
+      "auth": "none",
+      "name": "ELINT Intercepts",
+      "description": "ELINT/ES intercept cuts (one row per detection) with measured RF frequency, PRI, pulse width, bearing, SNR, and sensor id. The refreshable operational feed. SYNTHETIC \u2014 notional Baltic scenario.",
+      "extra": {
+        "csv_schema": {
+          "intercept_id": "string",
+          "detect_time_iso": "datetime",
+          "lat": "decimal",
+          "lon": "decimal",
+          "band": "string",
+          "meas_freq_ghz": "decimal",
+          "meas_pri_us": "decimal",
+          "meas_pw_us": "decimal",
+          "snr_db": "decimal",
+          "bearing_deg_meas": "decimal",
+          "sensor_id": "string",
+          "truth_emitter_id": "string",
+          "truth_class": "string"
+        },
+        "_skip_auto_casts": true
+      }
+    },
+    {
+      "type": "local_csv",
+      "path": "/Users/jgillmore/claude-projects/tableau-prep-etl-skill/flows/MOD_JEWOSC_EW_Fusion/v4/synthetic_data/threat_library.csv",
+      "format": "csv",
+      "auth": "none",
+      "name": "Threat Library",
+      "description": "Emitter threat-library reference: one row per emitter (NATO-style name, system type, library parametrics, lethality, associated weapon, priority). SYNTHETIC \u2014 notional Baltic scenario.",
+      "extra": {}
+    },
+    {
+      "type": "local_csv",
+      "path": "/Users/jgillmore/claude-projects/tableau-prep-etl-skill/flows/MOD_JEWOSC_EW_Fusion/v4/synthetic_data/eob_rollup.csv",
+      "format": "csv",
+      "auth": "none",
+      "name": "EOB Laydown Rollup",
+      "description": "Electronic Order of Battle rollup: one row per emitter summarising known sites (count, affiliation, confirmed/active) so the join stays 1:1. SYNTHETIC \u2014 notional Baltic scenario.",
+      "extra": {}
+    },
+    {
+      "type": "local_csv",
+      "path": "/Users/jgillmore/claude-projects/tableau-prep-etl-skill/flows/MOD_JEWOSC_EW_Fusion/v4/synthetic_data/platform_coverage.csv",
+      "format": "csv",
+      "auth": "none",
+      "name": "Platform MDF Coverage",
+      "description": "Per-emitter platform mission-data-file coverage: how many BLUE platform MDFs recognise the emitter and which are blind to it (the reprogramming workload). SYNTHETIC \u2014 notional Baltic scenario.",
+      "extra": {}
+    }
+  ],
+  "transformations": [
+    {
+      "kind": "ew_intercept_match",
+      "args": {
+        "name": "EW Intercept Match",
+        "branch": 0,
+        "freq_col": "meas_freq_ghz",
+        "pri_col": "meas_pri_us",
+        "pw_col": "meas_pw_us",
+        "lat_col": "lat",
+        "lon_col": "lon",
+        "own_ship_lat": 55.1,
+        "own_ship_lon": 18.3,
+        "own_ship_label": "BLUE-ISR ORBIT ALPHA",
+        "match_tolerance": 0.12,
+        "fingerprints": [
+          {
+            "emitter_id": "EMT-001",
+            "centre_freq_ghz": 2.9,
+            "pri_us": 3000.0,
+            "pw_us": 20.0
+          },
+          {
+            "emitter_id": "EMT-002",
+            "centre_freq_ghz": 1.3,
+            "pri_us": 2200.0,
+            "pw_us": 30.0
+          },
+          {
+            "emitter_id": "EMT-003",
+            "centre_freq_ghz": 5.2,
+            "pri_us": 900.0,
+            "pw_us": 1.5
+          },
+          {
+            "emitter_id": "EMT-004",
+            "centre_freq_ghz": 9.4,
+            "pri_us": 250.0,
+            "pw_us": 0.9
+          },
+          {
+            "emitter_id": "EMT-005",
+            "centre_freq_ghz": 9.6,
+            "pri_us": 240.0,
+            "pw_us": 0.8
+          },
+          {
+            "emitter_id": "EMT-006",
+            "centre_freq_ghz": 10.1,
+            "pri_us": 300.0,
+            "pw_us": 0.7
+          },
+          {
+            "emitter_id": "EMT-007",
+            "centre_freq_ghz": 3.3,
+            "pri_us": 1100.0,
+            "pw_us": 2.0
+          },
+          {
+            "emitter_id": "EMT-008",
+            "centre_freq_ghz": 9.9,
+            "pri_us": 280.0,
+            "pw_us": 0.8
+          },
+          {
+            "emitter_id": "EMT-009",
+            "centre_freq_ghz": 14.5,
+            "pri_us": 180.0,
+            "pw_us": 0.5
+          },
+          {
+            "emitter_id": "EMT-010",
+            "centre_freq_ghz": 0.9,
+            "pri_us": 1800.0,
+            "pw_us": 25.0
+          },
+          {
+            "emitter_id": "EMT-011",
+            "centre_freq_ghz": 0.16,
+            "pri_us": 6000.0,
+            "pw_us": 60.0
+          },
+          {
+            "emitter_id": "EMT-012",
+            "centre_freq_ghz": 0.22,
+            "pri_us": 0.0,
+            "pw_us": 0.0
+          },
+          {
+            "emitter_id": "EMT-013",
+            "centre_freq_ghz": 0.42,
+            "pri_us": 0.0,
+            "pw_us": 0.0
+          },
+          {
+            "emitter_id": "EMT-014",
+            "centre_freq_ghz": 9.2,
+            "pri_us": 260.0,
+            "pw_us": 0.9
+          },
+          {
+            "emitter_id": "EMT-015",
+            "centre_freq_ghz": 15.1,
+            "pri_us": 150.0,
+            "pw_us": 0.4
+          },
+          {
+            "emitter_id": "EMT-016",
+            "centre_freq_ghz": 9.4,
+            "pri_us": 1000.0,
+            "pw_us": 1.0
+          },
+          {
+            "emitter_id": "EMT-017",
+            "centre_freq_ghz": 1.03,
+            "pri_us": 2000.0,
+            "pw_us": 1.0
+          },
+          {
+            "emitter_id": "EMT-018",
+            "centre_freq_ghz": 2.7,
+            "pri_us": 2800.0,
+            "pw_us": 22.0
+          },
+          {
+            "emitter_id": "EMT-019",
+            "centre_freq_ghz": 5.9,
+            "pri_us": 320.0,
+            "pw_us": 1.2
+          },
+          {
+            "emitter_id": "EMT-020",
+            "centre_freq_ghz": 7.1,
+            "pri_us": 350.0,
+            "pw_us": 1.4
+          },
+          {
+            "emitter_id": "EMT-021",
+            "centre_freq_ghz": 2.9,
+            "pri_us": 1500.0,
+            "pw_us": 18.0
+          },
+          {
+            "emitter_id": "EMT-022",
+            "centre_freq_ghz": 14.8,
+            "pri_us": 160.0,
+            "pw_us": 0.4
+          },
+          {
+            "emitter_id": "EMT-023",
+            "centre_freq_ghz": 9.1,
+            "pri_us": 240.0,
+            "pw_us": 0.7
+          },
+          {
+            "emitter_id": "EMT-024",
+            "centre_freq_ghz": 9.3,
+            "pri_us": 220.0,
+            "pw_us": 0.6
+          },
+          {
+            "emitter_id": "EMT-025",
+            "centre_freq_ghz": 9.5,
+            "pri_us": 200.0,
+            "pw_us": 0.5
+          }
+        ],
+        "truth_class_col": "truth_class"
+      }
+    },
+    {
+      "kind": "join",
+      "args": {
+        "name": "\u22c8 Threat Library",
+        "description": "Fuse the emitter threat-library record onto each matched intercept on emitter_id (NATO name, system type, lethality, weapon, library parametrics).",
+        "left_branch": 0,
+        "right_branch": 1,
+        "on": "emitter_id",
+        "join_type": "leftOuter"
+      }
+    },
+    {
+      "kind": "join",
+      "args": {
+        "name": "\u22c8 EOB Laydown",
+        "description": "Fuse the Electronic Order of Battle rollup on emitter_id (known-site count, affiliation, confirmed/active).",
+        "left_branch": 0,
+        "right_branch": 2,
+        "on": "emitter_id",
+        "join_type": "leftOuter"
+      }
+    },
+    {
+      "kind": "join",
+      "args": {
+        "name": "\u22c8 Platform Coverage",
+        "description": "Fuse platform mission-data-file coverage on emitter_id (coverage gap count + which platforms are blind to this emitter).",
+        "left_branch": 0,
+        "right_branch": 3,
+        "on": "emitter_id",
+        "join_type": "leftOuter"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "kind": "published_data_source",
+      "name": "MOD JEWOSC EW Fusion v4",
+      "project": "31 - MOD JEWOSC EW Fusion Demo",
+      "description": "SYNTHETIC / NOTIONAL DEMONSTRATION DATA \u2014 NOT operational, NOT classified, NOT derived from any classified source. Built for a UK MoD JEWOSC maturity-evaluation demo of Tableau + the agentic Prep ETL skill. v4 demonstrates DATA FUSION as native Prep join nodes: a fuzzy parametric MATCH (modelling, Python) assigns an emitter_id, then three reference sources \u2014 threat library, EOB laydown rollup, and platform mission-data coverage \u2014 are fused onto each intercept with native SuperJoins on emitter_id. NATO-reporting-name-style emitter designations are used for audience resonance; every parametric value (frequency, PRI, pulse width, ERP, lethality, ranges) is fabricated. The Electronic Order of Battle laydown, platform mission-data coverage, and ELINT intercepts are all synthetic. Theatre: Baltic / NATO eastern flank (notional own-ship 'BLUE-ISR ORBIT ALPHA'). GAP DECLARATION: real emitter parametrics, true EOB geolocation, and actual platform MDF contents are classified and out of scope; this flow demonstrates the FUSION WORKFLOW and OPERATIONAL PRESENTATION, not real threat data."
+    }
+  ],
+  "server_publish": {
+    "project": "31 - MOD JEWOSC EW Fusion Demo",
+    "parent_project": "Prep Agent",
+    "flow_name": "MOD JEWOSC EW Fusion v4",
+    "overwrite": true,
+    "cadence": "hourly",
+    "hour_utc": 0,
+    "minute_utc": 0,
+    "schedule_name_hint": "MOD JEWOSC v4 Hourly Refresh"
+  },
+  "qa_tier": "none",
+  "eval_strategy": "self_consistency",
+  "deployment": "tableau_server",
+  "refresh_cadence": "hourly"
+}

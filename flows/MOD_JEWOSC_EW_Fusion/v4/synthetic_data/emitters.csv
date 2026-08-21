@@ -1,0 +1,26 @@
+emitter_id,nato_name,system_type,band,centre_freq_ghz,pri_us,pw_us,scan_type,scan_period_s,erp_dbw,modulation,modes,lethality,assoc_weapon,max_range_km,priority,notes
+EMT-001,BIG BIRD-N,EW/Surveillance,S,2.9,3000.0,20.0,circular,12.0,88.0,pulse,search,low,-,350,3,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-002,TALL RACK-N,EW/Acquisition,L,1.3,2200.0,30.0,circular,10.0,84.0,pulse,search/acq,low,-,300,3,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-003,CLAM SHELL-N,Acquisition,C,5.2,900.0,1.5,raster,6.0,78.0,pulse-doppler,acq,medium,SA-N-long,250,4,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-004,GRAVE STONE-N,Engagement,X,9.4,250.0,0.9,track/monopulse,3.0,72.0,pulse-doppler,track/guidance,critical,SA-N-long,200,8,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-005,TOMB STONE-N,Engagement,X,9.6,240.0,0.8,track/monopulse,3.0,71.0,pulse-doppler,track/guidance,critical,SA-N-long,200,8,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-006,FLAP LID-N,Engagement,X,10.1,300.0,0.7,track,2.5,68.0,pulse-doppler,track/guidance,critical,SA-N-med,150,8,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-007,SNOW DRIFT-N,Acquisition,S,3.3,1100.0,2.0,circular,8.0,80.0,pulse-doppler,acq,medium,SA-N-med,160,5,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-008,GRILL PAN-N,Engagement,X,9.9,280.0,0.8,phased/track,2.0,70.0,pulse-doppler,track/guidance,critical,SA-N-med,120,8,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-009,HOT SHOT-N,Engagement,Ku,14.5,180.0,0.5,track,1.5,62.0,pulse-doppler,track/guidance,high,SHORAD,40,7,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-010,DOG EAR-N,Acquisition,F,0.9,1800.0,25.0,circular,9.0,76.0,pulse,acq,medium,SHORAD,80,5,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-011,SPOON REST-N,EW/Surveillance,A,0.16,6000.0,60.0,circular,15.0,90.0,pulse,search,low,-,400,2,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-012,BOX SPRING-N,EW/Comms-jam,VHF,0.22,0.0,0.0,-,0.0,85.0,noise/barrage,jam,high,-,120,6,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-013,RICH TON-N,EW/Comms-jam,UHF,0.42,0.0,0.0,-,0.0,82.0,spot/barrage,jam,high,-,100,6,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-014,FIRE DOME-N,Engagement,X,9.2,260.0,0.9,phased/track,2.0,69.0,pulse-doppler,track/guidance,critical,SA-N-med,130,8,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-015,CHEESE BRICK-N,Fire-control,Ku,15.1,150.0,0.4,track,1.0,58.0,CW/pulse,guidance,high,naval-SAM,35,7,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-016,PALM FROND-N,Navigation,X,9.4,1000.0,1.0,circular,4.0,55.0,pulse,nav,none,-,60,1,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-017,SQUARE HEAD-N,IFF,L,1.03,2000.0,1.0,-,0.0,50.0,pulse,iff,none,-,80,1,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-018,BILL BOARD-N,EW/Surveillance,S,2.7,2800.0,22.0,circular,11.0,86.0,pulse,search,low,-,320,3,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-019,LOW BLOW-N,Engagement,G,5.9,320.0,1.2,track,2.5,66.0,pulse,track/guidance,high,SA-N-legacy,120,7,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-020,STRAIGHT FLUSH-N,Engagement,H,7.1,350.0,1.4,track,3.0,65.0,pulse,acq/track/guidance,high,SA-N-legacy,90,7,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-021,SIDE NET-N,Acquisition,E,2.9,1500.0,18.0,nodding,7.0,79.0,pulse,height-find,low,-,300,3,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-022,SCRUM HALF-N,Engagement,Ku,14.8,160.0,0.4,track,1.2,60.0,pulse-doppler,track/guidance,high,SHORAD,25,7,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-023,KITE SCREECH-N,Fire-control,X,9.1,240.0,0.7,track,1.5,64.0,pulse,gun-fc,medium,naval-gun,35,5,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-024,BAND STAND-N,Fire-control,X,9.3,220.0,0.6,track,1.4,63.0,CW/pulse,ssm-guidance,high,naval-SSM,50,7,NOTIONAL parametrics — unclassified demo; not real emitter data
+EMT-025,MUSHROOM-N,Airborne-intercept,X,9.5,200.0,0.5,track/scan,2.0,61.0,pulse-doppler,ai-search/track,high,AAM,90,7,NOTIONAL parametrics — unclassified demo; not real emitter data
