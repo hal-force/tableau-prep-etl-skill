@@ -54,7 +54,7 @@ GATEWAY_VERIFY_SSL = (
 
 
 SOURCE_TYPES = (
-    "local_folder", "native_connector", "rest_api", "graphql_api",
+    "local_folder", "native_connector", "local_csv", "rest_api", "graphql_api",
     "web_crawl", "pki_endpoint", "internal_published_ds",
 )
 QA_TIERS = ("none", "deterministic", "llm")

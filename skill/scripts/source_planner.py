@@ -135,6 +135,41 @@ def _plan_native_connector(src: Source, idx: int) -> tuple[list[NodePlan], list[
     return [inp], []
 
 
+def _plan_local_csv(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePlan]]:
+    """A local CSV file on disk → a working `.v1.LoadCsv` input node.
+
+    Distinct from `native_connector` (format=csv), which emits only a
+    minimum-viable hint node with no real read. This path reuses the
+    proven LoadCsv/textscan shape that run_loop's published-DS snapshot
+    mode drives — but with an EMPTY LUID, so nothing marks it for the
+    publish-time LoadSqlProxy swap. The CSV is read locally by prep-cli
+    and its rows flow into whatever downstream Script node consumes the
+    branch (the fusion pattern: intercepts.csv → ew_intercept_fusion).
+
+    `src.path` is the CSV path (absolute preferred). The file must exist
+    at generate time; unlike a folder trigger it carries real schema."""
+    from pathlib import Path
+    inp_name = src.name or f"Input {idx}"
+    csv_path = Path(src.path or "").expanduser()
+    inp_desc = src.description or f"Local CSV source: {csv_path}"
+    inp = NodePlan(
+        role="input", name=inp_name, description=inp_desc,
+        connector_class="local_csv",
+        connector_attrs={
+            # Reuse the local_csv input shape. _pds_csv_path is the read
+            # path; _pds_luid empty => publish leaves this input alone
+            # (no LoadSqlProxy swap-back, no server round-trip).
+            "_pds_csv_path": str(csv_path),
+            "_pds_luid": "",
+            "_pds_project": "",
+            "_pds_site": "",
+            "_pds_datasource_name": "",
+            "_pds_column_subset": [],
+        },
+    )
+    return [inp], []
+
+
 def _plan_rest_api(src: Source, idx: int, *, graphql: bool = False) -> tuple[list[NodePlan], list[NodePlan]]:
     """REST or GraphQL API → trivial folder-listing input + Python step."""
     proto = "GraphQL" if graphql else "REST"
@@ -677,6 +712,8 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
             ins, trs = _plan_local_folder(src, i)
         elif src.type == "native_connector":
             ins, trs = _plan_native_connector(src, i)
+        elif src.type == "local_csv":
+            ins, trs = _plan_local_csv(src, i)
         elif src.type == "rest_api":
             ins, trs = _plan_rest_api(src, i, graphql=False)
         elif src.type == "graphql_api":
@@ -933,6 +970,109 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
                 "input_schema":    input_schema,
             },
             function_name="fuse",
+            branch=branch_idx,
+        ))
+
+    # EW intercept -> mission-data fusion. The core JEWOSC analytic:
+    # correlate a feed of ELINT/ES intercept "cuts" (measured
+    # freq/PRI/PW) against a baked synthetic threat library + EOB +
+    # platform MDF coverage. This is a FUZZY parametric match (nearest
+    # emitter in normalized freq/PRI/PW space, unknown fallout ->
+    # reprogramming trigger), so it cannot be a native equality
+    # SuperJoin — it lives in a Python Script node like ew_fusion /
+    # embassy_threat_join. The primary feed (intercepts) arrives as the
+    # branch's input dataframe; the three reference tables are baked
+    # into the rendered script as Python literals via pyrepr.
+    for tr in spec.transformations:
+        if tr.kind != "ew_intercept_fusion":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        fx_name = args.get("name", "EW Intercept Fusion")
+        fx_desc = args.get("description") or (
+            "Correlates ELINT/ES intercept cuts against a synthetic "
+            "emitter threat-library, Electronic Order of Battle laydown, "
+            "and platform mission-data-file coverage. Fuzzy parametric "
+            "match on measured frequency / PRI / pulse-width; surfaces "
+            "matched / ambiguous / unknown cuts, flags reprogramming "
+            "triggers, resolves nearest EOB site + affiliation + "
+            "lethality + weapon, computes own-ship range/bearing and "
+            "weapon-engagement-zone membership, and counts platform "
+            "coverage gaps. All parametrics NOTIONAL — unclassified demo."
+        )
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=fx_name,
+            description=fx_desc,
+            template="ew_intercept_fusion.py.j2",
+            template_vars={
+                "freq_col":        args.get("freq_col", "meas_freq_ghz"),
+                "pri_col":         args.get("pri_col", "meas_pri_us"),
+                "pw_col":          args.get("pw_col", "meas_pw_us"),
+                "lat_col":         args.get("lat_col", "lat"),
+                "lon_col":         args.get("lon_col", "lon"),
+                "own_ship_lat":    float(args.get("own_ship_lat", 55.10)),
+                "own_ship_lon":    float(args.get("own_ship_lon", 18.30)),
+                "own_ship_label":  args.get("own_ship_label", "BLUE-ISR ORBIT ALPHA"),
+                "match_tolerance": float(args.get("match_tolerance", 0.06)),
+                "emitters":        args.get("emitters", []),
+                "eob_sites":       args.get("eob_sites", []),
+                "platforms":       args.get("platforms", []),
+                "input_schema":    input_schema,
+            },
+            function_name="fuse_intercepts",
+            branch=branch_idx,
+        ))
+
+    # EW intercept parametric MATCH (modelling only) — the v3 split of
+    # ew_intercept_fusion. This node does ONLY the nearest-neighbour
+    # correlation that can't be a native join (fuzzy parametric match of
+    # measured freq/PRI/PW against a baked emitter fingerprint) plus
+    # own-ship geometry. It emits `emitter_id` as a clean equality key;
+    # the threat-library record, EOB laydown rollup, and platform MDF
+    # coverage are then fused with three NATIVE Prep SuperJoins on
+    # emitter_id (see the spec's `join` transforms + reference sources).
+    # This demonstrates FUSION as visible join nodes rather than baking
+    # every reference table into one monolithic Script node.
+    for tr in spec.transformations:
+        if tr.kind != "ew_intercept_match":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        mx_name = args.get("name", "EW Intercept Match")
+        mx_desc = args.get("description") or (
+            "MODELLING step: correlates ELINT/ES intercept cuts against a "
+            "synthetic emitter fingerprint by fuzzy parametric match "
+            "(nearest emitter in normalized frequency / PRI / pulse-width "
+            "space) and assigns emitter_id + match_quality "
+            "(matched/ambiguous/unknown) + reprogramming-trigger flag, plus "
+            "own-ship range/bearing. Nearest-neighbour can't be a native "
+            "equality join, so it lives here; all downstream enrichment is "
+            "done with native Prep joins on emitter_id. Parametrics NOTIONAL."
+        )
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=mx_name,
+            description=mx_desc,
+            template="ew_intercept_match.py.j2",
+            template_vars={
+                "freq_col":        args.get("freq_col", "meas_freq_ghz"),
+                "pri_col":         args.get("pri_col", "meas_pri_us"),
+                "pw_col":          args.get("pw_col", "meas_pw_us"),
+                "lat_col":         args.get("lat_col", "lat"),
+                "lon_col":         args.get("lon_col", "lon"),
+                "own_ship_lat":    float(args.get("own_ship_lat", 55.10)),
+                "own_ship_lon":    float(args.get("own_ship_lon", 18.30)),
+                "own_ship_label":  args.get("own_ship_label", "BLUE-ISR ORBIT ALPHA"),
+                "match_tolerance": float(args.get("match_tolerance", 0.12)),
+                "fingerprints":    args.get("fingerprints", []),
+                # Optional ground-truth column: when set, the node splits the
+                # reprogramming queue by cause and emits the correlator
+                # confusion matrix (synthetic-demo calibration feature).
+                "truth_class_col": args.get("truth_class_col", ""),
+                "input_schema":    input_schema,
+            },
+            function_name="match_intercepts",
             branch=branch_idx,
         ))
 

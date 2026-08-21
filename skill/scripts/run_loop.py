@@ -42,6 +42,7 @@ from skill.scripts.spec_validation import (
     safe_output_dict,
     safe_source_dict,
     safe_transform_dict,
+    spec_advisories,
     validate_spec_strict,
 )
 from skill.scripts import host_trust
@@ -267,22 +268,47 @@ def _score_against_gt(rig_gt_dir: Path, output_rows: list[dict]) -> dict:
     }
 
 
-def _emit_report(run_dir: Path, history: list[dict], spec_dict: dict, tfl_path: Path) -> Path:
+def _emit_report(run_dir: Path, history: list[dict], spec_dict: dict, tfl_path: Path,
+                 advisories: Optional[list] = None) -> Path:
     """Write final report.md to run_dir."""
     report = run_dir / "report.md"
     final_iter = history[-1] if history else {}
     final_score = final_iter.get("score", {}).get("overall_mean", 0.0)
-    final_status = "PASS" if final_score >= THRESHOLD else "BELOW THRESHOLD"
+    n_scored = final_iter.get("score", {}).get("n_scored", 0)
+    built = final_iter.get("rc") == 0 and final_iter.get("n_out", 0) > 0
+
+    # Status is tri-state: a clean build with no ground-truth holdout to
+    # score against ("not evaluated") is reported distinctly from a real
+    # below-threshold accuracy result — the two must not look identical.
+    if not history:
+        final_status = "NOT RUN"
+    elif not built:
+        final_status = "BUILD FAILED"
+    elif n_scored > 0:
+        final_status = "PASS" if final_score >= THRESHOLD else "BELOW THRESHOLD"
+    else:
+        final_status = "BUILT — NOT EVALUATED (no ground-truth holdout)"
+
+    if n_scored > 0:
+        accuracy_line = (f"**Overall mean accuracy**: {final_score:.3f} "
+                         f"(threshold {THRESHOLD:.3f})")
+    else:
+        reason = final_iter.get("score", {}).get("reason", "no ground truth")
+        accuracy_line = f"**Accuracy eval**: not applicable — {reason}"
+
+    adv_block: list[str] = []
+    if advisories:
+        adv_block = ["## Advisories", ""] + [f"- ⚠️  {a}" for a in advisories] + [""]
 
     lines = [
         f"# tableau-prep-etl run report",
         "",
         f"**Status**: {final_status}",
-        f"**Overall mean accuracy**: {final_score:.3f}",
-        f"**Threshold**: {THRESHOLD:.3f}",
+        accuracy_line,
         f"**Iterations**: {len(history)}",
         f"**Flow**: `{tfl_path}`",
         "",
+        *adv_block,
         "## Spec",
         "",
         "```json",
@@ -868,15 +894,25 @@ def run(request: str, run_dir: Optional[Path] = None,
         if not rows:
             notes.append("no output rows")
 
+        built = rc == 0 and bool(rows)
         history.append({
             "iteration": iteration,
             "rc": rc,
+            "n_out": len(rows),
             "score": score,
             "notes": "; ".join(notes),
         })
 
         # Stop if we hit threshold or it's the last iteration
         if score["overall_mean"] >= THRESHOLD:
+            break
+        # No ground truth to score against (deterministic / passthrough /
+        # self_consistency with no holdout): once the flow builds cleanly
+        # there is nothing to refine and re-running just repeats the same
+        # result — don't burn the remaining iterations. A failed build
+        # (rc!=0 / no rows) still retries: the bounded loop masks transient
+        # TabPy flakiness.
+        if built and score.get("n_scored", 0) == 0:
             break
         if iteration == MAX_ITERATIONS:
             break
@@ -885,17 +921,54 @@ def run(request: str, run_dir: Optional[Path] = None,
         # to propose a script-template variant for the worst-performing
         # field and swap it in via tflb_lib.rewrite_script_paths.
 
-    # Phase 6: report
-    report_path = _emit_report(run_dir, history, spec.to_dict(), tfl_path)
+    # Phase 6: report. Surface non-fatal advisories (e.g. a local/script
+    # source scheduled on Cloud, whose backgrounder refresh is inert) in
+    # the report, on stderr, and on the returned result.
+    advisories = spec_advisories(spec.to_dict())
+    for a in advisories:
+        print(f"[advisory] {a}", file=sys.stderr)
+    report_path = _emit_report(run_dir, history, spec.to_dict(), tfl_path,
+                               advisories=advisories)
+
+    # Interpret the final iteration faithfully. Three distinct outcomes —
+    # a real accuracy failure, a clean pass, and "built fine but there was
+    # no ground truth to score against" — must not all collapse into
+    # passed:false / final_mean:0.0. The last case (deterministic enrich-
+    # then-publish, self_consistency with no holdout) is the common
+    # synthetic-demo shape; reporting it as a failure is a false alarm.
+    if not history:
+        final_mean, passed, eval_status, eval_reason = 0.0, False, "not_run", "no iterations"
+    else:
+        last = history[-1]
+        sc = last["score"]
+        built = last["rc"] == 0 and last.get("n_out", 0) > 0
+        if not built:
+            final_mean, passed = 0.0, False
+            eval_status = "build_failed"
+            eval_reason = last.get("notes") or sc.get("reason") or "build did not produce output"
+        elif sc.get("n_scored", 0) > 0:
+            final_mean = sc["overall_mean"]
+            passed = final_mean >= THRESHOLD
+            eval_status, eval_reason = "scored", None
+        else:
+            # Built cleanly, but no GT holdout existed to score against.
+            final_mean, passed = None, None
+            eval_status = "not_evaluated"
+            eval_reason = sc.get("reason") or "no ground-truth holdout for this eval strategy"
 
     result: dict = {
         "run_dir": str(run_dir),
         "tfl": str(tfl_path),
         "report": str(report_path),
         "iterations": len(history),
-        "final_mean": history[-1]["score"]["overall_mean"] if history else 0.0,
-        "passed": history[-1]["score"]["overall_mean"] >= THRESHOLD if history else False,
+        "final_mean": final_mean,
+        "passed": passed,
+        "eval_status": eval_status,
     }
+    if eval_reason:
+        result["eval_reason"] = eval_reason
+    if advisories:
+        result["advisories"] = advisories
 
     # Phase 7 (optional): publish + schedule on Tableau Server / Cloud.
     # Only fires when caller passed --publish AND the spec has a

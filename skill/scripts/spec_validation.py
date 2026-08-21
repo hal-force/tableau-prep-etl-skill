@@ -42,7 +42,7 @@ from urllib.parse import urlparse
 
 
 SOURCE_TYPES = (
-    "local_folder", "native_connector", "rest_api", "graphql_api",
+    "local_folder", "native_connector", "local_csv", "rest_api", "graphql_api",
     "web_crawl", "pki_endpoint", "internal_published_ds",
 )
 QA_TIERS = ("none", "deterministic", "llm")
@@ -381,6 +381,13 @@ _EXTRA_KEYS_BY_TYPE: dict[str, frozenset[str]] = {
     "native_connector": frozenset({
         "connector_id", "datasource_name", "project", "site",
     }),
+    "local_csv": frozenset({
+        # A local CSV on disk read via the LoadCsv/textscan path.
+        # csv_schema declares the post-read column types; _skip_auto_casts
+        # opts a source out of the cast/role heuristics (needed when a
+        # column is an ISO string Maestro must not auto-cast to datetime).
+        "csv_schema", "casts", "semantic_roles", "_skip_auto_casts",
+    }),
     "internal_published_ds": frozenset({
         "luid", "datasource_name", "project", "site",
         # `_pds_*` keys are populated at runtime by the extract
@@ -540,6 +547,62 @@ def validate_spec_strict(spec_dict: dict) -> dict:
             errors=errors,
         )
     return spec_dict
+
+
+# Source types whose data lives on the local build host. The Tableau
+# Cloud backgrounder cannot reach any of these (a local path, or a
+# script node Cloud won't execute), so a scheduled Cloud refresh against
+# them is inert — the DS is only refreshed by re-running the local
+# publish. `native_connector` and `internal_published_ds` are omitted:
+# those point at server-reachable databases / published extracts.
+_LOCAL_HOST_SOURCE_TYPES = frozenset({
+    "local_folder", "local_csv", "rest_api", "graphql_api",
+    "web_crawl", "pki_endpoint",
+})
+
+
+def spec_advisories(spec_dict: dict) -> list[str]:
+    """Non-fatal advisories about an otherwise-valid spec.
+
+    These are things that build and publish fine but behave in a way the
+    operator should know about — distinct from `validate_spec`, which
+    returns hard errors that block the run. Safe to call on any spec;
+    never raises.
+    """
+    advisories: list[str] = []
+    if not isinstance(spec_dict, dict):
+        return advisories
+
+    deployment = str(spec_dict.get("deployment") or "local").lower()
+    sp = spec_dict.get("server_publish")
+    sources = spec_dict.get("sources") or []
+    src_types = {
+        str((s or {}).get("type"))
+        for s in sources if isinstance(s, dict)
+    }
+
+    # Local / script-node source + a scheduled server refresh. On Tableau
+    # Cloud the backgrounder cannot reach the source, so the schedule
+    # never actually refreshes the published data source. We can't tell
+    # Cloud from on-prem Server at spec time (that's resolved at publish),
+    # so the advisory explains both cases.
+    if deployment == "tableau_server" and isinstance(sp, dict):
+        cadence = str(sp.get("cadence", "daily")).lower()
+        local_srcs = sorted(src_types & _LOCAL_HOST_SOURCE_TYPES)
+        if local_srcs and cadence in SERVER_PUBLISH_CADENCES:
+            advisories.append(
+                f"source type(s) {local_srcs} read data on the local build "
+                f"host. On Tableau Cloud the backgrounder cannot reach them, "
+                f"so the '{cadence}' server_publish.cadence will NOT refresh "
+                f"the published data source — the scheduled run has no access "
+                f"to the source. Refresh instead by re-running the local "
+                f"publish (run_loop with --publish). On Tableau Server "
+                f"(on-prem), the schedule works only if the source is "
+                f"reachable from the backgrounder host. See "
+                f"skill/reference/server_publishing.md."
+            )
+
+    return advisories
 
 
 # === Source-dataclass guarded constructor ===========================

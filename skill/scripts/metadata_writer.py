@@ -117,6 +117,7 @@ class DescriptionProposal:
     ds_description: str = ""
     column_descriptions: dict[str, str] = field(default_factory=dict)
     columns: list[str] = field(default_factory=list)
+    hidden_columns: list[str] = field(default_factory=list)
     sample_rows: list[dict] = field(default_factory=list)
     raw_llm_output: str = ""
 
@@ -134,6 +135,7 @@ class DescriptionProposal:
             "ds_description": self.ds_description,
             "column_descriptions": dict(self.column_descriptions),
             "columns": list(self.columns),
+            "hidden_columns": list(self.hidden_columns),
             "sample_rows": list(self.sample_rows),
             "raw_llm_output_sha256": hashlib.sha256(raw_bytes).hexdigest(),
             "raw_llm_output_len": len(raw_bytes),
@@ -297,6 +299,7 @@ def _apply_column_descriptions_via_tds(
     server, luid: str, descriptions: dict[str, str],
     column_types: Optional[dict[str, str]] = None,
     work_dir: Optional[Path] = None,
+    hidden_columns: Optional[list[str]] = None,
 ) -> dict:
     """Apply per-column descriptions by .tds round-trip.
 
@@ -324,7 +327,8 @@ def _apply_column_descriptions_via_tds(
     import xml.etree.ElementTree as ET
     import tableauserverclient as TSC  # noqa: F401 (import here to keep top-level import light)
 
-    if not descriptions:
+    hidden_columns = hidden_columns or []
+    if not descriptions and not hidden_columns:
         return {"status": "skipped", "reason": "no column descriptions to apply"}
 
     work_dir = Path(work_dir) if work_dir else Path(tempfile.mkdtemp(prefix="tpa_md_"))
@@ -366,6 +370,11 @@ def _apply_column_descriptions_via_tds(
         # previously fed the upstream input columns. Keep Tableau-
         # internal columns (Number of Records, __tableau_internal_*).
         authoritative = {f"[{c}]" for c in descriptions.keys() if c}
+        # Columns we deliberately hide (e.g. join-residue duplicate keys) are
+        # also authoritative — they must survive the orphan-prune so their
+        # hidden='true' element is written, not stripped.
+        hidden_attr = {f"[{c}]" for c in hidden_columns if c}
+        authoritative |= hidden_attr
         removed_orphans = 0
         for name, elem in list(existing.items()):
             if not name:
@@ -406,6 +415,31 @@ def _apply_column_descriptions_via_tds(
             ft = ET.SubElement(d, "formatted-text")
             run = ET.SubElement(ft, "run")
             run.text = desc
+
+        # Hide requested columns (e.g. emitter_id-1/-2/-3 join residue). Set
+        # hidden='true' on the existing <column>, or create a minimal hidden
+        # element when the .tds has none. Tableau keeps the field in the
+        # extract but drops it from the data pane / Ask-Data field list.
+        hidden_count = 0
+        for col in hidden_columns:
+            if not col:
+                continue
+            name_attr = f"[{col}]"
+            col_elem = existing.get(name_attr)
+            if col_elem is None:
+                decl = (types.get(col) or "string").lower()
+                tds_dt = _DECL_TO_TDS_TYPE.get(decl, "string")
+                is_measure = tds_dt in ("integer", "real")
+                col_elem = ET.SubElement(root, "column")
+                col_elem.set("caption", col)
+                col_elem.set("datatype", tds_dt)
+                col_elem.set("name", name_attr)
+                col_elem.set("role", "measure" if is_measure else "dimension")
+                col_elem.set("type", "quantitative" if is_measure else "nominal")
+                existing[name_attr] = col_elem
+            col_elem.set("hidden", "true")
+            hidden_count += 1
+
         ET.indent(tree, space="  ")
         tree.write(tds_path, encoding="utf-8", xml_declaration=True)
 
@@ -432,6 +466,7 @@ def _apply_column_descriptions_via_tds(
             "added_column_elements": added,
             "updated_column_elements": updated,
             "removed_orphan_elements": removed_orphans,
+            "hidden_column_elements": hidden_count,
             "luid": pub.id,
         }
     except Exception as e:
@@ -461,6 +496,7 @@ def apply_descriptions(proposal: DescriptionProposal,
         col_res = _apply_column_descriptions_via_tds(
             server, proposal.luid, proposal.column_descriptions,
             column_types=column_types,
+            hidden_columns=proposal.hidden_columns,
         )
     finally:
         try:

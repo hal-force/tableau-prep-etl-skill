@@ -7,6 +7,18 @@
       "api_caller_b0.py": "2ffd0c11b04f03ed4af7e407afa39c7cb11e8ee8afd138ba17ebb7fbea2e19d7",
       "ew_fusion_b0.py": "4a64c3228daa4368ff023c0a4af173c5e3e4fd60545cbdf8a242c7ae56093318"
     },
+    "MOD_JEWOSC_EW_Fusion/v2": {
+      "ew_intercept_fusion_b0.py": "d36f68bec0bdaba2a6f6d9009efc80945e1b9fdd6acaa4d334ff1beb298677bf"
+    },
+    "MOD_JEWOSC_EW_Fusion/v3": {
+      "ew_intercept_match_b0.py": "1d11e3ba819eacaec1de31215a4604d6833358ce5b164f5715cc2f66f4791436"
+    },
+    "MOD_JEWOSC_EW_Fusion/v4": {
+      "ew_intercept_match_b0.py": "1d11e3ba819eacaec1de31215a4604d6833358ce5b164f5715cc2f66f4791436"
+    },
+    "MOD_JEWOSC_EW_Fusion_v4/v1": {
+      "ew_intercept_match_b0.py": "1d11e3ba819eacaec1de31215a4604d6833358ce5b164f5715cc2f66f4791436"
+    },
     "UK_EA_Flood_Monitoring/v1": {
       "api_caller_b0.py": "5d6d8b454a2bfab42416e65a21334b4b5eeac168a98a38f6401023606ce0a587",
       "trend_features_b0.py": "d4c65f18fc015438f8bf1c287f9ff53b98f0402b9a50858576bd0b2b4f8cf981",
@@ -314,6 +326,8 @@
     "embassy_threat_join.py.j2": "99f266d51ddde518b0f84e7d35e0771b99af7006d2b959e8182df7c39127cde8",
     "eoc_fire_metrics.py.j2": "29d57d60523ee9121a3b17dec5ab9a856ae88e7466634e08d2615818543893b3",
     "ew_fusion.py.j2": "fa1b8c5528e06e0f318c0552fff011f40760f1bc0823ec700bf151150abea40f",
+    "ew_intercept_fusion.py.j2": "badd4e79005285b041f1725789a03d811fe979e0f43eb57c0df4392689fb9c86",
+    "ew_intercept_match.py.j2": "6baea474358718104b13d0aa4a10e553ee77fede24c3bbf2adf87f8d8669d628",
     "graph_analyzer.py.j2": "b21e6b481a5e32e1c62e00500ee52ef798d7b7d5c9589d2c26c11ac697e3fde4",
     "lib/_ssl_ctx.py.j2": "1038edac468a3fd0d4ebcdf1335055555599c22440c738d3dfddee539033a6a4",
     "pii_audit.py.j2": "687aa7135b401e8ab1f26e53996a913da0b9de7b58202efc2d167c125e4e5a31",
