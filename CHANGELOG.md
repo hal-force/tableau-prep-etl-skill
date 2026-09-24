@@ -7,6 +7,28 @@ starting from the initial `v0.9.0-preview` release.
 ## [Unreleased]
 
 ### Added
+- `reference/llm_backends.md` — recipe for LLM calls inside script
+  nodes: OpenAI-compatible gateway vs Cohere Chat API v2 wire shapes
+  (`message.content` is a list of typed blocks, not a string), the
+  reasoning-model thinking-budget trap (unbounded reasoning eats
+  `max_tokens` → `finish=MAX_TOKENS`, empty text, 0 rows; fix is
+  `thinking.token_budget` + `max_tokens >= budget + 2000`;
+  `thinking:disabled` is a 422), latency being output-bound not
+  reasoning-bound, and per-row concurrency via a bounded thread pool
+  (~11 min → ~3 min on 1,298 rows). Proven on the DNFSB Cohere arm.
+  Linked from SKILL.md → Configuration.
+- `reference/tabpy_setup.md`: "API keys for script nodes: read a config
+  file at call time" (GUI TabPy doesn't inherit the shell env; a
+  chmod-600 `~/.tableau-prep-etl/config.json` key read per call needs no
+  daemon restart to rotate) and troubleshooting for the
+  "Wait for cache write operation has terminated due to a failed write"
+  Prep run error (stale/cancelled-run cache or full disk — not a script
+  bug; check `df -h`, restart Builder, clear the extract cache).
+- `reference/server_publishing.md`: the project-URL integer
+  (`vizportalUrlId`, e.g. `.../projects/2365970`) is NOT the project
+  LUID and is not resolvable via REST / Metadata API — resolve target
+  projects by name (+ parent for nested children), never by the URL
+  number.
 - 10 advanced-route use-case flows (embassy_threat_monitor_v2,
   centcom_supplier_risk, sled_grant_clawback_risk,
   nursing_home_collapse_risk, wildfire_staging_gap,

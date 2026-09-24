@@ -171,6 +171,63 @@ bash -c '
 Re-confirm with `ps eww -p <new-PID> | tr ' ' '\n' | grep <VAR>`.
 The `RuntimeError: <VAR> not set` disappears on the next run.
 
+## API keys for script nodes: read a config file at call time
+
+The section above is the *CLI* path — a daemon launched from a shell
+that sourced `load_env.sh`. **Builder's GUI TabPy is worse:** it's a
+long-lived process started by the desktop app, so it inherits the GUI
+launch environment, not your terminal's. A script node that does
+`os.environ.get("COHERE_API_KEY")` gets an empty string even though
+your shell has the value, and there's no shell to re-source — so the
+restart dance above doesn't even apply.
+
+The robust pattern for any key a script node needs (LLM keys, external
+API keys) is to resolve it **at call time**, env first then a
+chmod-600 config file:
+
+```python
+def _key(env_name, cfg_section):
+    v = os.environ.get(env_name, "").strip()
+    if v:
+        return v
+    cfg = os.path.expanduser("~/.tableau-prep-etl/config.json")
+    if os.path.exists(cfg):
+        with open(cfg) as fh:
+            return (json.load(fh).get(cfg_section) or {}).get("api_key", "")
+    return ""
+```
+
+Because the file is read on every call, **rotating or adding a key
+needs no TabPy restart** — it takes effect on the next Run Flow. This
+is the one case that escapes the "restart the daemon after adding a
+var" rule above: a config-file key has no daemon-launch-time capture to
+go stale. Keep the key out of the `.tfl` and off argv; the config file
+(chmod 600, outside the repo) is the store. See
+`reference/llm_backends.md` for the full LLM-key discovery recipe.
+
+## Prep run fails with "Wait for cache write operation has terminated"
+
+**Symptom:** a Run Flow (usually in Builder, sometimes CLI) aborts with
+`Wait for cache write operation has terminated due to a failed write`.
+It reads like a script-node crash, so the instinct is to debug the
+Python. **It isn't a script error.** It's Prep's own connector/extract
+cache failing to persist a partial result — most often left behind by a
+*previously cancelled* run, occasionally a genuinely full disk.
+
+Fix, in order:
+
+1. **Check free disk first** (`df -h`) — rule out the boring cause. If
+   the disk has room (the DNFSB incident had 530 GB free), it's stale
+   cache, not space.
+2. **Restart Tableau Prep Builder** — this alone clears the in-memory
+   cache lock most of the time.
+3. **Clear the on-disk connector/extract cache** if a restart isn't
+   enough, then re-run.
+
+Do not start rewriting the script node over this error — none of the
+above touches your code, and a clean re-run after a Builder restart is
+the expected outcome.
+
 ## Pre-warm TabPy's DNS resolver before Socrata/AWS pulls
 
 macOS 15's `getaddrinfo` intermittently returns "nodename nor servname

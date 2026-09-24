@@ -359,6 +359,21 @@ trail of what got pushed to the site.
 - `LLM_GATEWAY_VERIFY_SSL` — optional; set `false` only for a dev
   gateway with a self-signed cert (default `true`).
 
+### Alternate LLM backends + script-node LLM calls
+
+The gateway above serves every built-in phase (intake, QA reviewer,
+metadata writer). When a flow needs an LLM **inside a script node** —
+per-row extraction / classification / enrichment on TabPy — or when
+you point it at **Cohere Chat API v2** instead of the OpenAI-compatible
+gateway, see **`reference/llm_backends.md`**. It covers the two wire
+shapes, the reasoning-model thinking-budget trap (bounded-budget
+models silently return 0 rows otherwise), per-row concurrency (a
+bounded thread pool: ~11 min → ~3 min on 1,298 rows), and call-time key
+discovery (`COHERE_API_KEY` env → `~/.tableau-prep-etl/config.json`
+`cohere` block, read per call so no TabPy restart is needed). Concurrency
+knob: `COHERE_CONCURRENCY` / `DNFSB_LLM_CONCURRENCY` (default 6; drop to
+1–2 on trial keys).
+
 ### Tableau Server (publish + INTERNAL scan + metadata writer)
 
 All four are required for any operation that talks to the site

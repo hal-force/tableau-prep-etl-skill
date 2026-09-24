@@ -149,6 +149,19 @@ can:
 `--auto-create-project` flips this to auto-approve — useful for
 CI / batch runs where there's no interactive user.
 
+**Resolve target projects by NAME, not by the URL number.** When a
+user hands you a project link like
+`.../#/projects/2365970`, that trailing integer is the
+`vizportalUrlId` — a UI routing id. It is **not** the project LUID and
+is **not resolvable** through REST or the Metadata API: those surface
+projects only by `name` and by their UUID `luid`. Feeding the URL
+number to `projects.get_by_id()` or a GraphQL `luid:` filter returns
+nothing and looks like "the project doesn't exist." Always match on
+the project **name** (plus `parent_project` / `parent_id` to
+disambiguate a nested child — see below), never on the number scraped
+from the URL. A nested subproject is then created with
+`TSC.ProjectItem(name, parent_id=<parent_luid>)`.
+
 **Cache-warmup quirk:** if `--auto-create-project` creates a project
 and the publish step runs in the same TSC session, `publish_run`'s
 project lookup may not see the freshly-created project (TSC re-fetches
