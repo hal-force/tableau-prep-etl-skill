@@ -7,6 +7,20 @@ starting from the initial `v0.9.0-preview` release.
 ## [Unreleased]
 
 ### Added
+- Templates for the WHS CX survey and DNFSB report flows:
+  `whs_cx` (four wrappers over `lib/whs_cx_core.py.j2` — KPI Long,
+  Comments, Respondent, YoY Summary; Summary hangs off KPI Long and
+  aggregates its output), `entity_extract` (spaCy NER, long-form),
+  `dnfsb_crawler` (headed-Chromium listing crawl behind Akamai, via
+  `web_crawl` + `extra.crawl_mode: "listing"`), and `pdf_text_extract`
+  (WAF-warmed PDF fetch + pdfplumber with an OCR fallback limited to the
+  first `max_ocr_pages` pages, flagged `_partial` when that limit cuts
+  text). Fail-closed by design: a missing spaCy model, an empty
+  `domains_allowlist` (rejected at plan time for `pdf_text_extract`), a
+  bad `$<max_reports_env>` override, or a WAF block on any listing page
+  raises instead of emitting a short or unredacted table.
+  `skill/tests/test_new_templates.py` (30 tests) covers them with fake
+  browser / OCR / spaCy stand-ins.
 - `reference/examples/synthetic_multiview.md` — one trigger → N
   `script → hyper` branches, with every node importing one shared
   deterministic scenario module so the extracts stay consistent. Covers

@@ -76,6 +76,25 @@ class Plan:
     parameters: dict = field(default_factory=dict)  # Tableau Prep parameters block
 
 
+# Catalog schema emitted by the paginated listing crawler
+# (templates/dnfsb_crawler.py.j2) and passed through unchanged by the PDF
+# text-extract node (templates/pdf_text_extract.py.j2). Column -> declared
+# Tableau Prep type. `week_ending` is an ISO date kept as a STRING because
+# Maestro rejects ISO-as-datetime declarations (see reference/tabpy_setup.md).
+_LISTING_CATALOG_SCHEMA: dict = {
+    "doc_id": "string",
+    "collection": "string",
+    "site": "string",
+    "week_ending": "string",
+    "week_ending_text": "string",
+    "title": "string",
+    "detail_url": "string",
+    "pdf_url": "string",
+    "listing_page": "int",
+    "crawl_status": "string",
+}
+
+
 def _plan_local_folder(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePlan]]:
     """Local-folder source → (input nodes, transform nodes)."""
     # The input is a tiny .xlsx with a single 'folder' column pointing at the
@@ -206,8 +225,66 @@ def _plan_rest_api(src: Source, idx: int, *, graphql: bool = False) -> tuple[lis
     return [inp], [api]
 
 
+def _plan_listing_crawl(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePlan], dict]:
+    """Paginated document-listing crawl (extra.crawl_mode == "listing").
+
+    Emits a headed-Chromium crawler (templates/dnfsb_crawler.py.j2) that
+    walks a Drupal-style `<article>` listing behind Akamai and returns one
+    catalog row per report. No Prep parameter: the per-run cap is baked at
+    generate time and overridable via an environment variable, because Prep
+    parameters are not injected into Script-node input DataFrames by this
+    skill's flow wiring."""
+    extra = src.extra or {}
+    inp_name = src.name or f"Input {idx}"
+    base_url = src.url or extra.get("base_url", "")
+    domains = extra.get("domains_allowlist", [])
+    max_reports = int(extra.get("max_results_per_run", 50))
+    max_reports_env = extra.get("max_reports_env", "DNFSB_MAX_REPORTS")
+    collection_label = extra.get("collection_label", inp_name)
+
+    inp_desc = src.description or (
+        f"Trigger row for a headed-Chromium paginated listing crawl of "
+        f"{base_url or '<no url>'} (Akamai-protected)."
+    )
+    inp = NodePlan(role="input", name=inp_name, description=inp_desc,
+                   connector_class="local_xlsx_pointer")
+    crawl = NodePlan(
+        role="script",
+        name=f"{inp_name} Crawler" if src.name else f"Listing Crawler {idx}",
+        description=(
+            f"Headed Chromium crawl of the {collection_label!r} listing at "
+            f"{base_url or '<no url>'}: walks `?{extra.get('page_param', 'page')}=N` "
+            f"pages, emits one catalog row per report (site, week-ending date, "
+            f"title, detail URL, PDF URL). Capped at {max_reports} "
+            f"(override via ${max_reports_env}). Requires a GUI session — the "
+            f"site's Akamai WAF blocks headless/daemon browsers."
+        ),
+        template="dnfsb_crawler.py.j2",
+        template_vars={
+            "base_url": base_url,
+            "page_param": extra.get("page_param", "page"),
+            "per_page": int(extra.get("per_page", 10)),
+            "max_reports": max_reports,
+            "max_reports_env": max_reports_env,
+            "domains_allowlist": domains,
+            "title_split_token": extra.get("title_split_token", " Week Ending "),
+            "collection_label": collection_label,
+            "browser_channel": extra.get("browser_channel", "chrome"),
+            "nav_timeout_ms": int(extra.get("nav_timeout_ms", 45000)),
+            "settle_ms": int(extra.get("settle_ms", 2500)),
+            "catalog_schema": _LISTING_CATALOG_SCHEMA,
+        },
+        function_name="crawl",
+    )
+    return [inp], [crawl], {}
+
+
 def _plan_web_crawl(src: Source, idx: int) -> tuple[list[NodePlan], list[NodePlan], dict]:
     """Web crawl → Python step + Prep parameter for the query."""
+    # Listing mode is a distinct strategy (paginated catalog crawl behind a
+    # bot-manager WAF) with its own template and no query parameter.
+    if (src.extra or {}).get("crawl_mode") == "listing":
+        return _plan_listing_crawl(src, idx)
     inp_name = src.name or f"Input {idx}"
     inp_desc = src.description or f"Trigger row for web crawl (engine: {src.extra.get('engine', 'crawl4ai')})."
     inp = NodePlan(role="input", name=inp_name, description=inp_desc,
@@ -783,6 +860,159 @@ def plan_sources(spec: Spec, outputs_dir: Optional[Path] = None) -> Plan:
     # datetime in `get_output_schema()` to match what Maestro sees, or
     # Maestro fails the run with 'a datetime type is required for [X]'.
     input_schema = _input_schema_after_casts(spec)
+
+    # WHS CX survey demo. One free-form kind fans out four script nodes.
+    # kpi_long / comments / respondent fork off the trigger input
+    # (`@input`): each ignores the trigger row and reads the three period
+    # extracts + codebook fresh from `inputs_dir`. summary hangs off the
+    # kpi_long node and aggregates its output rather than rebuilding it.
+    # Each variant uses its own wrapper template (distinct rendered
+    # filename) that {% include %}s the shared core. Outputs bind to these
+    # node names via `output.source`.
+    for tr in spec.transformations:
+        if tr.kind != "whs_cx":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        shared_vars = {
+            "inputs_dir": args.get("inputs_dir", ""),
+            "period_files": args.get("period_files") or {},
+            "codebook_file": args.get("codebook_file", "question_list.csv"),
+            "current_period": args.get("current_period", ""),
+            "prior_period": args.get("prior_period", ""),
+            "use_ner": bool(args.get("use_ner", True)),
+        }
+        whs_variants = [
+            ("kpi_long", "whs_kpi_long.py.j2", args.get("kpi_long_name", "WHS KPI Long"),
+             "One row per (respondent x directorate x KPI) with Top-2-Box / NPS flags and decoded demographics."),
+            ("comments", "whs_comments.py.j2", args.get("comments_name", "WHS Comments Long"),
+             "One row per open-text survey comment, PII-redacted (spaCy PERSON NER + regex) and sentiment-scored."),
+            ("respondent", "whs_respondent.py.j2", args.get("respondent_name", "WHS Respondent Wide"),
+             "Respondent-level wide table: decoded demographics, role-in-service, and every KPI/CSS response value."),
+            ("summary", "whs_summary.py.j2", args.get("summary_name", "WHS YoY Summary"),
+             "Pre-aggregated scores by (Directorate, KPI, FY_Q) with year-over-year delta. Validated to the published HLD report."),
+        ]
+        kpi_long_name = whs_variants[0][2]
+        for variant, template, node_name, node_desc in whs_variants:
+            tvars = {"variant": variant}
+            tvars.update(shared_vars)
+            plan.transforms.append(NodePlan(
+                role="script",
+                name=node_name,
+                description=node_desc,
+                template=template,
+                template_vars=tvars,
+                function_name="transform",
+                branch=branch_idx,
+                parent=kpi_long_name if variant == "summary" else "@input",
+            ))
+
+    # Entity extraction. Single-input script consuming an upstream text
+    # table (the WHS CX Comments extract by default). Runs spaCy NER over
+    # `text_col` and emits one row per detected entity — carrying `id_col`
+    # plus a set of context columns through for slicing in Tableau. Linear
+    # append (parent="") hangs it off the source's tail, so the flow is
+    # simply: input(comments.csv) -> Entity Extractor -> output. spaCy is
+    # loaded via a mutable-container cache (never `global`) so it survives
+    # TabPy's single-`def _user_script` wrap of the whole rendered script.
+    _EE_DEFAULT_PASSTHROUGH = [
+        ["Directorate", "string"], ["DirectorateName", "string"],
+        ["CommentType", "string"], ["FY_Q", "string"],
+        ["Sentiment", "string"], ["SentimentScore", "decimal"],
+        ["PayGrade", "string"], ["Location", "string"],
+        ["InternalExternal", "string"], ["RoleInService", "string"],
+        ["Component_Short", "string"],
+    ]
+    for tr in spec.transformations:
+        if tr.kind != "entity_extract":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        ee_name = args.get("name", "Entity Extractor")
+        text_col = args.get("text_col", "CommentText")
+        id_col = args.get("id_col", "SubmissionID")
+        passthrough = args.get("passthrough") or _EE_DEFAULT_PASSTHROUGH
+        entity_labels = args.get("entity_labels") or []
+        spacy_model = args.get("spacy_model", "en_core_web_sm")
+        ee_desc = args.get("description") or (
+            f"Runs spaCy ({spacy_model}) named-entity recognition over "
+            f"{text_col!r}; emits one row per detected entity (EntityText, "
+            f"EntityLabel, EntityLabelDesc, EntityCategory, char offsets), "
+            f"carrying {id_col} plus demographic/directorate context through "
+            f"for slicing. "
+            + ("All entity labels kept."
+               if not entity_labels
+               else "Labels filtered to " + ", ".join(entity_labels) + ".")
+        )
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=ee_name,
+            description=ee_desc,
+            template="entity_extract.py.j2",
+            template_vars={
+                "text_col": text_col,
+                "id_col": id_col,
+                "passthrough": passthrough,
+                "entity_labels": entity_labels,
+                "spacy_model": spacy_model,
+            },
+            function_name="extract",
+            branch=branch_idx,
+        ))
+
+    # PDF full-text extraction. Consumes the listing crawler's catalog
+    # (one row per report, with a `pdf_url` column), fetches each PDF
+    # through a headed Chromium context (Akamai warm-up + APIRequestContext
+    # so the raw bytes come back, not the viewer HTML), and appends the
+    # report's full text plus fetch/extraction diagnostics. Every catalog
+    # column passes through. Linear append (parent="") chains it onto the
+    # crawler's tail.
+    for tr in spec.transformations:
+        if tr.kind != "pdf_text_extract":
+            continue
+        args = tr.args or {}
+        branch_idx = int(args.get("branch", 0))
+        pdf_name = args.get("name", "PDF Text Extractor")
+        pdf_url_col = args.get("pdf_url_col", "pdf_url")
+        pdf_allowlist = args.get("domains_allowlist") or []
+        if not pdf_allowlist:
+            # The node fetches whatever URLs arrive in pdf_url_col; with no
+            # allowlist that is an open fetcher (SSRF). Fail at plan time.
+            raise ValueError(
+                f"pdf_text_extract {pdf_name!r}: args.domains_allowlist is required "
+                f"(hosts the node may fetch PDFs from)"
+            )
+        pdf_desc = args.get("description") or (
+            f"Fetches each report PDF (via {pdf_url_col!r}) through a headed "
+            f"Chromium session and extracts full text with pdfplumber (OCR "
+            f"fallback for scanned pages, limited to the first "
+            f"{int(args.get('max_ocr_pages', 8))} pages). Appends full_text, "
+            f"page_count, extraction_method, text_char_count, fetch_status, "
+            f"fetch_bytes; passes the catalog columns through. Requires a GUI "
+            f"session (Akamai blocks headless browsers)."
+        )
+        plan.transforms.append(NodePlan(
+            role="script",
+            name=pdf_name,
+            description=pdf_desc,
+            template="pdf_text_extract.py.j2",
+            template_vars={
+                "base_url": args.get("base_url", ""),
+                "pdf_url_col": pdf_url_col,
+                "domains_allowlist": pdf_allowlist,
+                "browser_channel": args.get("browser_channel", "chrome"),
+                "nav_timeout_ms": int(args.get("nav_timeout_ms", 45000)),
+                "request_timeout_ms": int(args.get("request_timeout_ms", 60000)),
+                "settle_ms": int(args.get("settle_ms", 2500)),
+                "max_ocr_pages": int(args.get("max_ocr_pages", 8)),
+                "ocr_dpi": int(args.get("ocr_dpi", 200)),
+                "max_text_chars": int(args.get("max_text_chars", 200000)),
+                "catalog_schema": _LISTING_CATALOG_SCHEMA,
+            },
+            function_name="extract_pdf_text",
+            branch=branch_idx,
+        ))
+
     for j, tr in enumerate(spec.transformations):
         if tr.kind != "graph_analysis":
             continue
