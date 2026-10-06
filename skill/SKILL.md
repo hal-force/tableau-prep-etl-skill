@@ -48,6 +48,25 @@ It is **not** the right tool for:
 - Running production ETL ad-hoc (run the produced `.tfl` via
   `tableau-prep-cli` directly).
 
+**Where Prep stops.** Requirements docs (RFIs especially) often bundle
+asks that belong to the layer above the extracts. Build the data layer
+and say up front which parts sit elsewhere:
+
+- **Real-time / event-driven** — Prep is scheduled or triggered batch;
+  an extract is only as fresh as its last run.
+- **Interactive what-if** — Prep can bake a fixed set of named
+  scenarios (baseline / tasking / surge) as rows; a live
+  move-the-slider re-model is a workbook, extension, or app.
+- **Alert delivery** — Prep can compute the breach flag; sending the
+  notification is Server subscriptions/data-driven alerts or a
+  downstream service.
+- **Dashboards** — Prep produces `.hyper` / published data sources; a
+  workbook draws the views.
+
+When no real source is reachable (classified or PHI systems of
+record), build a deterministic synthetic scenario and label it as such:
+`reference/examples/synthetic_multiview.md`.
+
 ## Routes — Simplified vs Advanced
 
 The skill has two entry routes. Pick the one that matches the user's

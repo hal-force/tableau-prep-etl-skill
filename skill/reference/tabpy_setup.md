@@ -316,6 +316,52 @@ breaks both:
 Use plain `dict` / `list` (no subscripts) at module level. Function
 bodies and lazy annotations are fine.
 
+### `get_output_schema()` must return a DataFrame
+
+Prep calls the script's `get_output_schema()` global to learn the
+node's output columns. Return a `pd.DataFrame` whose values are the
+injected `prep_*()` helpers — not a plain `dict` of them, which crashes
+the TabPy call:
+
+```python
+def get_output_schema():
+    return pd.DataFrame({
+        "unit_id":   prep_string(),   # noqa: F821  (injected by Prep)
+        "staffed":   prep_decimal(),  # noqa: F821
+        "breach":    prep_decimal(),  # noqa: F821  0/1 flag
+    })
+```
+
+The helpers only exist inside Prep's preamble, so `# noqa: F821` keeps
+linters quiet and the function must never be called standalone. For
+yes/no fields, emit `0`/`1` and declare `prep_decimal()` rather than
+relying on a boolean helper — `prep_string` and `prep_decimal` are the
+ones proven across the example flows.
+
+### Shared modules across script nodes
+
+When several script nodes import one shared helper module (the
+one-scenario/N-views pattern in `examples/synthetic_multiview.md`), the
+flow directory is not on TabPy's `sys.path`, and `__file__` may not be
+defined in the node's scope. Insert the directory with a guarded
+fallback before the import:
+
+```python
+_FLOW_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() \
+    else "/abs/path/to/flow_dir"
+if _FLOW_DIR not in sys.path:
+    sys.path.insert(0, _FLOW_DIR)
+import scenario_core  # noqa: E402
+```
+
+**Restart TabPy after editing a shared module.** TabPy keeps imported
+modules in `sys.modules` for the life of its process, so a re-run picks
+up edits to the node script itself but *not* to the module it imports.
+Observed: a text fix in the shared module passed the standalone harness,
+prep-cli then reported "Finished running the flow successfully", and the
+Hyper still held the old string. After restarting TabPy, re-run and read
+a changed value back out of the produced Hyper to confirm.
+
 ### Sibling-output routing via `output.source`
 
 When two outputs need to consume different transformations off a

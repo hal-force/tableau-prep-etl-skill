@@ -7,6 +7,22 @@ starting from the initial `v0.9.0-preview` release.
 ## [Unreleased]
 
 ### Added
+- `reference/examples/synthetic_multiview.md` — one trigger → N
+  `script → hyper` branches, with every node importing one shared
+  deterministic scenario module so the extracts stay consistent. Covers
+  shrinking a seed flow to its Excel input, `add_branch` append and
+  name-idempotency behavior, the `folder` trigger column, and a
+  cross-extract coherence harness that runs before prep-cli. Drawn from
+  the JADC2 eight-view and DHA ARMOR UC5 capacity builds.
+- `reference/tabpy_setup.md`: `get_output_schema()` must return a
+  `pd.DataFrame` of `prep_*()` helpers (a plain dict crashes TabPy);
+  emit flags as 0/1 `prep_decimal()`; a guarded `sys.path` insert for
+  importing a shared module from script nodes; and restart TabPy after
+  editing a shared module, since `sys.modules` keeps the old copy and
+  prep-cli still reports success (observed: a stale string shipped in
+  the Hyper).
+- `SKILL.md`: "Where Prep stops" scoping note (real-time, interactive
+  what-if, alert delivery, dashboards belong above the extracts).
 - `reference/llm_backends.md` — recipe for LLM calls inside script
   nodes: OpenAI-compatible gateway vs Cohere Chat API v2 wire shapes
   (`message.content` is a list of typed blocks, not a string), the
