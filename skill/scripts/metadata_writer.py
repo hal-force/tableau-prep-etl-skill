@@ -473,6 +473,37 @@ def _apply_column_descriptions_via_tds(
         return {"status": "error", "type": type(e).__name__, "message": str(e)}
 
 
+def verify_column_descriptions(server, luid: str,
+                               columns: list[str]) -> dict:
+    """Synchronous read-back of what `apply_descriptions` wrote.
+
+    Re-downloads the .tdsx without its extract and parses the .tds, rather
+    than asking the GraphQL Metadata API, whose Catalog index lags 10-30+
+    minutes behind a publish on Tableau Cloud. Returns
+    `{"ds_description": bool, "described": n, "expected": n, "missing": [...]}`.
+    """
+    import tempfile
+    import zipfile
+    import xml.etree.ElementTree as ET
+
+    item = server.datasources.get_by_id(luid)
+    with tempfile.TemporaryDirectory() as td:
+        path = server.datasources.download(luid, filepath=td, include_extract=False)
+        with zipfile.ZipFile(path) as zf:
+            tds = [n for n in zf.namelist() if n.endswith(".tds")]
+            if not tds:
+                return {"ds_description": bool(item.description), "described": 0,
+                        "expected": len(columns), "missing": list(columns),
+                        "error": "no .tds inside downloaded .tdsx"}
+            root = ET.fromstring(zf.read(tds[0]))
+    have = {c.get("name", "").strip("[]"): (c.findtext("./desc/formatted-text/run") or "").strip()
+            for c in root.findall("./column")}
+    missing = [c for c in columns if not have.get(c)]
+    return {"ds_description": bool(item.description),
+            "described": len(columns) - len(missing),
+            "expected": len(columns), "missing": missing}
+
+
 def apply_descriptions(proposal: DescriptionProposal,
                        column_types: Optional[dict[str, str]] = None) -> dict:
     """Apply a generated proposal to the site. DS-level description goes

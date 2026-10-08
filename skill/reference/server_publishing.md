@@ -247,6 +247,18 @@ When a user reports a 404 on the lineage page right after publish:
 verify via REST first, then tell them to wait 10-30 min. It is not
 a publish failure or a permissions problem.
 
+## Flow descriptions
+
+TSC 0.38's `flows.update()` serializes only name, project and owner.
+`flow.description = "..."; server.flows.update(flow)` returns 200 and
+changes nothing. Use `publishing.set_flow_description(server, flow_id,
+text)` (a direct REST `PUT /flows/{id}`), or pass `description=` to
+`publish_flow`, which calls it after the upload. For a Cloud
+script-node flow published as an unscheduled artifact, the description
+is the place to say *why* it is unscheduled and where the extracts
+come from. `test_tsc_flow_update_still_drops_description` is a canary
+that fails once TSC fixes this.
+
 ## pds_uploads LUID injection
 
 For Cloud-friendly local-prep flows, `_maybe_publish_pds_uploads`
@@ -274,3 +286,34 @@ LUIDs), then:
 
 `--review-metadata` stops after step 2 so the user can approve
 the proposal before push.
+
+### Hand-authored descriptions (no LLM)
+
+When the column semantics are defined in code, e.g. a domain core
+module with a `VIEW_SCHEMAS` contract and documented thresholds, author
+the text and skip `generate_descriptions`. Build a
+`DescriptionProposal(output_name, luid, ds_description,
+column_descriptions, columns)` directly, save `proposal.to_dict()` as
+the audit JSON, and call `apply_descriptions(proposal,
+column_types={col: "decimal"|"string"})`. Keep one shared dict of
+column meanings plus per-view overrides for columns whose meaning
+shifts (e.g. `value` is dollars in a line-item view but a ratio in a
+metric panel). Fail the publish if any schema column lacks text. Then
+check every number the descriptions quote (thresholds, weights,
+tolerances) against the code before pushing. Catalog text that
+disagrees with the logic is worse than none. Observed on a
+regulatory peer-surveillance flow: 6 data sources, 183 columns, all
+described and verified.
+
+### Verifying what landed
+
+`metadata_writer.verify_column_descriptions(server, luid, columns)`
+re-downloads the .tdsx (no extract) and parses the .tds, so it is
+synchronous. Don't verify through GraphQL (see *Catalog indexing lag*
+above). It returns `ds_description`, `described`/`expected` and
+`missing`. Gate the publish on `missing == []`.
+
+The .tds round-trip republishes the extract too. To prove it survived,
+download once with `include_extract=True` and count rows in the
+embedded Hyper. Observed: 333,260 rows in, 333,260 rows back, and the
+LUID was unchanged.

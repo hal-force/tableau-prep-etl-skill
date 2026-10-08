@@ -362,6 +362,35 @@ prep-cli then reported "Finished running the flow successfully", and the
 Hyper still held the old string. After restarting TabPy, re-run and read
 a changed value back out of the produced Hyper to confirm.
 
+### Test and production variants from one shared module
+
+When a production flow grows past its original input (e.g. one
+hand-supplied document becoming an automated 150-filing pull), keep
+the small variant as a fast test flow without forking the code:
+
+- Give the shared module named **input profiles**, e.g.
+  `PROFILES = {"peer": {...}, "single": {"call_dir": ..., "manifest": None}}`.
+  Thread the profile through `build(profile)` / `frame(view, profile)`.
+- **Memoize per profile.** Don't clear one global memo on each build.
+  Both flows can run in the same TabPy process, and a single-slot memo
+  would make them evict each other.
+- Expose a second entry function in each view script (`build()` and
+  `build_single()`). Point the test `.tfl`'s
+  `executionParameters.scriptFunctionName` at it (`function_name` in
+  `add_branch` steps). One script file then serves both flows, and
+  `get_output_schema` is shared, so the two schemas can't drift apart.
+- Let content-addressed caches (API pulls keyed by query, parsed facts
+  keyed by sha256) be shared between profiles. Keep the inputs and
+  outputs separate. The test flow then needs no network inside the
+  read-only TabPy container once the production run has warmed the cache.
+- QA gate: run the same model checks, skip the checks that only make
+  sense for the production profile (acquisition coverage), and assert
+  that the test profile loaded exactly the inputs you expect.
+
+`tflb_lib.builder.build()` mints fresh node ids on every run. So a
+rebuilt `.tfl` won't byte-diff against the old one, even when nothing
+changed. Compare node names, types and script bindings instead.
+
 ### Sibling-output routing via `output.source`
 
 When two outputs need to consume different transformations off a

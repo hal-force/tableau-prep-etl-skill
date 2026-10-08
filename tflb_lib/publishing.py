@@ -8,6 +8,7 @@ Public surface:
     sign_in()                       — authenticate via PAT
     find_project()                  — locate a project by exact name or id
     publish_flow()                  — upload .tfl into a project
+    set_flow_description()          — REST PUT; TSC's flows.update() drops it
     list_scheduled_tasks()          — flow + extract tasks with parsed
                                       next-run times and fire hours
                                       (works on both Server and Cloud)
@@ -243,12 +244,28 @@ def publish_flow(
     project_id: str,
     flow_name: Optional[str] = None,
     overwrite: bool = True,
+    description: str = "",
 ) -> TSC.FlowItem:
     """Upload a .tfl into the named project. Overwrite by default so
-    re-runs replace the previous version rather than failing."""
+    re-runs replace the previous version rather than failing. A
+    `description` is applied after upload via `set_flow_description`."""
     new_flow = TSC.FlowItem(project_id=project_id, name=flow_name)
     mode = TSC.Server.PublishMode.Overwrite if overwrite else TSC.Server.PublishMode.CreateNew
-    return server.flows.publish(new_flow, flow_path, mode)
+    flow = server.flows.publish(new_flow, flow_path, mode)
+    if description:
+        set_flow_description(server, flow.id, description)
+        flow.description = description
+    return flow
+
+
+def set_flow_description(server: TSC.Server, flow_id: str, description: str) -> None:
+    """Set a flow's description. TSC 0.38's `flows.update()` serializes
+    only name / project / owner, so `flow.description = ...; update()`
+    returns 200 and silently changes nothing. PUT the REST body
+    directly instead."""
+    from xml.sax.saxutils import quoteattr
+    _rest_put(server, f"flows/{flow_id}",
+              f"<tsRequest><flow description={quoteattr(description)}/></tsRequest>")
 
 
 def publish_hyper_as_datasource(

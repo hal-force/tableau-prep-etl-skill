@@ -191,3 +191,24 @@ def test_apply_ds_description_ok_and_error():
     assert r["status"] == "error"
     assert r["type"] == "RuntimeError"
     assert "boom" in r["message"]
+
+
+def test_verify_column_descriptions_reads_back_tds(tmp_path):
+    seed = _make_seed_tdsx(tmp_path)
+    r = mw.verify_column_descriptions(_FakeServer(seed), "ds-luid",
+                                      ["orphan_col", "kept_col", "absent_col"])
+    assert r["ds_description"] is False
+    assert (r["described"], r["expected"]) == (1, 3)
+    assert r["missing"] == ["kept_col", "absent_col"]
+
+
+def test_verify_after_injection_finds_every_column(tmp_path):
+    seed = _make_seed_tdsx(tmp_path)
+    server = _FakeServer(seed)
+    res = mw._apply_column_descriptions_via_tds(
+        server, "ds-luid", {"kept_col": "Kept.", "new_col": "New."},
+        column_types={"new_col": "decimal"}, work_dir=tmp_path / "work")
+    assert res["status"] == "ok"
+    server.datasources._tdsx_source = server.datasources.published_tdsx
+    r = mw.verify_column_descriptions(server, "ds-luid", ["kept_col", "new_col"])
+    assert r["missing"] == [] and r["described"] == 2
