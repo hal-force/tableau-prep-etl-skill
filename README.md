@@ -1,9 +1,68 @@
 # tableau-prep-etl-skill
 
-A Claude Code skill that takes a natural-language ETL request and
-produces a working, verified Tableau Prep `.tfl` flow. Optionally
-publishes the flow + a Hyper-backed published data source + column
-metadata to Tableau Server / Cloud.
+A Claude Code skill that turns a natural-language ETL request into a
+working Tableau Prep flow. You describe the data you want. The skill
+writes the `.tfl`, runs it through `tableau-prep-cli` and TabPy, checks
+the output Hyper against a deterministic QA gate and, if you ask,
+publishes the flow and its extracts to Tableau Server / Cloud with
+data source and column descriptions filled in.
+
+## How it works
+
+```
+request ──> 0. INTERNAL scan    reuse a published DS on the site before going external
+            1. Intake           request -> spec.json (sources, transforms, outputs, QA tier)
+            2. Plan + confirm   one-page plan; nothing touches creds or data before approval
+            3. Source planning  pick a strategy per source (table below)
+            4. Acquire + infer  pull a small sample, derive the output schema
+            5. Generate         render templates -> script nodes; tflb_lib assembles the .tfl
+            6. Eval rig         expected values: from source / sample / synthesized / user / consensus
+            7. Run + verify     prep-cli + TabPy -> Hyper -> QA gate (schema, nulls, bounds,
+                                spec post-conditions); bounded retry, up to 3 iterations
+            8-9. Report         .tfl + report.md (attention list, anomalies, run manifest)
+           10. Publish          opt-in: flow + Hyper-backed published data sources (TSC, PAT auth)
+           11. Metadata         DS + per-column descriptions via .tds round-trip, read back to verify
+```
+
+**Two routes.** The *simplified* route (the default) is the
+one-shot pipeline above, for when you know the source. The *advanced*
+route is for when you start with a **question** rather than a dataset.
+It applies structured analytic techniques to break the question into
+factors and indicators, then a collections plan, then up to three
+acquisition passes, internal sources first. Any indicator it can't fill
+is declared as a gap. The output is a `spec.json` that feeds the
+simplified route. See
+[`skill/reference/advanced_collections_route.md`](skill/reference/advanced_collections_route.md).
+
+### What it can build
+
+| Source strategy | How |
+|---|---|
+| `local_folder` | folder listing + per-file script node (PDF text / OCR, CSV, Excel) |
+| `local_csv` / `native_connector` | native `LoadCsv` / `LoadExcel` / `SqlConnection` inputs |
+| `rest_api` / `graphql_api` | `api_caller` template: JSON, JSONL, CSV, ZIP-of-CSV, ArcGIS features. Handles every common pagination shape, POST bodies, nested envelopes, derived columns and query-string keys ([knobs](skill/reference/api_caller_knobs.md)) |
+| `web_crawl` | Crawl4AI crawler template (opt-in) and a site-specific PDF crawler pattern |
+| `pki_endpoint` | certificate-authenticated fetcher |
+| `internal_published_ds` | native input bound to a published DS LUID (no Python) |
+
+| Transform | Output |
+|---|---|
+| `join` | native Prep `SuperJoin`s across branches (left-deep for chains) |
+| `trend_analysis` | row-level calendar features + long-form stats (rolling, YoY, z-score anomalies) |
+| `graph_analysis` | networkx centralities + spring layout per node |
+| `pii_redaction` | redacted rows + an audit table holding a sha256 per detection, never the original |
+| `entity_extract`, LLM script nodes | spaCy entities; LLM classification / summarization per row ([backends](skill/reference/llm_backends.md)) |
+| domain kinds | EOC fire metrics, EW fusion / intercept match, spatial event-to-post joins and risk bands, survey CX roll-ups |
+
+**Multi-view flows.** When one model has to feed several dashboard
+views, a single trigger fans out to N `script -> hyper` branches. Every
+branch imports one shared core module, so the extracts stay mutually
+consistent and a cross-extract coherence gate can check them. A
+production flow can keep a small-input **test variant** that calls a
+second entry function in the same scripts (one filing instead of 150,
+seconds instead of minutes). See
+[`synthetic_multiview.md`](skill/reference/examples/synthetic_multiview.md)
+and [`tabpy_setup.md`](skill/reference/tabpy_setup.md).
 
 ## What's in the box
 
@@ -14,18 +73,24 @@ tableau-prep-etl-skill/
 │   ├── inputs.py             # rewire_input_to_local_excel
 │   ├── topology.py           # prune_nodes_by_name, rewrite_script_paths
 │   ├── builder.py            # build() top-level read/mutate/write
-│   └── publishing.py         # PAT auth, project/schedule wiring (TSC)
+│   └── publishing.py         # PAT auth, projects, flow/DS publish, schedules (TSC + REST)
 │
 ├── skill/                    # the Claude Code skill
 │   ├── SKILL.md              # frontmatter + workflow spec
-│   ├── scripts/              # intake, source_planner, generate_flow, run_loop, etc.
-│   ├── templates/            # Jinja templates for connector / api_caller /
-│   │                         #   crawler / trend_features / eoc_fire_metrics /
-│   │                         #   graph_analyzer / etc.
-│   └── reference/            # tfl_format, tabpy_setup, server_publishing,
-│                             #   metadata_api, examples
+│   ├── scripts/              # intake, server_scan, source_planner, generate_flow,
+│   │                         #   run_loop, publish, metadata_writer, server_creds,
+│   │                         #   spec_validation, host_trust, archive_flow, …
+│   ├── templates/            # ~30 Jinja script-node templates: api_caller, crawler,
+│   │                         #   pdf_text_extract, entity_extract, trend_*, graph_analyzer,
+│   │                         #   pii_redactor/audit, qa_reviewer, statistical_analyst, …
+│   ├── reference/            # tabpy_setup, server_publishing, metadata_api, tfl_format,
+│   │                         #   api_caller_knobs, llm_backends, security,
+│   │                         #   advanced_collections_route, examples/
+│   └── tests/                # pytest suite (CI on Ubuntu, Python 3.11-3.13)
 │
-└── flows/                    # 50+ archived per-flow artifacts (cred-scrubbed)
+├── docs/                     # authoring_a_spec, worked_examples
+├── docker/                   # TabPy + Python deps container recipe
+└── flows/                    # 55 archived per-flow artifacts (cred-scrubbed)
     ├── gdelt_global/v1/       #   e.g. otf_grants, us_wildfires_eoc,
     ├── otf_grants/v1/         #   cisa_kev, fema_disasters, la_crime_2024, …
     └── …                      #   see docs/worked_examples.md for the full set
@@ -256,7 +321,7 @@ pagination shape, every derived column kind):
 
 ## Worked examples
 
-50+ archived flows live under `flows/<name>/v*/`, each with a
+55 archived flows live under `flows/<name>/v*/`, each with a
 self-contained spec.json + flow.tfl + sample Hyper you can run cold.
 A representative table with per-flow highlights and reproduction
 commands:
@@ -300,6 +365,43 @@ This is automatic — `local_iteration` mode in `run_loop` flips on
 whenever the spec has a `published_data_source` output. See
 `skill/reference/server_publishing.md` for details.
 
+### Publishing and catalog metadata
+
+- **Projects.** Nested layouts are supported: `parent_project` +
+  `project` resolves or creates `Parent / NN - Flow` children. The
+  picker asks before it creates anything.
+- **Data sources.** Uploads use Overwrite, so LUIDs survive re-runs and
+  dashboards stay connected.
+- **Flow artifact.** `publish_flow(..., description=...)` sets the
+  description with a direct REST PUT, because TSC's `flows.update()`
+  drops that field.
+- **Descriptions.** Each data source gets a 2-4 sentence description,
+  and each column gets one sentence. They are LLM-generated by default.
+  For domain flows whose column meanings live in code, you can author
+  them by hand and pass them to `apply_descriptions`. Columns are
+  written by downloading the `.tdsx`, injecting `<desc>` elements into
+  the `.tds` and republishing, because Cloud's Metadata API has no
+  write path. Every proposal is saved as an audit JSON.
+- **Verification.** `metadata_writer.verify_column_descriptions`
+  re-downloads the `.tdsx` and checks every column, which is
+  synchronous. The Catalog / GraphQL view can lag 10-30+ minutes, so
+  it isn't used to verify.
+
+## Tableau Prep product gaps found along the way
+
+Each of these is worked around in the skill and documented in
+`skill/reference/`.
+
+| Gap | Impact | Workaround |
+|---|---|---|
+| Tableau Cloud's flow runner can't execute TabPy script nodes | Script-heavy flows can't be scheduled on Cloud | Run locally via prep-cli, publish the Hyper outputs as data sources, and publish the `.tfl` as an unscheduled artifact |
+| `prep-cli` `credentials.json` accepts username/password only; PATs are rejected | Local runs of flows that read published data sources need a password, which breaks MFA-first setups | Temporary per-run credentials file built from Keychain, deleted after the run |
+| Cloud Metadata API is read-only (`updateField` / `updateColumn` return 500s) | No API path for column descriptions | `.tds` round-trip and republish with Overwrite |
+| The Catalog index lags 10-30+ minutes after publish | Lineage / Data Details pages 404 and GraphQL readbacks are stale | Verify via REST and a `.tdsx` re-download |
+| TSC `flows.update()` doesn't serialize `description` | Flow descriptions silently don't save | REST PUT (`set_flow_description`), with a canary test for when TSC fixes it |
+| TabPy caches imported modules for the life of the process | Edits to a shared module are ignored, yet the run reports success | Restart TabPy after editing shared modules, then read a changed value back out of the Hyper |
+| prep-cli's authenticated TabPy path is broken on recent macOS builds; the default evaluate timeout is 30 s | Script nodes fail or time out | Loopback TabPy without auth on `:9099`, with a 600 s timeout (Docker recipe included) |
+
 ## Per-flow archive convention
 
 Successful runs land in `flows/<flow_name>/v<N>/` via
@@ -331,6 +433,13 @@ outputs are capped at 50 MB total per archive.
   new spec.
 - `skill/reference/metadata_api.md` — Metadata API queries (read-only
   on Cloud) + .tds-roundtrip writes.
+- `skill/reference/advanced_collections_route.md` — question-first
+  route: factors, indicators, collections plan, gap declaration.
+- `skill/reference/llm_backends.md` — LLM script nodes (OpenAI-compatible
+  gateway or Cohere), reasoning-budget and concurrency lessons.
+- `skill/reference/security.md` — spec validation, host trust, secret
+  handling.
+- `skill/reference/operator_quickstart.md` — cold-start how-to.
 - `skill/reference/tfl_format.md` — Maestro deserializer notes /
   required node fields.
 - `skill/reference/examples/*.md` — worked spec.json examples.
@@ -355,6 +464,9 @@ outputs are capped at 50 MB total per archive.
 | `LLM gateway not configured` during metadata-write phase | Set `LLM_GATEWAY_URL/KEY/MODEL` env vars (or run `python3 -m skill.scripts.llm_config`). The flow + DS publish succeed without it; only column metadata generation needs it. |
 | `name 'null' is not defined` runtime error inside an api_caller script | Stale rendered script from before the `JSON_BODY` Jinja fix. Delete `~/.tableau-prep-etl/connectors/<sig>/` and `runtime/<flow>/` to force a re-render. |
 | Metadata API `Internal Server Error(s) while executing query` on `updateField` / `updateColumn` | Cloud's Metadata API is read-only. Use the .tds-roundtrip writer (`apply_descriptions`). |
+| Lineage page 404 / GraphQL shows no descriptions right after publish | Catalog index lag (10-30+ min). Verify with `verify_column_descriptions` (REST + `.tdsx` re-download) instead. |
+| Flow description is blank after `flows.update()` returned 200 | TSC drops `description` on flow updates. Use `publishing.set_flow_description` or `publish_flow(..., description=...)`. |
+| prep-cli says the run succeeded, but the Hyper still has old values after editing a shared module | TabPy caches `sys.modules`. Restart TabPy (`docker restart tpe-tabpy` for the container recipe) and re-run. |
 
 ## v2 roadmap (not yet implemented)
 
@@ -389,5 +501,9 @@ anymore, listed for cross-reference):
   NREL, Data.gov).
 - Metadata writer + .tds-roundtrip column-description apply
   (`metadata_api.md`).
-- 50+ archived flows (incl. the Prep Agent demo collection under a
+- 55 archived flows (incl. the Prep Agent demo collection under a
   nested parent project, and the 10 advanced-route use cases).
+- Multi-view shared-core flows, LLM script-node backends, PDF crawler /
+  text / entity-extraction templates.
+- Flow descriptions via REST, synchronous column-description
+  verification, hand-authored metadata path.
