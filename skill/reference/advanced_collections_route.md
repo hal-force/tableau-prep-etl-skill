@@ -196,6 +196,65 @@ The skill records the per-pass attempt log in
 `runtime/<run>/collections_log.md` so the user can audit what was
 tried.
 
+**Expect public sources to fail on the first try.** For a run against
+global public sources, plan a fallback for each one before Pass 2
+starts. Failures seen in practice:
+
+| Source | Failure | Fallback |
+|---|---|---|
+| Wikipedia API | 429 rate limit | Backoff, then Wikidata (P625 for coordinates) |
+| OpenStreetMap Overpass | 504 on area-filtered queries | One flat tag query, then filter locally |
+| Akamai-fronted sites (e.g. usembassy.gov) | 403 to plain `requests` | `curl_cffi` with browser TLS impersonation |
+| UCDP GED API | 401 without a token | Public candidate-events CSV, with its lag stated |
+| GDACS | 400 on the MAP endpoint | Paged SEARCH endpoint |
+| Keyed sources (ACLED) | No key in the environment | Build and schema-test the loader anyway. Record `SKIPPED_NO_CREDENTIALS` and mark the indicator RED |
+
+Run acquisition as a **pre-step** that writes a `cache/` directory and an
+`acquisition_manifest.json` (one row per fetch: URL, HTTP status, rows
+kept, fallback used). Don't run it inside the script nodes. The TabPy
+container then needs no network, and the manifest can be published as its
+own extract so every number traces back to a fetch.
+
+### Step 3b — Calibrate before accepting a score
+
+When an indicator is built from **machine-coded media events** (GDELT,
+or any news-derived event feed), the first full run is almost always
+miscalibrated. The feed measures media attention, and that's not the
+same as events on the ground. Check the top of the ranking against
+common sense before Step 4. The corrections that were needed for a
+post-level GDELT threat score:
+
+1. **Dateline inflation.** Media hubs pick up coverage of distant wars
+   that is filed from them. Where neither actor is from the host country,
+   down-weight the event (×0.25).
+2. **Media volume.** Hubs produce more of every event class. Normalise
+   per location by `sqrt(median_volume / volume)`, clipped to `[0.2, 1]`.
+   This needs an all-event volume count kept alongside the filtered
+   threat events.
+3. **Uncorroborated categories.** CAMEO 19x ("fight") is often figurative.
+   Down-weight it (×0.1) unless an independent source (UCDP, the
+   advisory) corroborates it.
+4. **Aggregation.** A noisy-OR across categories rewards breadth over
+   intensity. `0.7 × max + 0.3 × mean(top 3)` ranked conflict zones above
+   busy capitals.
+5. **Frozen scale.** Fix saturation constants (e.g. K per category at
+   about p95 of the first accepted run). If they move each refresh, the
+   trend is an artefact of re-normalisation.
+6. **Check the codebook.** Verify reused code→label maps against the
+   source codebook. Inherited CAMEO labels had 175, 176 and 133-138
+   wrong.
+7. **Language.** GDELT 1.0 is English-only. Declare the under-coverage of
+   non-English-media locations as a gap.
+
+Free-text matching on official text (advisory posture flags) needs the
+same scrutiny. "All U.S. consulates … have suspended operations"
+matched an *embassy*-suspension pattern. Keep distinct flags for
+distinct postures, and quote the matched sentence into the output so a
+reader can audit it.
+
+Record each correction in `collections_log.md` with the before/after
+effect.
+
 ### Step 4 — Gap declaration
 
 For every indicator that ended RED (or AMBER and the user accepts
@@ -265,6 +324,27 @@ hanging off un-joined source branches resolve via the source-name
 lookup; outputs that name a joined branch resolve to the join tail.
 
 From here, Phases 1-11 of the simplified route apply unchanged.
+
+**When the plan outgrows `run_loop`.** The spec templates cover one
+source → transforms → outputs, or native joins of branches. Some plans
+can't be expressed that way: a multi-source *spatial* union, scoring
+shared across several outputs, or acquisition that has to run before
+the flow. For those, build with the multi-view builder pattern
+(`examples/synthetic_multiview.md`): one trigger fans out to N
+`script → hyper` branches via `tflb_lib.topology.add_branch`, and every
+script imports one shared core module. Then:
+
+- Still emit `spec.json` from the plan, for the record (sources, model
+  constants, outputs with gap-bearing descriptions). Archive it with the
+  SAT brief and logs, and say in the README that it documents the build
+  rather than driving it.
+- Put a QA gate in front of prep-cli that checks the model, not just the
+  schemas: radius bounds, key resolution across extracts, the indicator
+  count against the plan, and sample = full when there's a test variant.
+- Publish the extracts as DSs with the same gap text in each description,
+  scoped to the indicators that extract depends on.
+
+Worked example: `examples/us_post_threat_picture.md`.
 
 ## Internal-first preference — what counts as internal?
 
@@ -356,3 +436,6 @@ the agent, not by `run_loop.py`.
   publish the gap declaration.
 - `SKILL.md` — full phase reference; advanced route is Phase 0.5
   ahead of the standard pipeline.
+- `examples/us_post_threat_picture.md` — the full route on a global,
+  multi-source question: 14 indicators, three passes, calibration, a
+  multi-view build with a sample variant, and gap text in the published DSs.

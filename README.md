@@ -33,6 +33,9 @@ acquisition passes, internal sources first. Any indicator it can't fill
 is declared as a gap. The output is a `spec.json` that feeds the
 simplified route. See
 [`skill/reference/advanced_collections_route.md`](skill/reference/advanced_collections_route.md).
+For a worked run (threats within 50 miles of all 314 US diplomatic posts,
+14 indicators from 10 public sources, ending GREEN 4 / AMBER 8 / RED 2), see
+[`us_post_threat_picture.md`](skill/reference/examples/us_post_threat_picture.md).
 
 ### What it can build
 

@@ -7,6 +7,22 @@ starting from the initial `v0.9.0-preview` release.
 ## [Unreleased]
 
 ### Added
+- `reference/examples/us_post_threat_picture.md` — the advanced route
+  end to end on a global multi-source question (314 US posts, 14
+  indicators, 10 public sources). It covers per-source acquisition
+  fallbacks, calibration of media-coded events, a multi-view build when
+  the plan exceeds `run_loop` spec templates, a sample variant that must
+  equal the full run, and gap text in each published DS.
+- `advanced_collections_route.md`: common public-source acquisition
+  failures and their fallbacks; acquisition as a pre-step with a fetch
+  manifest; a new Step 3b on calibrating media-coded event data
+  (dateline, media volume, corroboration, aggregation, frozen scale,
+  codebook check, language); a caution on posture-flag regexes; and the
+  multi-view builder path when a plan can't be expressed as a spec.
+- `tabpy_setup.md`: subset profiles take their ranks from the full
+  profile (with a re-entrant lock); competition rank for ties; a QA check
+  that sample equals full; recreating the TabPy container with a
+  same-path read-only mount and restoring its restart policy.
 - Templates for the WHS CX survey and DNFSB report flows:
   `whs_cx` (four wrappers over `lib/whs_cx_core.py.j2` — KPI Long,
   Comments, Respondent, YoY Summary; Summary hangs off KPI Long and
@@ -79,6 +95,13 @@ starting from the initial `v0.9.0-preview` release.
   portable `$(which tabpy)`), plus an expanded `.env.example`.
 
 ### Fixed
+- `templates/embassy_threat_join.py.j2`: CAMEO event labels corrected
+  against the CAMEO 1.1b3 codebook. 175 is violent repression (was
+  hostage-taking), 176 is cyberattack, 181 is abduction/hostage-taking,
+  133-138 and 1411/1412/1414 were shifted or wrong, and 190/200 were
+  mislabelled. Missing leaf codes (1381-1385, 1451-1454, 1711/1712, 1834,
+  1951/1952, 204) were added. The output schema is unchanged. Render
+  goldens were updated for the two Embassy Threat Monitor specs.
 - `tflb_lib/publishing.py::list_projects` now walks `TSC.Pager`
   instead of `server.projects.get()` (first page only), so the
   publish picker sees freshly-created child projects on busy sites.

@@ -386,6 +386,30 @@ the small variant as a fast test flow without forking the code:
 - QA gate: run the same model checks, skip the checks that only make
   sense for the production profile (acquisition coverage), and assert
   that the test profile loaded exactly the inputs you expect.
+- **Ranks in a subset profile come from the full profile.** If the test
+  profile is a slice of the production population (10 of 314 posts),
+  ranking inside the slice gives ranks of 1-10 that disagree with
+  production. Have the subset build call the full build and look up its
+  ranks. The full build and the subset build then both take the memo
+  lock, so use `threading.RLock()` (re-entrant), not `Lock()`, or the
+  nested call deadlocks.
+- **Use competition rank for ties** (`rank(method="min")`). Co-located
+  entities (an embassy and the multilateral missions in the same city)
+  share a score, and an ordinal rank breaks the tie by row order. Row
+  order can differ between TabPy and the host, so ordinal ranks don't
+  reproduce across the two environments.
+- **QA the subset against the full run.** Assert that every score and
+  rank in the subset output equals the matching row of the full output.
+  This catches a subset that silently re-normalises.
+
+**Adding a new flow folder to a running container.** A container's mounts
+are fixed at creation, so a flow in a new folder needs the container
+recreated. Add a read-only mount at the *same* path inside and outside
+(`-v /abs/flow:/abs/flow:ro`), because the script nodes import the shared
+module by its host path. `docker run` does not carry over the old
+container's restart policy, so set it again afterwards with
+`docker update --restart unless-stopped <container>`. Without that, TabPy
+stays down after the next Docker restart.
 
 `tflb_lib.builder.build()` mints fresh node ids on every run. So a
 rebuilt `.tfl` won't byte-diff against the old one, even when nothing

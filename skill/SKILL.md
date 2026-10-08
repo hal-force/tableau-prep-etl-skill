@@ -94,6 +94,13 @@ To run it, follow `reference/advanced_collections_route.md` by hand
 passes) until it produces a `spec.json`, then feed that spec to the
 simplified route: `python3 -m skill.scripts.run_loop --spec <plan>.json`.
 The simplified route is the default and the only automated entry point.
+When the plan can't be expressed as a `run_loop` spec (a multi-source
+spatial union, or scoring shared across several outputs), build it with
+the multi-view builder (`reference/examples/synthetic_multiview.md`) and
+still emit `spec.json` for the record. Calibrate any score built on
+media-coded events (GDELT) before accepting it. Both are covered in
+`reference/advanced_collections_route.md`, and worked through end to end
+in `reference/examples/us_post_threat_picture.md`.
 
 **Internal-first sourcing** applies to both routes — Phase 0 always
 runs first unless `--skip-scan` is passed. The advanced route makes
@@ -528,3 +535,9 @@ See `reference/examples/`:
   trend stats (monthly count, YoY, rolling, z-score, lifetime rank,
   is_anomaly) so a single Hyper extract powers both detail and
   dashboard views.
+- `synthetic_multiview.md` — one trigger → N `script → hyper` branches
+  over one shared deterministic scenario module.
+- `us_post_threat_picture.md` — the advanced route end to end: SAT brief,
+  14 indicators, three acquisition passes with per-source fallbacks,
+  calibration of media-coded events, a multi-view build with a sample
+  variant, and gap text in every published DS.
