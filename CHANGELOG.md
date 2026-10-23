@@ -102,6 +102,20 @@ starting from the initial `v0.9.0-preview` release.
   mislabelled. Missing leaf codes (1381-1385, 1451-1454, 1711/1712, 1834,
   1951/1952, 204) were added. The output schema is unchanged. Render
   goldens were updated for the two Embassy Threat Monitor specs.
+- `templates/embassy_threat_join.py.j2`: a code missing from the label
+  table now falls back to a proper verb per CAMEO root ("coerced", "used
+  conventional force against") instead of the root name plus "ed"
+  ("coerceed", "fighted"). The docstring now warns that `composite_score`
+  is uncalibrated: fit for event triage, not for ranking posts.
+  `tests/test_embassy_templates.py` pins the corrected codebook labels,
+  so a golden re-bless can no longer accept a wrong label unnoticed.
+- `us_post_threat_picture.md` steps now match the route doc (Step 2
+  collections plan, Step 3b calibration, Step 4 gap declaration).
+- `tabpy_setup.md`: recreating the container must repeat every existing
+  mount (with a `docker inspect` one-liner to list them); a subset profile
+  must read the full profile's ranks through the shared memo entry; any
+  tie-break must use a stable, rounded sort because the container and the
+  host often run different numpy versions.
 - `tflb_lib/publishing.py::list_projects` now walks `TSC.Pager`
   instead of `server.projects.get()` (first page only), so the
   publish picker sees freshly-created child projects on busy sites.

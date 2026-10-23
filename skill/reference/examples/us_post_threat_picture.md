@@ -40,8 +40,14 @@ places:
 
 Factors: post baseline, armed conflict, terrorism and targeted violence, civil
 unrest, crime / kidnapping / detention, natural hazards, health, official US
-posture. Fourteen indicators hang off those factors. Each one lists at least two
-candidate sources and an acceptance criterion in `collections_plan.json`.
+posture. Fourteen indicators hang off those factors.
+
+## Step 2: collections plan
+
+Each of the 14 indicators lists at least two candidate sources (INTERNAL first)
+and an acceptance criterion in `collections_plan.json`. The plan also records
+each indicator's assessed GREEN/AMBER/RED status before any data is pulled, so
+the live run can be scored against it.
 
 ## Step 3: acquisition passes
 
@@ -49,7 +55,10 @@ candidate sources and an acceptance criterion in `collections_plan.json`.
 (60 curated posts, GDELT only) and a significant-quakes DS. Neither covered the
 full roster, so the route reused their *logic* (CAMEO severity, banding) and not
 their data. Re-checking the reused CAMEO labels against the codebook turned up
-errors. They have since been fixed in `templates/embassy_threat_join.py.j2`.
+errors. They have since been fixed in `templates/embassy_threat_join.py.j2`,
+and `tests/test_embassy_templates.py` pins them to the codebook. That template
+is still uncalibrated (see Step 3b), so it is fit for event triage, not for
+ranking posts.
 
 **Pass 2 (primary external).** Every source below worked only after a fallback.
 These are the failures to expect from the same public sources:
@@ -71,12 +80,12 @@ Street crime has no open global source (OSAC needs authentication; municipal
 portals are few and inconsistent). It ends RED, with the advisory crime
 indicator and GDELT assault events as proxies.
 
-Final coverage: **GREEN 4, AMBER 8, RED 2.** The acquisition pre-step writes a
-`cache/` directory and an `acquisition_manifest.json` (one row per fetch: URL,
-status, rows, fallback used). The manifest becomes its own extract, so every
-number traces back to a fetch.
+The acquisition pre-step writes a `cache/` directory and an
+`acquisition_manifest.json` (one row per fetch: URL, status, rows, fallback
+used). The manifest becomes its own extract, so every number traces back to a
+fetch.
 
-## Calibration: the first global run is wrong
+## Step 3b: calibrate (the first global run is wrong)
 
 The first run ranked London, Paris and New Delhi as war zones. None of these were
 code bugs; they come from how media-coded events behave. Fix them before
@@ -102,7 +111,15 @@ accepting any score:
 Also state that GDELT 1.0 is English-language only, so Spanish- and
 Portuguese-language posts are under-covered.
 
-## Building the flow
+## Step 4: gap declaration
+
+Final coverage: **GREEN 4, AMBER 8, RED 2.** The two RED indicators are I08
+street crime (no open global source) and I14 ACLED (no key). Each AMBER/RED
+indicator's gap statement and mitigation is written into the Collection Coverage
+extract, and quoted verbatim in the description of every data source that
+depends on it (see Publish below).
+
+## Step 5: hand off and build the flow
 
 `run_loop` spec templates are one source → transforms → outputs, or joins of
 branches. This plan is a multi-source spatial union with shared scoring, which

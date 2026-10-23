@@ -390,14 +390,23 @@ the small variant as a fast test flow without forking the code:
   profile is a slice of the production population (10 of 314 posts),
   ranking inside the slice gives ranks of 1-10 that disagree with
   production. Have the subset build call the full build and look up its
-  ranks. The full build and the subset build then both take the memo
-  lock, so use `threading.RLock()` (re-entrant), not `Lock()`, or the
-  nested call deadlocks.
+  ranks. Call it through the same entry point as the production flow
+  (`build(full_profile)`), so it reads the *same* memo entry, keyed on the full
+  profile's input fingerprint. Don't rank inside a private copy of the full
+  build. With one shared entry, the full build runs once per input change,
+  and an input change invalidates the ranks the subset reads. The full
+  build and the subset build then both take the memo lock, so use
+  `threading.RLock()` (re-entrant), not `Lock()`, or the nested call
+  deadlocks.
 - **Use competition rank for ties** (`rank(method="min")`). Co-located
   entities (an embassy and the multilateral missions in the same city)
   share a score, and an ordinal rank breaks the tie by row order. Row
   order can differ between TabPy and the host, so ordinal ranks don't
-  reproduce across the two environments.
+  reproduce across the two environments. The same applies to any
+  tie-break, e.g. a largest-remainder allocation that sorts remainders:
+  use `np.argsort(np.round(key, 9), kind="stable")`. The default argsort
+  is not stable, and the TabPy container and the host often run different
+  numpy versions, which break ties differently.
 - **QA the subset against the full run.** Assert that every score and
   rank in the subset output equals the matching row of the full output.
   This catches a subset that silently re-normalises.
@@ -406,7 +415,15 @@ the small variant as a fast test flow without forking the code:
 are fixed at creation, so a flow in a new folder needs the container
 recreated. Add a read-only mount at the *same* path inside and outside
 (`-v /abs/flow:/abs/flow:ro`), because the script nodes import the shared
-module by its host path. `docker run` does not carry over the old
+module by its host path. The new `docker run` must repeat **every** existing
+mount as well, or the flows already mounted fail with `ImportError` on their
+shared modules. List them before removing the old container:
+
+```sh
+docker inspect -f '{{range .Mounts}}-v {{.Source}}:{{.Destination}}{{if not .RW}}:ro{{end}} {{end}}' <container>
+```
+
+`docker run` does not carry over the old
 container's restart policy, so set it again afterwards with
 `docker update --restart unless-stopped <container>`. Without that, TabPy
 stays down after the next Docker restart.

@@ -30,6 +30,12 @@ Per-row outputs added (event-level, one per post-event pair within range):
   composite_score       severity*2 + proximity + recency + us_actor_flag
   event_root_name       human-readable CAMEO root label
 
+Uncalibrated: composite_score is the raw sum above. It applies none of the
+media-event calibration in reference/advanced_collections_route.md (no
+dateline down-weight, media-volume normalisation or corroboration discount),
+so media-hub posts (London, Paris, New Delhi) rank far above their real
+threat. Use it to triage events, not to rank posts against each other.
+
 Roster scope: a vetted demo set of ~50 US diplomatic posts derived
 from the public State.gov listing - capital embassies + named major
 consulates with elevated security profile. For production deployment
@@ -162,6 +168,17 @@ _CAMEO_EVENT_LABEL = {
 }
 
 
+# Verb for a code that is in neither table (malformed or undefined in CAMEO).
+_CAMEO_ROOT_VERB = {
+    "13": "threatened",
+    "14": "protested against",
+    "17": "coerced",
+    "18": "assaulted",
+    "19": "used conventional force against",
+    "20": "used unconventional mass violence against",
+}
+
+
 def _event_label(event_code: str, root_code: str, root_label: str) -> str:
     """Pick the most-specific human verb available for the EventCode."""
     code = (event_code or "").strip()
@@ -170,7 +187,7 @@ def _event_label(event_code: str, root_code: str, root_label: str) -> str:
     # Try the 3-digit base if a 4-digit leaf wasn't in the table.
     if len(code) >= 3 and code[:3] in _CAMEO_EVENT_LABEL:
         return _CAMEO_EVENT_LABEL[code[:3]]
-    return root_label.lower() + "ed" if root_label else "engaged with"
+    return _CAMEO_ROOT_VERB.get((root_code or "").strip().zfill(2), "engaged with")
 
 
 def _compose_summary(actor1: str, actor2: str, verb: str, place: str, date_str: str) -> str:
